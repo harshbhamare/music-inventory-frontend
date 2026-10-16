@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { InternalUsage, Product, SerializedItem, StockLocation } from '@/lib/types';
+import { InternalUsage, Product, SerializedItem, StockLocation, RentalMonthlyPayment } from '@/lib/types';
 import { formatDate, formatDateTime, formatCurrency } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -35,6 +35,9 @@ import {
   Square,
   Bell,
   RefreshCw,
+  Pencil,
+  SlidersHorizontal,
+  PlusCircle,
 } from 'lucide-react';
 
 const COMMON_ACCESSORIES = [
@@ -94,6 +97,30 @@ export default function UsagePage() {
   const [paymentError, setPaymentError] = useState('');
   const [isSendingReminder, setIsSendingReminder] = useState(false);
   const [reminderFeedback, setReminderFeedback] = useState('');
+
+  // Edit Payment & Price / Trn No. Modal
+  const [editingPayment, setEditingPayment] = useState<RentalMonthlyPayment | null>(null);
+  const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
+  const [editAmountDue, setEditAmountDue] = useState<number>(0);
+  const [editTransactionRef, setEditTransactionRef] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'UPI' | 'CARD' | 'CASH' | 'BANK_TRANSFER'>('UPI');
+  const [editNotes, setEditNotes] = useState('');
+  const [editAdjustNextMonth, setEditAdjustNextMonth] = useState(false);
+  const [isSavingEditPayment, setIsSavingEditPayment] = useState(false);
+  const [editPaymentError, setEditPaymentError] = useState('');
+
+  // Direct Adjust Scheduled Rent Due Modal
+  const [adjustingMonth, setAdjustingMonth] = useState<RentalMonthlyPayment | null>(null);
+  const [adjustAmountDue, setAdjustAmountDue] = useState<number>(0);
+  const [adjustReason, setAdjustReason] = useState('');
+  const [isSavingAdjustDue, setIsSavingAdjustDue] = useState(false);
+  const [adjustDueError, setAdjustDueError] = useState('');
+
+  // Add Next Rental Month state
+  const [isAddingMonth, setIsAddingMonth] = useState(false);
+
+  // Submitting ref lock to strictly prevent multi-clicks
+  const isSubmittingPaymentRef = React.useRef(false);
 
   // Return & Inspection Modal
   const [returnModalUsage, setReturnModalUsage] = useState<InternalUsage | null>(null);
@@ -246,11 +273,14 @@ export default function UsagePage() {
     setRentalPaymentNotes('');
     setPaymentError('');
     setReminderFeedback('');
+    setEditingPayment(null);
+    setAdjustingMonth(null);
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRentalForLedger) return;
+    if (!selectedRentalForLedger || isRecordingPayment || isSubmittingPaymentRef.current) return;
+    isSubmittingPaymentRef.current = true;
     setIsRecordingPayment(true);
     setPaymentError('');
 
@@ -273,11 +303,119 @@ export default function UsagePage() {
       setSelectedRentalForLedger(res.usage);
       setRentalTransactionRef('');
       setRentalPaymentNotes('');
+      // Pre-fill next unpaid month if available
+      const nextDue = res.usage.monthlyPayments?.find((p) => p.status !== 'PAID');
+      if (nextDue) {
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(nextDue.amountDue);
+      } else {
+        setSelectedBillingMonth('');
+        setPaymentAmount(0);
+      }
       fetchUsages();
     } catch (err: any) {
       setPaymentError(err.message || 'Failed to record rent payment.');
     } finally {
       setIsRecordingPayment(false);
+      isSubmittingPaymentRef.current = false;
+    }
+  };
+
+  // Open Edit Payment & Trn No. Modal
+  const handleOpenEditPayment = (payment: RentalMonthlyPayment) => {
+    setEditingPayment(payment);
+    setEditAmountPaid(payment.amountPaid || payment.amountDue || 0);
+    setEditAmountDue(payment.amountDue || 0);
+    setEditTransactionRef(payment.transactionRef || '');
+    setEditPaymentMethod((payment.paymentMethod as any) || 'UPI');
+    setEditNotes(payment.notes || '');
+    setEditAdjustNextMonth(false);
+    setEditPaymentError('');
+  };
+
+  const handleSaveEditPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRentalForLedger || !editingPayment) return;
+    setIsSavingEditPayment(true);
+    setEditPaymentError('');
+
+    try {
+      const paymentIdentifier = editingPayment._id || editingPayment.monthIndex;
+      const res = await api.put<{ usage: InternalUsage }>(
+        `/usage/${selectedRentalForLedger._id}/payments/${paymentIdentifier}`,
+        {
+          amountPaid: editAmountPaid,
+          amountDue: editAmountDue,
+          transactionRef: editTransactionRef.trim() || undefined,
+          paymentMethod: editPaymentMethod,
+          notes: editNotes.trim() || undefined,
+          adjustNextMonth: editAdjustNextMonth,
+        }
+      );
+
+      setSelectedRentalForLedger(res.usage);
+      setEditingPayment(null);
+      fetchUsages();
+    } catch (err: any) {
+      setEditPaymentError(err.message || 'Failed to update payment details.');
+    } finally {
+      setIsSavingEditPayment(false);
+    }
+  };
+
+  // Open Direct Adjust Month Rent Due Modal
+  const handleOpenAdjustMonthDue = (payment: RentalMonthlyPayment) => {
+    setAdjustingMonth(payment);
+    setAdjustAmountDue(payment.amountDue || 0);
+    setAdjustReason('');
+    setAdjustDueError('');
+  };
+
+  const handleSaveAdjustMonthDue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRentalForLedger || !adjustingMonth) return;
+    setIsSavingAdjustDue(true);
+    setAdjustDueError('');
+
+    try {
+      const res = await api.put<{ usage: InternalUsage }>(
+        `/usage/${selectedRentalForLedger._id}/adjust-month-due`,
+        {
+          monthIndex: adjustingMonth.monthIndex,
+          newAmountDue: adjustAmountDue,
+          reason: adjustReason.trim() || undefined,
+        }
+      );
+
+      setSelectedRentalForLedger(res.usage);
+      setAdjustingMonth(null);
+      fetchUsages();
+    } catch (err: any) {
+      setAdjustDueError(err.message || 'Failed to adjust month rent due.');
+    } finally {
+      setIsSavingAdjustDue(false);
+    }
+  };
+
+  // Add an extra rental month to agreement
+  const handleAddRentalMonth = async () => {
+    if (!selectedRentalForLedger || isAddingMonth) return;
+    setIsAddingMonth(true);
+
+    try {
+      const res = await api.post<{ usage: InternalUsage }>(
+        `/usage/${selectedRentalForLedger._id}/add-month`,
+        {
+          amountDue: selectedRentalForLedger.monthlyRent || 1500,
+        }
+      );
+
+      setSelectedRentalForLedger(res.usage);
+      fetchUsages();
+    } catch (err: any) {
+      alert(err.message || 'Failed to add next rental month.');
+    } finally {
+      setIsAddingMonth(false);
     }
   };
 
@@ -1065,6 +1203,7 @@ export default function UsagePage() {
                       <th className="py-2.5 px-3 text-right">Paid Amount</th>
                       <th className="py-2.5 px-3 text-center">Status</th>
                       <th className="py-2.5 px-3">Payment Info</th>
+                      <th className="py-2.5 px-3 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -1092,17 +1231,74 @@ export default function UsagePage() {
                         </td>
                         <td className="py-2.5 px-3 text-slate-500">
                           {p.paymentMethod ? (
-                            <span>
-                              {p.paymentMethod} {p.transactionRef ? `(${p.transactionRef})` : ''}
-                            </span>
+                            <div>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {p.paymentMethod}
+                              </span>
+                              {p.transactionRef && (
+                                <span className="ml-1 text-[11px] font-mono text-amber-500">
+                                  ({p.transactionRef})
+                                </span>
+                              )}
+                              {p.notes && (
+                                <div className="text-[10px] text-slate-400 italic">{p.notes}</div>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-slate-400 italic">Pending payment</span>
                           )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenEditPayment(p)}
+                              className="h-6 px-2 text-[10px] font-bold gap-1 text-amber-500 hover:text-amber-400 border-amber-500/30"
+                              title="Edit Price, Trn No. & Adjust Next Month Rent"
+                            >
+                              <Pencil className="h-2.5 w-2.5" />
+                              <span>Edit</span>
+                            </Button>
+                            {p.status !== 'PAID' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenAdjustMonthDue(p)}
+                                className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                                title="Adjust Rent Due for this Month"
+                              >
+                                <SlidersHorizontal className="h-2.5 w-2.5" />
+                                <span>Adjust Rent</span>
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Add Extra Rental Month Button */}
+              <div className="flex justify-between items-center pt-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddRentalMonth}
+                  isLoading={isAddingMonth}
+                  disabled={isAddingMonth}
+                  className="h-7 text-xs font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                >
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  <span>+ Add Next Rental Month</span>
+                </Button>
+                <span className="text-[11px] text-slate-400">
+                  Click &quot;Edit&quot; on any month to update price &amp; trn no. or adjust next month&apos;s rent.
+                </span>
               </div>
             </div>
 
@@ -1176,7 +1372,7 @@ export default function UsagePage() {
                     placeholder="e.g. UPI-998822"
                     value={rentalTransactionRef}
                     onChange={(e) => setRentalTransactionRef(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
                   />
                 </div>
               </div>
@@ -1199,6 +1395,7 @@ export default function UsagePage() {
                   variant="default"
                   size="sm"
                   isLoading={isRecordingPayment}
+                  disabled={isRecordingPayment}
                   className="gap-1.5 font-bold"
                 >
                   <Check className="h-3.5 w-3.5" />
@@ -1235,6 +1432,217 @@ export default function UsagePage() {
               </Button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Edit Payment & Rent Details Modal */}
+      <Modal
+        isOpen={!!editingPayment}
+        onClose={() => setEditingPayment(null)}
+        title={`Edit Payment & Rent — ${editingPayment?.billingMonth}`}
+        description="Update paid amount, transaction reference (trn no.), payment method, and adjust next month's rent."
+        maxWidth="md"
+      >
+        {editingPayment && (
+          <form onSubmit={handleSaveEditPayment} className="space-y-4 text-xs">
+            {editPaymentError && (
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 font-semibold text-red-500">
+                {editPaymentError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Monthly Rent Due (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={editAmountDue}
+                  onChange={(e) => setEditAmountDue(parseFloat(e.target.value) || 0)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Price / Paid Amount (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={editAmountPaid}
+                  onChange={(e) => setEditAmountPaid(parseFloat(e.target.value) || 0)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-emerald-500 text-right"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={editPaymentMethod}
+                  onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                  className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                >
+                  <option value="UPI">UPI (GPay / PhonePe)</option>
+                  <option value="CARD">Debit / Credit Card</option>
+                  <option value="CASH">Cash</option>
+                  <option value="BANK_TRANSFER">Bank IMPS</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Transaction No. / Trn Ref
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. UPI-998822"
+                  value={editTransactionRef}
+                  onChange={(e) => setEditTransactionRef(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                Payment Notes / Remarks
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Paid in cash to store manager, balance settled"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+              />
+            </div>
+
+            {/* Dynamic Next Month Rent Adjustment Section */}
+            {editAmountDue !== editAmountPaid && (
+              <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-indigo-400 uppercase tracking-wider text-[10px]">
+                    Next Month Rent Adjustment
+                  </span>
+                  <span className="font-mono font-bold text-xs">
+                    {editAmountPaid < editAmountDue ? (
+                      <span className="text-rose-400">
+                        Shortfall: -₹{editAmountDue - editAmountPaid}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-400">
+                        Surplus: +₹{editAmountPaid - editAmountDue}
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  {editAmountPaid < editAmountDue
+                    ? `Customer underpaid by ₹${editAmountDue - editAmountPaid}. You can automatically carry over and add this balance to next month's rent.`
+                    : `Customer overpaid by ₹${editAmountPaid - editAmountDue}. You can credit and deduct this amount from next month's rent.`}
+                </p>
+
+                <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={editAdjustNextMonth}
+                    onChange={(e) => setEditAdjustNextMonth(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="font-semibold text-xs">
+                    {editAmountPaid < editAmountDue
+                      ? `Adjust Next Month: Add ₹${editAmountDue - editAmountPaid} to next month's rent`
+                      : `Adjust Next Month: Deduct ₹${editAmountPaid - editAmountDue} from next month's rent`}
+                  </span>
+                </label>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingPayment(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                isLoading={isSavingEditPayment}
+                className="font-bold"
+              >
+                Save &amp; Update Payment
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Adjust Rent Due for Specific Month Modal */}
+      <Modal
+        isOpen={!!adjustingMonth}
+        onClose={() => setAdjustingMonth(null)}
+        title={`Adjust Rent Due — ${adjustingMonth?.billingMonth}`}
+        description="Modify the agreed monthly rent due for this billing cycle."
+        maxWidth="sm"
+      >
+        {adjustingMonth && (
+          <form onSubmit={handleSaveAdjustMonthDue} className="space-y-4 text-xs">
+            {adjustDueError && (
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 font-semibold text-red-500">
+                {adjustDueError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                New Rent Due Amount (₹) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                required
+                value={adjustAmountDue}
+                onChange={(e) => setAdjustAmountDue(parseFloat(e.target.value) || 0)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                Reason / Adjustment Note
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. ₹500 discount given or carryover adjustment"
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setAdjustingMonth(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                isLoading={isSavingAdjustDue}
+                className="font-bold"
+              >
+                Save Rent Adjustment
+              </Button>
+            </div>
+          </form>
         )}
       </Modal>
 
