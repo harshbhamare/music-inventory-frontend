@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { api, getApiUrl } from '@/lib/api';
 import { StockMovement } from '@/lib/types';
 import { formatDateTime } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -42,7 +42,7 @@ export default function MovementsPage() {
   };
 
   const exportCsv = () => {
-    window.open('/api/v1/reports/export/movements', '_blank');
+    window.open(getApiUrl('/reports/export/movements'), '_blank');
   };
 
   return (

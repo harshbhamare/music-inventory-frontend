@@ -1,4 +1,24 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+function resolveBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!envUrl) return '/api/v1';
+  let trimmed = envUrl.trim().replace(/\/+$/, '');
+  if (!trimmed.endsWith('/api/v1')) {
+    trimmed = `${trimmed}/api/v1`;
+  }
+  return trimmed;
+}
+
+export const BASE_URL = resolveBaseUrl();
+
+export function getApiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (cleanEndpoint.startsWith('/api/v1')) {
+    if (BASE_URL === '/api/v1') return cleanEndpoint;
+    const baseWithoutV1 = BASE_URL.replace(/\/api\/v1$/, '');
+    return `${baseWithoutV1}${cleanEndpoint}`;
+  }
+  return `${BASE_URL}${cleanEndpoint}`;
+}
 
 export class ApiError extends Error {
   public code: string;
@@ -14,7 +34,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${BASE_URL}${endpoint}`;
+  const url = getApiUrl(endpoint);
   const headers = new Headers(options.headers || {});
 
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {

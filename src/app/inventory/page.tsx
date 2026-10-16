@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { api, getApiUrl } from '@/lib/api';
 import { Product, SerializedItem, Category, Supplier } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -304,7 +304,7 @@ export default function InventoryPage() {
   };
 
   const exportCsv = () => {
-    window.open('/api/v1/reports/export/products', '_blank');
+    window.open(getApiUrl('/reports/export/products'), '_blank');
   };
 
   return (
