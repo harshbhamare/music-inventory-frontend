@@ -45,6 +45,7 @@ export interface Product {
   _id: string;
   name: string;
   sku: string;
+  color?: string;
   hsnCode?: string;
   category: Category | string;
   brand: string;

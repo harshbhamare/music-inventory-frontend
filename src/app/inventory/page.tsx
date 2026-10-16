@@ -25,7 +25,63 @@ import {
   PackagePlus,
   RefreshCw,
   Sparkles,
+  Palette,
 } from 'lucide-react';
+
+const COLOR_PRESETS = [
+  { name: 'Black', hex: '#18181b', border: '#3f3f46' },
+  { name: 'White', hex: '#ffffff', border: '#cbd5e1' },
+  { name: 'Sunburst', hex: 'linear-gradient(135deg, #f59e0b, #78350f)', border: '#b45309' },
+  { name: 'Natural Wood', hex: '#d97706', border: '#b45309' },
+  { name: 'Vintage Red', hex: '#ef4444', border: '#b91c1c' },
+  { name: 'Metallic Blue', hex: '#2563eb', border: '#1d4ed8' },
+  { name: 'Silver / Chrome', hex: 'linear-gradient(135deg, #e2e8f0, #94a3b8)', border: '#64748b' },
+  { name: 'Gold', hex: 'linear-gradient(135deg, #fde047, #ca8a04)', border: '#a16207' },
+  { name: 'Emerald Green', hex: '#10b981', border: '#047857' },
+  { name: 'Purple', hex: '#8b5cf6', border: '#6d28d9' },
+];
+
+function getColorStyle(colorName?: string): React.CSSProperties {
+  if (!colorName) return { background: '#64748b' };
+  const lower = colorName.toLowerCase().trim();
+  const matched = COLOR_PRESETS.find((p) => p.name.toLowerCase() === lower);
+  if (matched) {
+    return { background: matched.hex, borderColor: matched.border };
+  }
+  if (lower.includes('sunburst')) return { background: 'linear-gradient(135deg, #f59e0b, #78350f)' };
+  if (lower.includes('wood') || lower.includes('natural')) return { background: '#d97706' };
+  if (lower.includes('black') || lower.includes('ebony')) return { background: '#18181b' };
+  if (lower.includes('white') || lower.includes('arctic') || lower.includes('ivory')) {
+    return { background: '#ffffff', borderColor: '#cbd5e1' };
+  }
+  if (lower.includes('red') || lower.includes('cherry') || lower.includes('crimson')) return { background: '#ef4444' };
+  if (lower.includes('blue') || lower.includes('lake') || lower.includes('cyan')) return { background: '#2563eb' };
+  if (lower.includes('silver') || lower.includes('grey') || lower.includes('gray')) return { background: '#94a3b8' };
+  if (lower.includes('gold')) return { background: '#eab308' };
+  if (lower.includes('green') || lower.includes('emerald')) return { background: '#10b981' };
+  if (lower.includes('yellow') || lower.includes('butterscotch')) return { background: '#eab308' };
+  if (lower.includes('pink')) return { background: '#ec4899' };
+  if (lower.includes('purple')) return { background: '#8b5cf6' };
+  if (lower.includes('orange')) return { background: '#f97316' };
+  return { background: '#64748b' };
+}
+
+function renderColorBadge(color?: string) {
+  if (!color) return null;
+  const style = getColorStyle(color);
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-800 dark:text-slate-100"
+      title={`Product Colour: ${color}`}
+    >
+      <span
+        className="h-3 w-3 rounded-full ring-1 ring-black/20 shrink-0 shadow-inner"
+        style={style}
+      />
+      <span className="capitalize">{color}</span>
+    </span>
+  );
+}
 
 export default function InventoryPage() {
   const { canManageCatalogue } = useAuth();
@@ -51,6 +107,7 @@ export default function InventoryPage() {
 
   // New product form
   const [newProdName, setNewProdName] = useState('');
+  const [newProdColor, setNewProdColor] = useState('');
   const [newProdSku, setNewProdSku] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
   const [newProdCost, setNewProdCost] = useState('');
@@ -71,6 +128,7 @@ export default function InventoryPage() {
   // Edit Product Modal State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editProdName, setEditProdName] = useState('');
+  const [editProdColor, setEditProdColor] = useState('');
   const [editProdBrand, setEditProdBrand] = useState('');
   const [editProdModel, setEditProdModel] = useState('');
   const [editProdCategory, setEditProdCategory] = useState('');
@@ -192,6 +250,7 @@ export default function InventoryPage() {
   const handleOpenEditProduct = (p: Product) => {
     setEditingProduct(p);
     setEditProdName(p.name);
+    setEditProdColor(p.color || '');
     setEditProdBrand(p.brand);
     setEditProdModel(p.modelName || '');
     setEditProdCategory(
@@ -215,6 +274,7 @@ export default function InventoryPage() {
     try {
       await api.patch(`/products/${editingProduct._id}`, {
         name: editProdName.trim(),
+        color: editProdColor.trim() || undefined,
         brand: editProdBrand.trim(),
         modelName: editProdModel.trim() || undefined,
         category: editProdCategory || undefined,
@@ -262,6 +322,7 @@ export default function InventoryPage() {
   const handleOpenAddProduct = async () => {
     setFormError('');
     setNewProdName('');
+    setNewProdColor('');
     setNewProdCost('');
     setNewProdPrice('');
     setNewProdThreshold('5');
@@ -281,6 +342,7 @@ export default function InventoryPage() {
     try {
       await api.post('/products', {
         name: newProdName.trim(),
+        color: newProdColor.trim() || undefined,
         sku: newProdSku.trim().toUpperCase() || undefined,
         category: newProdCategory || categories[0]?._id,
         trackingMode: 'QUANTITY',
@@ -292,6 +354,7 @@ export default function InventoryPage() {
 
       setIsAddModalOpen(false);
       setNewProdName('');
+      setNewProdColor('');
       setNewProdSku('');
       setNewProdCost('');
       setNewProdPrice('');
@@ -445,6 +508,7 @@ export default function InventoryPage() {
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
                     <th className="py-3 px-4">Item & SKU</th>
+                    <th className="py-3 px-4">Colour</th>
                     <th className="py-3 px-4">Brand / Category</th>
                     <th className="py-3 px-4">Mode</th>
                     <th className="py-3 px-4 text-center">Available Stock</th>
@@ -457,13 +521,13 @@ export default function InventoryPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         Loading product catalogue...
                       </td>
                     </tr>
                   ) : products.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-500">
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
                         <Boxes className="mx-auto h-8 w-8 text-slate-300 mb-2" />
                         <p className="text-sm font-medium">No products in catalogue yet.</p>
                         <p className="text-xs text-slate-400 mt-1">
@@ -482,8 +546,22 @@ export default function InventoryPage() {
                       return (
                         <tr key={p._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                           <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 dark:text-white">{p.name}</div>
+                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <span>{p.name}</span>
+                              {p.color && (
+                                <span className="sm:hidden">
+                                  {renderColorBadge(p.color)}
+                                </span>
+                              )}
+                            </div>
                             <div className="font-mono text-[11px] text-amber-500">{p.sku}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {p.color ? (
+                              renderColorBadge(p.color)
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Default</span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
                             <div className="font-semibold">{p.brand}</div>
@@ -815,6 +893,57 @@ export default function InventoryPage() {
             </div>
           </div>
 
+          {/* Product Colour Field */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5 text-amber-500" />
+                <span>Product Colour</span>
+              </label>
+              {editProdColor && (
+                <button
+                  type="button"
+                  onClick={() => setEditProdColor('')}
+                  className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                >
+                  Clear Colour
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="e.g. Gloss Black, Sunburst, Natural Wood"
+                value={editProdColor}
+                onChange={(e) => setEditProdColor(e.target.value)}
+                className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+              />
+              <span
+                className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
+                style={getColorStyle(editProdColor)}
+              />
+            </div>
+            {/* Colour Preset Buttons */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {COLOR_PRESETS.map((cp) => (
+                <button
+                  key={cp.name}
+                  type="button"
+                  onClick={() => setEditProdColor(cp.name)}
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
+                    editProdColor.toLowerCase() === cp.name.toLowerCase()
+                      ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-400"
+                  )}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
+                  <span>{cp.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
               label="Purchase Cost (₹) *"
@@ -922,6 +1051,57 @@ export default function InventoryPage() {
                   Auto
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Product Colour Field */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5 text-amber-500" />
+                <span>Product Colour</span>
+              </label>
+              {newProdColor && (
+                <button
+                  type="button"
+                  onClick={() => setNewProdColor('')}
+                  className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                >
+                  Clear Colour
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="e.g. Sunburst, Gloss Black, Natural Wood, Arctic White"
+                value={newProdColor}
+                onChange={(e) => setNewProdColor(e.target.value)}
+                className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+              />
+              <span
+                className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
+                style={getColorStyle(newProdColor)}
+              />
+            </div>
+            {/* Colour Preset Buttons */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {COLOR_PRESETS.map((cp) => (
+                <button
+                  key={cp.name}
+                  type="button"
+                  onClick={() => setNewProdColor(cp.name)}
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
+                    newProdColor.toLowerCase() === cp.name.toLowerCase()
+                      ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-400"
+                  )}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
+                  <span>{cp.name}</span>
+                </button>
+              ))}
             </div>
           </div>
 

@@ -716,7 +716,7 @@ export default function IntakePage() {
               <option value="">-- Select Product from Catalogue --</option>
               {products.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name} ({p.sku}) — {p.trackingMode} Mode
+                  {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.trackingMode} Mode
                 </option>
               ))}
             </select>
@@ -996,7 +996,7 @@ export default function IntakePage() {
                   <option value="">Select Product</option>
                   {products.map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name} ({p.sku}) — {p.trackingMode}
+                      {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.trackingMode}
                     </option>
                   ))}
                 </select>

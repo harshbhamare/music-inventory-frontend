@@ -430,7 +430,14 @@ export default function SalesPage() {
                       className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-amber-500 bg-white dark:bg-slate-950 cursor-pointer transition-colors flex justify-between items-center text-xs"
                     >
                       <div>
-                        <div className="font-semibold text-slate-900 dark:text-white">{p.name}</div>
+                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <span>{p.name}</span>
+                          {p.color && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                              {p.color}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-400">
                           {p.brand} | Available: <strong>{p.availableForSale}</strong>
                         </div>
@@ -474,6 +481,11 @@ export default function SalesPage() {
                             <span className="font-bold text-slate-900 dark:text-white">
                               {item.product.name}
                             </span>
+                            {item.product.color && (
+                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                {item.product.color}
+                              </span>
+                            )}
                             <span className="ml-2 text-[10px] font-mono text-amber-500">
                               {item.product.sku}
                             </span>
@@ -713,7 +725,14 @@ export default function SalesPage() {
                       return (
                         <tr key={i}>
                           <td className="py-2 font-medium">
-                            <div>{li.product?.name}</div>
+                            <div>
+                              <span>{li.product?.name}</span>
+                              {li.product?.color && (
+                                <span className="ml-1.5 text-[10px] font-bold text-slate-500">
+                                  ({li.product.color})
+                                </span>
+                              )}
+                            </div>
                             {li.serializedItemIds && li.serializedItemIds.length > 0 && (
                               <div className="text-[10px] font-mono text-amber-500">
                                 Asset IDs: {li.serializedItemIds.map((u: any) => u.assetId || u).join(', ')}

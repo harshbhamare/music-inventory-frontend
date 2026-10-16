@@ -729,6 +729,11 @@ export default function UsagePage() {
                             {u.items.map((it, idx) => (
                               <div key={idx} className="text-slate-800 dark:text-slate-200">
                                 <span className="font-semibold">{it.product?.name}</span>
+                                {it.product?.color && (
+                                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                    {it.product.color}
+                                  </span>
+                                )}
                                 {it.serializedItemId && (
                                   <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
                                     [{(it.serializedItemId as any).assetId || 'Unit'}]
@@ -1008,7 +1013,7 @@ export default function UsagePage() {
                   .filter((p) => p.availableForSale > 0)
                   .map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name} ({p.sku}) — Available: {p.availableForSale} units ({p.trackingMode})
+                      {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — Available: {p.availableForSale} units ({p.trackingMode})
                     </option>
                   ))}
               </select>
