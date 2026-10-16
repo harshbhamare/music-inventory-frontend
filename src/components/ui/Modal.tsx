@@ -11,7 +11,10 @@ export interface ModalProps {
   description?: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
+  zIndex?: number;
 }
+
+let activeModalCount = 0;
 
 export function Modal({
   isOpen,
@@ -20,20 +23,28 @@ export function Modal({
   description,
   children,
   maxWidth = 'lg',
+  zIndex = 50,
 }: ModalProps) {
   useEffect(() => {
+    if (!isOpen) return;
+
+    activeModalCount++;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    }
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      activeModalCount = Math.max(0, activeModalCount - 1);
+      if (activeModalCount === 0) {
+        document.body.style.overflow = '';
+      }
     };
   }, [isOpen, onClose]);
 
@@ -49,10 +60,20 @@ export function Modal({
   }[maxWidth];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      style={{ zIndex }}
+      className="fixed inset-0 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      onMouseDown={(e) => {
+        // Only trigger close if the click originated and released directly on this outer overlay
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+        aria-hidden="true"
         onClick={onClose}
       />
 
@@ -60,17 +81,20 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         className={cn(
-          'relative z-50 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all duration-200 dark:border-slate-800 dark:bg-slate-900 animate-in zoom-in-95',
+          'relative z-10 w-full my-auto overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl transition-all duration-200 dark:border-slate-800 dark:bg-slate-900 animate-in zoom-in-95',
           maxWidthClasses
         )}
       >
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
-            {description && <p className="text-sm text-slate-500 mt-0.5">{description}</p>}
+            {description && <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{description}</p>}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
           >

@@ -18,10 +18,61 @@ import {
   Boxes,
   TrendingUp,
   FileText,
+  Calendar,
+  Layers,
+  ArrowUpRight,
+  ShoppingCart,
+  Truck,
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from 'recharts';
+
+interface PeriodicSummaryItem {
+  periodKey: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  salesRevenue: number;
+  salesCount: number;
+  itemsSold: number;
+  receiptsCount: number;
+  receiptsValue: number;
+  adjustmentsCount: number;
+}
+
+interface PeriodicSummaryResult {
+  period: 'week' | 'month';
+  kpis: {
+    totalRevenue: number;
+    totalSalesCount: number;
+    totalUnitsSold: number;
+    averageOrderValue: number;
+    totalInwardPurchases: number;
+    totalReceiptsCount: number;
+  };
+  periods: PeriodicSummaryItem[];
+  topProducts: Array<{
+    name: string;
+    sku: string;
+    quantity: number;
+    revenue: number;
+  }>;
+}
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<'valuation' | 'reconciliation' | 'emailReports'>('valuation');
+  const [activeTab, setActiveTab] = useState<'summary' | 'valuation' | 'reconciliation' | 'emailReports'>('summary');
+  const [summaryPeriod, setSummaryPeriod] = useState<'week' | 'month'>('week');
+
+  // Periodic summary state
+  const [periodicData, setPeriodicData] = useState<PeriodicSummaryResult | null>(null);
 
   // Valuation report state
   const [valuationData, setValuationData] = useState<{
@@ -52,12 +103,17 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReportData();
-  }, [activeTab]);
+  }, [activeTab, summaryPeriod]);
 
   const fetchReportData = async () => {
     setIsLoading(true);
     try {
-      if (activeTab === 'valuation') {
+      if (activeTab === 'summary') {
+        const res = await api.get<{ success: boolean; data: PeriodicSummaryResult }>(
+          `/reports/periodic-summary?period=${summaryPeriod}`
+        );
+        setPeriodicData(res.data);
+      } else if (activeTab === 'valuation') {
         const res = await api.get<any>('/reports/valuation');
         setValuationData(res);
       } else if (activeTab === 'reconciliation') {
@@ -104,40 +160,68 @@ export default function ReportsPage() {
     window.open(getApiUrl('/reports/export/products'), '_blank');
   };
 
+  const exportPeriodicCsv = () => {
+    window.open(getApiUrl(`/reports/export/periodic?period=${summaryPeriod}`), '_blank');
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Reporting & Audit Center
+            Reporting & Analytics Center
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Valuation reports, inventory ledger reconciliation audits, and automated email reporting.
+            Weekly and monthly operational summaries, catalog valuation, and audit reconciliation.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {activeTab === 'summary' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportPeriodicCsv}
+              className="gap-1.5 text-xs font-semibold"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+              <span>Export {summaryPeriod === 'week' ? 'Weekly' : 'Monthly'} CSV</span>
+            </Button>
+          )}
+
           {activeTab === 'valuation' && (
             <Button
               variant="outline"
               size="sm"
               onClick={exportValuationCsv}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs font-semibold"
             >
               <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-              <span>Export CSV</span>
+              <span>Export Valuation CSV</span>
             </Button>
           )}
 
           <Button variant="outline" size="sm" onClick={fetchReportData} title="Refresh">
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setActiveTab('summary')}
+          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'summary'
+              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <TrendingUp className="h-4 w-4" />
+          <span>Weekly & Monthly Summary</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('valuation')}
           className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
@@ -171,11 +255,290 @@ export default function ReportsPage() {
           }`}
         >
           <Mail className="h-4 w-4" />
-          <span>Automated Email Reports & Delivery</span>
+          <span>Automated Email Reports</span>
         </button>
       </div>
 
-      {/* Tab 1: Valuation */}
+      {/* Tab 1: Periodic Weekly / Monthly Summary */}
+      {activeTab === 'summary' && (
+        <div className="space-y-6">
+          {/* Period Selector Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-amber-500" />
+                <span>Aggregated Performance Overview</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Switch between weekly cadence and monthly financial summaries to track store performance and stock velocity.
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSummaryPeriod('week')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  summaryPeriod === 'week'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Weekly View (8 Weeks)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryPeriod('month')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  summaryPeriod === 'month'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Monthly View (12 Months)
+              </button>
+            </div>
+          </div>
+
+          {/* Metric KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border-l-4 border-l-amber-500">
+              <CardHeader className="pb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <ShoppingCart className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Total Sales Revenue</span>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatCurrency(periodicData?.kpis.totalRevenue ?? 0)}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Across {periodicData?.kpis.totalSalesCount ?? 0} invoices
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardHeader className="pb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Boxes className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Total Units Sold</span>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  {periodicData?.kpis.totalUnitsSold ?? 0} units
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Avg {periodicData?.kpis.averageOrderValue ? formatCurrency(periodicData.kpis.averageOrderValue) : '₹0'} / order
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-indigo-500">
+              <CardHeader className="pb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Stock Purchases Inflow</span>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatCurrency(periodicData?.kpis.totalInwardPurchases ?? 0)}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  From {periodicData?.kpis.totalReceiptsCount ?? 0} dock receipts
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-blue-500">
+              <CardHeader className="pb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Net Inflow Differential</span>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatCurrency((periodicData?.kpis.totalRevenue ?? 0) - (periodicData?.kpis.totalInwardPurchases ?? 0))}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Revenue minus intake expenditure
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Visual Bar Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>
+                  {summaryPeriod === 'week' ? 'Weekly Sales Revenue vs Stock Inflow' : 'Monthly Sales Revenue vs Stock Inflow'}
+                </span>
+                <span className="text-xs font-normal text-slate-500">Values in INR (₹)</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-72 w-full pt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={periodicData?.periods || []} margin={{ top: 10, right: 10, left: 0, bottom: 25 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                    <XAxis
+                      dataKey="periodKey"
+                      tick={{ fontSize: 11 }}
+                      interval={0}
+                      angle={-20}
+                      textAnchor="end"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                    />
+                    <Tooltip
+                      formatter={(val: any) => formatCurrency(Number(val) || 0)}
+                      labelFormatter={(label, items) => {
+                        const item = items?.[0]?.payload;
+                        return item ? `${item.label}` : label;
+                      }}
+                      contentStyle={{
+                        borderRadius: '0.75rem',
+                        fontSize: '12px',
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#fff',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    <Bar
+                      dataKey="salesRevenue"
+                      name="Sales Revenue"
+                      fill="#f59e0b"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="receiptsValue"
+                      name="Inward Stock Purchases"
+                      fill="#6366f1"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detailed Period-by-Period Table */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-2">
+              <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Detailed {summaryPeriod === 'week' ? 'Weekly' : 'Monthly'} Breakdown</span>
+                  <Badge variant="outline" className="text-xs">
+                    {periodicData?.periods.length ?? 0} periods tracked
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="responsive-table-wrapper">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
+                        <th className="py-3 px-4">Period Range</th>
+                        <th className="py-3 px-4 text-center">Orders</th>
+                        <th className="py-3 px-4 text-right">Revenue (₹)</th>
+                        <th className="py-3 px-4 text-center">Units Sold</th>
+                        <th className="py-3 px-4 text-center">Receipts</th>
+                        <th className="py-3 px-4 text-right">Inward Stock (₹)</th>
+                        <th className="py-3 px-4 text-center">Adjustments</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                      {(periodicData?.periods || []).map((p, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900 dark:text-white">{p.label}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {p.startDate.slice(0, 10)} to {p.endDate.slice(0, 10)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
+                            {p.salesCount}
+                          </td>
+                          <td className="py-3 px-4 text-right font-black text-amber-600 dark:text-amber-400">
+                            {formatCurrency(p.salesRevenue)}
+                          </td>
+                          <td className="py-3 px-4 text-center font-medium text-slate-600 dark:text-slate-400">
+                            {p.itemsSold}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">
+                            {p.receiptsCount}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
+                            {formatCurrency(p.receiptsValue)}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-500">
+                            {p.adjustmentsCount > 0 ? (
+                              <Badge variant="warning" className="text-[10px]">
+                                {p.adjustmentsCount}
+                              </Badge>
+                            ) : (
+                              '0'
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top Selling Products in Period */}
+            <Card>
+              <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Top Selling Products</span>
+                  <span className="text-xs text-slate-400">By Revenue</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                {(!periodicData?.topProducts || periodicData.topProducts.length === 0) ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    No sales recorded in this period timeframe.
+                  </div>
+                ) : (
+                  periodicData.topProducts.map((tp, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-xs text-slate-900 dark:text-white line-clamp-1">
+                          {idx + 1}. {tp.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">SKU: {tp.sku}</div>
+                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                          {tp.quantity} unit(s) sold
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-black text-amber-500">
+                          {formatCurrency(tp.revenue)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Valuation */}
       {activeTab === 'valuation' && (
         <div className="space-y-6">
           {/* Summary KPI Cards */}
@@ -199,34 +562,46 @@ export default function ReportsPage() {
             <Card className="border-l-4 border-l-emerald-500">
               <CardHeader className="pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Potential Retail Value
+                  Total Potential Retail Value
                 </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                   {formatCurrency(valuationData?.totals?.totalPotentialRetail ?? 0)}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">At default catalog selling prices</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Expected revenue at default MSRP
+                </p>
               </CardContent>
             </Card>
 
             <Card className="border-l-4 border-l-indigo-500">
               <CardHeader className="pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Potential Gross Margin
+                  Estimated Gross Margin
                 </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">
+                <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                   {formatCurrency(valuationData?.totals?.totalPotentialMargin ?? 0)}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Potential retail margin before taxes</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Potential profit upon 100% sell-through
+                </p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Product-wise valuation table */}
+          {/* Detailed Valuation Table */}
           <Card>
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-base">Product-by-Product Asset Valuation</CardTitle>
+                <span className="text-xs text-slate-500">
+                  {valuationData?.items?.length ?? 0} products listed
+                </span>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <div className="responsive-table-wrapper">
                 <table className="w-full text-left text-xs border-collapse">
@@ -234,40 +609,46 @@ export default function ReportsPage() {
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
                       <th className="py-3 px-4">Product / SKU</th>
                       <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Tracking Mode</th>
                       <th className="py-3 px-4 text-center">On Hand</th>
+                      <th className="py-3 px-4 text-center">Available</th>
                       <th className="py-3 px-4 text-right">Unit Cost</th>
-                      <th className="py-3 px-4 text-right">Unit Price</th>
-                      <th className="py-3 px-4 text-right">Total Cost Value</th>
+                      <th className="py-3 px-4 text-right">Selling Price</th>
+                      <th className="py-3 px-4 text-right">Valuation (Cost)</th>
                       <th className="py-3 px-4 text-right">Potential Retail</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                     {valuationData?.items?.map((item) => (
                       <tr key={item.productId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900 dark:text-white">{item.name}</div>
-                          <div className="font-mono text-[11px] text-amber-500">{item.sku}</div>
+                          <div className="text-[11px] font-mono text-amber-500">{item.sku}</div>
                         </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
-                          {item.category}
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline">{item.trackingMode}</Badge>
-                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{item.category}</td>
                         <td className="py-3 px-4 text-center font-bold text-slate-900 dark:text-white">
                           {item.onHand}
                         </td>
-                        <td className="py-3 px-4 text-right font-medium text-slate-500">
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={
+                              item.available > 0
+                                ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                                : 'text-rose-500 font-semibold'
+                            }
+                          >
+                            {item.available}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
                           {formatCurrency(item.unitCost)}
                         </td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
                           {formatCurrency(item.unitPrice)}
                         </td>
-                        <td className="py-3 px-4 text-right font-bold text-amber-500">
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                           {formatCurrency(item.valuationCost)}
                         </td>
-                        <td className="py-3 px-4 text-right font-bold text-emerald-500">
+                        <td className="py-3 px-4 text-right font-black text-amber-500">
                           {formatCurrency(item.potentialRetail)}
                         </td>
                       </tr>
@@ -280,90 +661,111 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tab 2: Reconciliation */}
+      {/* Tab 3: Ledger Reconciliation Audit */}
       {activeTab === 'reconciliation' && (
         <div className="space-y-6">
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Independent Stock Ledger Integrity Audit
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Calculates cumulative delta of all immutable movements and compares against stored on-hand balances.
-              </p>
-            </div>
+          <Card className="border-l-4 border-l-blue-500">
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-blue-500" />
+                    <span>Real-time Ledger Integrity Verification</span>
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Every physical change generates an immutable transaction movement in the ledger.
+                    This automated audit re-calculates all movements from Genesis and validates them against current product quantities.
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    reconciliationData?.mismatchesFound === 0 ? 'success' : 'danger'
+                  }
+                  className="font-bold text-xs"
+                >
+                  {reconciliationData?.mismatchesFound === 0
+                    ? '100% Invariant Compliant'
+                    : `${reconciliationData?.mismatchesFound} Discrepancy Found`}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs">
+                <div>
+                  <span className="text-slate-500">Last Verified:</span>
+                  <div className="font-semibold text-slate-900 dark:text-white">
+                    {reconciliationData?.timestamp
+                      ? formatDateTime(reconciliationData.timestamp)
+                      : 'Just now'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Total Products Audited:</span>
+                  <div className="font-semibold text-slate-900 dark:text-white">
+                    {reconciliationData?.totalProductsChecked ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Ledger Discrepancies:</span>
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {reconciliationData?.mismatchesFound ?? 0} Mismatches
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            <div className="flex items-center gap-3">
-              <Badge
-                variant={
-                  reconciliationData?.mismatchesFound === 0 ? 'success' : 'danger'
-                }
-                className="text-xs font-bold py-1 px-3"
-              >
-                {reconciliationData?.mismatchesFound === 0
-                  ? '✅ 100% Reconciled (No Discrepancies)'
-                  : `⚠️ ${reconciliationData?.mismatchesFound} Discrepancy Found`}
-              </Badge>
-              <Button size="sm" variant="default" onClick={fetchReportData} className="text-xs font-bold">
-                Run Audit Now
-              </Button>
-            </div>
-          </div>
-
+          {/* Audit Results Table */}
           <Card>
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base">Ledger Reconciliation Audit Log</CardTitle>
+            </CardHeader>
             <CardContent className="p-0">
               <div className="responsive-table-wrapper">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Product / SKU</th>
-                      <th className="py-3 px-4">Tracking Mode</th>
+                      <th className="py-3 px-4">Product Name</th>
+                      <th className="py-3 px-4">SKU</th>
                       <th className="py-3 px-4 text-center">Recorded Balance</th>
-                      <th className="py-3 px-4 text-center">Ledger Derived Sum</th>
-                      <th className="py-3 px-4 text-center">Physical Serials Count</th>
-                      <th className="py-3 px-4 text-center">Discrepancy Delta</th>
+                      <th className="py-3 px-4 text-center">Calculated from Ledger</th>
+                      <th className="py-3 px-4 text-center">Variance</th>
                       <th className="py-3 px-4 text-center">Audit Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {reconciliationData?.results?.map((res) => (
-                      <tr key={res.productId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white">
-                            {res.productName}
-                          </div>
-                          <div className="font-mono text-[11px] text-amber-500">{res.sku}</div>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {reconciliationData?.results?.map((res, i) => (
+                      <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                          {res.productName}
                         </td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline">{res.trackingMode}</Badge>
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold text-slate-900 dark:text-white">
-                          {res.recordedOnHand}
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold text-amber-500">
-                          {res.calculatedFromLedger}
-                        </td>
-                        <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">
-                          {res.serializedPhysicalCount !== undefined
-                            ? res.serializedPhysicalCount
-                            : 'N/A (Bulk)'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold">
-                          {res.discrepancyDelta === 0 ? (
-                            <span className="text-emerald-500">0</span>
-                          ) : (
-                            <span className="text-rose-500 font-extrabold">{res.discrepancyDelta}</span>
-                          )}
+                        <td className="py-3 px-4 font-mono text-amber-500">{res.sku}</td>
+                        <td className="py-3 px-4 text-center font-bold">{res.recordedOnHand}</td>
+                        <td className="py-3 px-4 text-center font-bold text-indigo-500">
+                          {res.calculatedOnHand}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {res.hasMismatch ? (
-                            <Badge variant="danger" className="text-[10px]">
-                              Mismatch
-                            </Badge>
+                          <span
+                            className={
+                              res.variance === 0
+                                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                                : 'text-rose-500 font-bold'
+                            }
+                          >
+                            {res.variance === 0 ? '0' : res.variance}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {res.status === 'MATCH' ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Verified</span>
+                            </span>
                           ) : (
-                            <Badge variant="success" className="text-[10px]">
-                              Verified
-                            </Badge>
+                            <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-semibold">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span>Mismatch</span>
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -376,127 +778,149 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tab 3: Email Reports & Schedules */}
+      {/* Tab 4: Automated Email Reports & Delivery */}
       {activeTab === 'emailReports' && (
         <div className="space-y-6">
           {emailStatusMessage && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-700 dark:text-amber-400">
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800 dark:text-amber-400">
               {emailStatusMessage}
             </div>
           )}
 
-          {/* Quick Manual Trigger Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Daily Stock Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-slate-500">
-                  Sends current total stock, available quantities, low-stock alerts, and valuations.
-                </p>
+          {/* Action Trigger Card */}
+          <Card>
+            <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="h-4 w-4 text-amber-500" />
+                <span>Manual Email Dispatch Triggers</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <p className="text-xs text-slate-500">
+                Trigger transactional notifications immediately to verified recipient lists.
+              </p>
+              <div className="flex flex-wrap gap-3">
                 <Button
                   size="sm"
                   variant="default"
                   isLoading={isSendingEmail}
                   onClick={() => handleTriggerEmail('summary')}
-                  className="w-full text-xs font-bold"
+                  className="font-bold gap-1.5 text-xs"
                 >
-                  <Send className="mr-2 h-3.5 w-3.5" />
-                  <span>Send Stock Summary</span>
+                  <Mail className="h-4 w-4" />
+                  <span>Send Daily Stock Summary Now</span>
                 </Button>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Overdue Loan Reminders</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-slate-500">
-                  Scans academy loans and alerts managers about equipment past expected return date.
-                </p>
                 <Button
                   size="sm"
                   variant="outline"
                   isLoading={isSendingEmail}
                   onClick={() => handleTriggerEmail('overdue')}
-                  className="w-full text-xs font-bold"
+                  className="gap-1.5 text-xs"
                 >
-                  <Send className="mr-2 h-3.5 w-3.5" />
-                  <span>Send Overdue Alerts</span>
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <span>Send Overdue Usage Alerts</span>
                 </Button>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Test Email Integration</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-slate-500">
-                  Sends a test notification to verify transactional email delivery logging.
-                </p>
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="outline"
                   isLoading={isSendingEmail}
                   onClick={() => handleTriggerEmail('test')}
-                  className="w-full text-xs font-bold"
+                  className="gap-1.5 text-xs"
                 >
-                  <Send className="mr-2 h-3.5 w-3.5" />
-                  <span>Send Test Email</span>
+                  <Send className="h-4 w-4 text-indigo-500" />
+                  <span>Send Config Test Email</span>
                 </Button>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Automated Schedule Configs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {reportConfigs.map((cfg) => (
+              <Card key={cfg._id} className="border-slate-200 dark:border-slate-800">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-sm font-bold text-slate-900 dark:text-white">
+                        {cfg.name}
+                      </CardTitle>
+                      <div className="text-[11px] font-mono text-amber-500 mt-0.5">
+                        Cron: {cfg.cronSchedule}
+                      </div>
+                    </div>
+                    <Badge variant={cfg.enabled ? 'success' : 'outline'} className="text-[10px]">
+                      {cfg.enabled ? 'Active Schedule' : 'Paused'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-slate-400">Recipients:</span>
+                    <div className="text-slate-700 dark:text-slate-300 font-medium truncate">
+                      {cfg.recipients?.join(', ') || 'No recipients assigned'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Last Dispatched:</span>
+                    <div className="text-slate-600 dark:text-slate-400">
+                      {cfg.lastRunAt ? formatDateTime(cfg.lastRunAt) : 'Not yet dispatched'}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          {/* Recent Delivery Logs */}
+          {/* Email Delivery Audit Trail */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent Email Dispatch Delivery Logs</CardTitle>
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base">Email Delivery Audit Trail</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="responsive-table-wrapper">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Timestamp</th>
+                      <th className="py-3 px-4">Dispatched At</th>
                       <th className="py-3 px-4">Report Type</th>
                       <th className="py-3 px-4">Recipients</th>
                       <th className="py-3 px-4">Subject</th>
-                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-center">Status</th>
                       <th className="py-3 px-4">Provider Ref</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                     {emailLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-500">
-                          No email dispatches recorded yet. Click one of the buttons above to test.
+                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                          No email dispatch records found.
                         </td>
                       </tr>
                     ) : (
                       emailLogs.map((log) => (
                         <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
-                            {formatDateTime(log.createdAt)}
-                          </td>
-                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                            {log.reportType}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
-                            {log.recipients?.join(', ')}
-                          </td>
-                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
-                            {log.subject}
+                          <td className="py-3 px-4 text-slate-500">
+                            {formatDateTime(log.sentAt || log.createdAt)}
                           </td>
                           <td className="py-3 px-4">
+                            <Badge variant="outline" className="text-[10px]">
+                              {log.reportType}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                            {log.recipients?.join(', ')}
+                          </td>
+                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 truncate max-w-xs">
+                            {log.subject}
+                          </td>
+                          <td className="py-3 px-4 text-center">
                             <Badge
                               variant={
                                 log.status === 'SENT'
                                   ? 'success'
-                                  : log.status === 'SIMULATED'
+                                  : log.status === 'PENDING'
                                   ? 'warning'
                                   : 'danger'
                               }

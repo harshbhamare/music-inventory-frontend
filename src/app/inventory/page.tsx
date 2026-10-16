@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, getApiUrl } from '@/lib/api';
 import { Product, SerializedItem, Category, Supplier } from '@/lib/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   AlertCircle,
   PackagePlus,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 export default function InventoryPage() {
@@ -51,15 +53,13 @@ export default function InventoryPage() {
   const [newProdName, setNewProdName] = useState('');
   const [newProdSku, setNewProdSku] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
-  const [newProdBrand, setNewProdBrand] = useState('');
-  const [newProdModel, setNewProdModel] = useState('');
-  const [newProdTracking, setNewProdTracking] = useState<'QUANTITY' | 'SERIALIZED'>('QUANTITY');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdSupplier, setNewProdSupplier] = useState('');
   const [newProdThreshold, setNewProdThreshold] = useState('5');
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingSku, setIsFetchingSku] = useState(false);
 
   // Quick Stock Adjustment Modal State
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
@@ -245,6 +245,33 @@ export default function InventoryPage() {
     }
   };
 
+  // Fetch Next Auto-Incremented SKU
+  const fetchNextSku = async () => {
+    setIsFetchingSku(true);
+    try {
+      const res = await api.get<{ nextSku: string }>('/products/next-sku');
+      if (res.nextSku) setNewProdSku(res.nextSku);
+    } catch {
+      // fallback
+    } finally {
+      setIsFetchingSku(false);
+    }
+  };
+
+  // Open Add Product Modal with Fresh SKU
+  const handleOpenAddProduct = async () => {
+    setFormError('');
+    setNewProdName('');
+    setNewProdCost('');
+    setNewProdPrice('');
+    setNewProdThreshold('5');
+    if (categories.length > 0 && !newProdCategory) {
+      setNewProdCategory(categories[0]._id);
+    }
+    await fetchNextSku();
+    setIsAddModalOpen(true);
+  };
+
   // Create Product
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,11 +281,9 @@ export default function InventoryPage() {
     try {
       await api.post('/products', {
         name: newProdName.trim(),
-        sku: newProdSku.trim().toUpperCase(),
-        category: newProdCategory,
-        brand: newProdBrand.trim(),
-        modelName: newProdModel.trim() || undefined,
-        trackingMode: newProdTracking,
+        sku: newProdSku.trim().toUpperCase() || undefined,
+        category: newProdCategory || categories[0]?._id,
+        trackingMode: 'QUANTITY',
         purchaseCost: parseFloat(newProdCost) || 0,
         defaultSellingPrice: parseFloat(newProdPrice) || 0,
         supplier: newProdSupplier || undefined,
@@ -268,8 +293,6 @@ export default function InventoryPage() {
       setIsAddModalOpen(false);
       setNewProdName('');
       setNewProdSku('');
-      setNewProdBrand('');
-      setNewProdModel('');
       setNewProdCost('');
       setNewProdPrice('');
       fetchProducts();
@@ -330,10 +353,7 @@ export default function InventoryPage() {
             <Button
               size="sm"
               variant="default"
-              onClick={() => {
-                setFormError('');
-                setIsAddModalOpen(true);
-              }}
+              onClick={handleOpenAddProduct}
               className="gap-1.5 text-xs font-bold"
             >
               <Plus className="h-4 w-4" />
@@ -777,20 +797,6 @@ export default function InventoryPage() {
               value={editProdName}
               onChange={(e) => setEditProdName(e.target.value)}
             />
-            <Input
-              label="Brand / Manufacturer *"
-              required
-              value={editProdBrand}
-              onChange={(e) => setEditProdBrand(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Model Number / Detail"
-              value={editProdModel}
-              onChange={(e) => setEditProdModel(e.target.value)}
-            />
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                 Category
@@ -869,8 +875,8 @@ export default function InventoryPage() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Add Product to Catalogue"
-        description="Register a musical instrument, studio accessory, or bulk consumable."
-        maxWidth="2xl"
+        description="Register a new retail product into the master inventory catalogue."
+        maxWidth="xl"
       >
         <form onSubmit={handleCreateProduct} className="space-y-4">
           {formError && (
@@ -883,33 +889,43 @@ export default function InventoryPage() {
             <Input
               label="Product Name *"
               required
-              placeholder="e.g. Yamaha F310 Acoustic Guitar"
+              placeholder="e.g. 1/4 Inch Instrument Cable 3m"
               value={newProdName}
               onChange={(e) => setNewProdName(e.target.value)}
             />
-            <Input
-              label="SKU Code *"
-              required
-              placeholder="e.g. GTR-YAM-F310"
-              value={newProdSku}
-              onChange={(e) => setNewProdSku(e.target.value)}
-            />
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  SKU Code (Auto-Incremented)
+                </label>
+                <button
+                  type="button"
+                  onClick={fetchNextSku}
+                  disabled={isFetchingSku}
+                  title="Generate next sequential SKU"
+                  className="text-[11px] font-bold text-amber-500 hover:text-amber-600 flex items-center gap-1 transition-colors"
+                >
+                  <RefreshCw className={cn('h-3 w-3', isFetchingSku && 'animate-spin')} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  readOnly
+                  value={newProdSku || 'Generating...'}
+                  className="w-full h-10 px-3 pr-16 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 font-mono font-bold text-amber-600 dark:text-amber-400 cursor-default"
+                />
+                <span className="absolute right-2.5 top-2.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                  Auto
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input
-              label="Brand *"
-              required
-              placeholder="e.g. Yamaha, Fender, Shure"
-              value={newProdBrand}
-              onChange={(e) => setNewProdBrand(e.target.value)}
-            />
-            <Input
-              label="Model"
-              placeholder="e.g. F310"
-              value={newProdModel}
-              onChange={(e) => setNewProdModel(e.target.value)}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                 Category *
@@ -927,45 +943,7 @@ export default function InventoryPage() {
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Tracking Mode *
-              </label>
-              <select
-                value={newProdTracking}
-                onChange={(e) => setNewProdTracking(e.target.value as any)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-semibold text-amber-500"
-              >
-                <option value="QUANTITY">Quantity-Based (Bulk/Accessories)</option>
-                <option value="SERIALIZED">Serialized (Distinct Instruments)</option>
-              </select>
-            </div>
-
-            <Input
-              label="Purchase Cost (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 7200"
-              value={newProdCost}
-              onChange={(e) => setNewProdCost(e.target.value)}
-            />
-
-            <Input
-              label="Selling Price (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 10490"
-              value={newProdPrice}
-              onChange={(e) => setNewProdPrice(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -984,7 +962,7 @@ export default function InventoryPage() {
                 onChange={(e) => setNewProdSupplier(e.target.value)}
                 className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
               >
-                <option value="">Select Supplier</option>
+                <option value="">Select Supplier (Optional)</option>
                 {suppliers.map((s) => (
                   <option key={s._id} value={s._id}>
                     {s.name}
@@ -992,6 +970,28 @@ export default function InventoryPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="Purchase Cost (₹) *"
+              type="number"
+              min="0"
+              required
+              placeholder="e.g. 450"
+              value={newProdCost}
+              onChange={(e) => setNewProdCost(e.target.value)}
+            />
+
+            <Input
+              label="Selling Price (₹) *"
+              type="number"
+              min="0"
+              required
+              placeholder="e.g. 750"
+              value={newProdPrice}
+              onChange={(e) => setNewProdPrice(e.target.value)}
+            />
 
             <Input
               label="Low Stock Alert Threshold"
@@ -1000,6 +1000,11 @@ export default function InventoryPage() {
               value={newProdThreshold}
               onChange={(e) => setNewProdThreshold(e.target.value)}
             />
+          </div>
+
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
+            <span>Tracking Mode: <strong>Bulk (Quantity-based)</strong></span>
+            <span className="text-[11px] font-semibold text-slate-500">Unit: pcs/pack</span>
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -1020,6 +1025,7 @@ export default function InventoryPage() {
         title="Add New Supplier"
         description="Register a new vendor/supplier to assign to this product."
         maxWidth="md"
+        zIndex={60}
       >
         <form onSubmit={handleSaveQuickSupplier} className="space-y-4">
           <Input

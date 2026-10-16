@@ -37,7 +37,7 @@ import {
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<'today' | '7days' | '30days' | 'all'>('7days');
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | '30days' | 'all'>('week');
 
   useEffect(() => {
     fetchMetrics();
@@ -46,15 +46,23 @@ export default function DashboardPage() {
   const fetchMetrics = async () => {
     setIsLoading(true);
     try {
-      const now = new Date();
       let startDate: string | undefined;
 
       if (dateRange === 'today') {
-        startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-      } else if (dateRange === '7days') {
         const d = new Date();
-        d.setDate(d.getDate() - 7);
+        d.setHours(0, 0, 0, 0);
         startDate = d.toISOString();
+      } else if (dateRange === 'week') {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = (day + 6) % 7;
+        d.setDate(d.getDate() - diff);
+        d.setHours(0, 0, 0, 0);
+        startDate = d.toISOString();
+      } else if (dateRange === 'month') {
+        const d = new Date();
+        const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        startDate = startOfMonth.toISOString();
       } else if (dateRange === '30days') {
         const d = new Date();
         d.setDate(d.getDate() - 30);
@@ -98,7 +106,7 @@ export default function DashboardPage() {
         {/* Date Filter Controls & Refresh */}
         <div className="flex items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
-            {(['today', '7days', '30days', 'all'] as const).map((r) => (
+            {(['today', 'week', 'month', '30days', 'all'] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setDateRange(r)}
@@ -108,7 +116,15 @@ export default function DashboardPage() {
                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                 }`}
               >
-                {r === 'today' ? 'Today' : r === '7days' ? 'Last 7 Days' : r === '30days' ? 'Last 30 Days' : 'All Time'}
+                {r === 'today'
+                  ? 'Today'
+                  : r === 'week'
+                  ? 'This Week'
+                  : r === 'month'
+                  ? 'This Month'
+                  : r === '30days'
+                  ? 'Last 30 Days'
+                  : 'All Time'}
               </button>
             ))}
           </div>
@@ -127,7 +143,7 @@ export default function DashboardPage() {
             <div className="text-sm">
               <span className="font-bold">Attention Required:</span>{' '}
               {kpis?.pendingApprovalsCount ? (
-                <span>{kpis.pendingApprovalsCount} stock adjustment(s) awaiting manager approval. </span>
+                <span>{kpis.pendingApprovalsCount} stock adjustment(s) awaiting Superadmin approval. </span>
               ) : null}
               {kpis?.overdueUsageCount ? (
                 <span>{kpis.overdueUsageCount} instrument loan(s) currently overdue.</span>
