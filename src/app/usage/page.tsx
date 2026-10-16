@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { InternalUsage, Product, SerializedItem, StockLocation } from '@/lib/types';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate, formatDateTime, formatCurrency } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
 import {
-  GraduationCap,
+  Music2,
   Plus,
   RotateCcw,
   Clock,
@@ -19,11 +19,32 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarPlus,
-  UserCheck,
   Search,
   Wrench,
-  ShieldAlert,
+  Mail,
+  IndianRupee,
+  CreditCard,
+  Send,
+  Layers,
+  Tag,
+  Check,
+  Shield,
+  Phone,
+  User,
+  CheckSquare,
+  Square,
+  Bell,
+  RefreshCw,
 } from 'lucide-react';
+
+const COMMON_ACCESSORIES = [
+  'Heavy-Duty Stand',
+  'Power Adapter & Cable',
+  'Padded Gig Bag / Hardcase',
+  'Sustain Pedal',
+  'Studio Monitor Headphones',
+  'Instrument Cable (6.35mm TS)',
+];
 
 export default function UsagePage() {
   const { canIssueUsage } = useAuth();
@@ -35,14 +56,25 @@ export default function UsagePage() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Issue Equipment Modal
+  // Issue / Rent Equipment Modal State
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [purpose, setPurpose] = useState<
     'CLASS' | 'PRACTICE' | 'REHEARSAL' | 'DEMONSTRATION' | 'EVENT' | 'REPAIR' | 'OTHER'
   >('CLASS');
+  const [isRental, setIsRental] = useState(true);
   const [assignedPerson, setAssignedPerson] = useState('');
   const [assignedPersonContact, setAssignedPersonContact] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [lockInPeriodMonths, setLockInPeriodMonths] = useState(3);
+  const [securityDeposit, setSecurityDeposit] = useState<number>(5000);
+  const [monthlyRent, setMonthlyRent] = useState<number>(1500);
   const [expectedReturnDate, setExpectedReturnDate] = useState('');
+  const [includedAccessories, setIncludedAccessories] = useState<string[]>([
+    'Heavy-Duty Stand',
+    'Power Adapter & Cable',
+  ]);
+  const [customAccessoryInput, setCustomAccessoryInput] = useState('');
+
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedSerialId, setSelectedSerialId] = useState('');
   const [issueQuantity, setIssueQuantity] = useState(1);
@@ -50,6 +82,18 @@ export default function UsagePage() {
   const [notes, setNotes] = useState('');
   const [issueError, setIssueError] = useState('');
   const [isIssuing, setIsIssuing] = useState(false);
+
+  // Monthly Rental Ledger & Payment Tracking Modal
+  const [selectedRentalForLedger, setSelectedRentalForLedger] = useState<InternalUsage | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [selectedBillingMonth, setSelectedBillingMonth] = useState('');
+  const [rentalPaymentMethod, setRentalPaymentMethod] = useState<'UPI' | 'CARD' | 'CASH' | 'BANK_TRANSFER'>('UPI');
+  const [rentalTransactionRef, setRentalTransactionRef] = useState('');
+  const [rentalPaymentNotes, setRentalPaymentNotes] = useState('');
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [reminderFeedback, setReminderFeedback] = useState('');
 
   // Return & Inspection Modal
   const [returnModalUsage, setReturnModalUsage] = useState<InternalUsage | null>(null);
@@ -70,6 +114,14 @@ export default function UsagePage() {
     fetchUsages();
     fetchInventory();
   }, [statusFilter, search]);
+
+  // Pre-calculate expected return date whenever lockInPeriodMonths changes
+  const applyLockInMonths = (months: number) => {
+    setLockInPeriodMonths(months);
+    const date = new Date();
+    date.setMonth(date.getMonth() + months);
+    setExpectedReturnDate(date.toISOString().slice(0, 16));
+  };
 
   const fetchUsages = async () => {
     setIsLoading(true);
@@ -102,6 +154,34 @@ export default function UsagePage() {
     }
   };
 
+  const toggleAccessory = (acc: string) => {
+    if (includedAccessories.includes(acc)) {
+      setIncludedAccessories(includedAccessories.filter((a) => a !== acc));
+    } else {
+      setIncludedAccessories([...includedAccessories, acc]);
+    }
+  };
+
+  const handleAddCustomAccessory = (e: React.KeyboardEvent | React.MouseEvent) => {
+    if ('key' in e && e.key !== 'Enter') return;
+    e.preventDefault();
+    const trimmed = customAccessoryInput.trim();
+    if (trimmed && !includedAccessories.includes(trimmed)) {
+      setIncludedAccessories([...includedAccessories, trimmed]);
+      setCustomAccessoryInput('');
+    }
+  };
+
+  const openIssueModal = () => {
+    setIsIssueModalOpen(true);
+    setIsRental(true);
+    applyLockInMonths(3);
+    setSecurityDeposit(5000);
+    setMonthlyRent(1500);
+    setIncludedAccessories(['Heavy-Duty Stand', 'Power Adapter & Cable']);
+    setIssueError('');
+  };
+
   const selectedProduct = products.find((p) => p._id === selectedProductId);
 
   const handleIssueSubmit = async (e: React.FormEvent) => {
@@ -110,7 +190,7 @@ export default function UsagePage() {
     setIsIssuing(true);
 
     try {
-      if (!selectedProduct) throw new Error('Please select an instrument or accessory.');
+      if (!selectedProduct) throw new Error('Please select an instrument or product.');
 
       const isSerialized = selectedProduct.trackingMode === 'SERIALIZED';
       if (isSerialized && !selectedSerialId) {
@@ -121,8 +201,14 @@ export default function UsagePage() {
         purpose,
         assignedPerson: assignedPerson.trim(),
         assignedPersonContact: assignedPersonContact.trim() || undefined,
+        customerEmail: customerEmail.trim() || undefined,
         location: locations[0]?._id,
         expectedReturnDate,
+        isRental,
+        lockInPeriodMonths,
+        securityDeposit,
+        monthlyRent,
+        includedAccessories,
         notes: notes.trim() || undefined,
         items: [
           {
@@ -137,15 +223,86 @@ export default function UsagePage() {
       setIsIssueModalOpen(false);
       setAssignedPerson('');
       setAssignedPersonContact('');
+      setCustomerEmail('');
       setSelectedProductId('');
       setSelectedSerialId('');
       setNotes('');
       fetchUsages();
       fetchInventory();
     } catch (err: any) {
-      setIssueError(err.message || 'Failed to issue equipment.');
+      setIssueError(err.message || 'Failed to create instrument rental agreement.');
     } finally {
       setIsIssuing(false);
+    }
+  };
+
+  // Open Monthly Payment Tracker & Ledger Modal
+  const openLedgerModal = (usage: InternalUsage) => {
+    setSelectedRentalForLedger(usage);
+    const firstDue = usage.monthlyPayments?.find((p) => p.status !== 'PAID');
+    setPaymentAmount(firstDue?.amountDue || usage.monthlyRent || 1500);
+    setSelectedBillingMonth(firstDue?.billingMonth || '');
+    setRentalTransactionRef('');
+    setRentalPaymentNotes('');
+    setPaymentError('');
+    setReminderFeedback('');
+  };
+
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRentalForLedger) return;
+    setIsRecordingPayment(true);
+    setPaymentError('');
+
+    try {
+      if (paymentAmount <= 0) {
+        throw new Error('Payment amount must be greater than 0.');
+      }
+
+      const res = await api.post<{ usage: InternalUsage }>(
+        `/usage/${selectedRentalForLedger._id}/payments`,
+        {
+          amount: paymentAmount,
+          billingMonth: selectedBillingMonth || undefined,
+          paymentMethod: rentalPaymentMethod,
+          transactionRef: rentalTransactionRef.trim() || undefined,
+          notes: rentalPaymentNotes.trim() || undefined,
+        }
+      );
+
+      setSelectedRentalForLedger(res.usage);
+      setRentalTransactionRef('');
+      setRentalPaymentNotes('');
+      fetchUsages();
+    } catch (err: any) {
+      setPaymentError(err.message || 'Failed to record rent payment.');
+    } finally {
+      setIsRecordingPayment(false);
+    }
+  };
+
+  const handleSendReminder = async (usage: InternalUsage) => {
+    setIsSendingReminder(true);
+    setReminderFeedback('');
+
+    try {
+      const res = await api.post<{
+        success: boolean;
+        message: string;
+        sentTo: string;
+        channel: string;
+        usage: InternalUsage;
+      }>(`/usage/${usage._id}/send-reminder`, {});
+
+      setReminderFeedback(`Payment reminder dispatched to ${res.sentTo} (${res.channel})!`);
+      fetchUsages();
+      if (selectedRentalForLedger && selectedRentalForLedger._id === usage._id) {
+        setSelectedRentalForLedger(res.usage);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to send reminder.');
+    } finally {
+      setIsSendingReminder(false);
     }
   };
 
@@ -190,7 +347,7 @@ export default function UsagePage() {
 
       await api.post(`/usage/${returnModalUsage._id}/return`, {
         items: itemsPayload,
-        notes: 'Return inspection processed',
+        notes: 'Rental inspection processed & equipment returned',
       });
 
       setReturnModalUsage(null);
@@ -205,7 +362,7 @@ export default function UsagePage() {
 
   const openExtendModal = (usage: InternalUsage) => {
     setExtendModalUsage(usage);
-    setNewExtendedDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
+    setNewExtendedDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
     setExtensionReason('');
     setExtendError('');
   };
@@ -225,22 +382,29 @@ export default function UsagePage() {
       setExtendModalUsage(null);
       fetchUsages();
     } catch (err: any) {
-      setExtendError(err.message || 'Failed to extend loan date.');
+      setExtendError(err.message || 'Failed to extend rental schedule.');
     } finally {
       setIsExtending(false);
     }
   };
+
+  // Financial KPIs for Rentals
+  const activeRentals = usages.filter((u) => u.status !== 'RETURNED');
+  const totalDepositsHeld = activeRentals.reduce((sum, u) => sum + (u.securityDeposit || 0), 0);
+  const totalRentCollected = usages.reduce((sum, u) => sum + (u.totalRentPaid || 0), 0);
+  const totalRentPending = activeRentals.reduce((sum, u) => sum + (u.totalRentDue || 0), 0);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Internal Equipment & Academy Loans
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <Music2 className="h-6 w-6 text-amber-500" />
+            <span>Rent Instrument & Instrument Loans</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Track musical instruments deployed for music classes, rehearsals, student practice, and events.
+            Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
           </p>
         </div>
 
@@ -248,13 +412,68 @@ export default function UsagePage() {
           <Button
             size="sm"
             variant="default"
-            onClick={() => setIsIssueModalOpen(true)}
+            onClick={openIssueModal}
             className="gap-1.5 text-xs font-bold shadow-md"
           >
             <Plus className="h-4 w-4" />
-            <span>Issue Instrument / Gear</span>
+            <span>Rent Instrument / Issue Loan</span>
           </Button>
         )}
+      </div>
+
+      {/* Rental Financial Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-amber-500 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <span>Active Rentals & Loans</span>
+              <Music2 className="h-4 w-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              {activeRentals.length}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Instruments currently on rent/loan</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-indigo-500 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <span>Security Deposits Held</span>
+              <Shield className="h-4 w-4 text-indigo-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              {formatCurrency(totalDepositsHeld)}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Refundable customer safety deposits</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <span>Total Rent Collected</span>
+              <IndianRupee className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              {formatCurrency(totalRentCollected)}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Monthly rental income processed</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-rose-500 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <span>Pending Rent Due</span>
+              <AlertTriangle className="h-4 w-4 text-rose-500" />
+            </div>
+            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+              {formatCurrency(totalRentPending)}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Outstanding rental installments</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filter Toolbar */}
@@ -270,16 +489,22 @@ export default function UsagePage() {
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              {s === 'ALL' ? 'All Loans' : s === 'ACTIVE' ? 'Active Loans' : s === 'OVERDUE' ? '⚠️ Overdue' : 'Returned'}
+              {s === 'ALL'
+                ? 'All Rentals'
+                : s === 'ACTIVE'
+                ? 'Active Rentals'
+                : s === 'OVERDUE'
+                ? '⚠️ Due / Overdue'
+                : 'Returned / Closed'}
             </button>
           ))}
         </div>
 
-        <div className="relative w-full sm:w-72">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search Reference, Student, Teacher..."
+            placeholder="Search Reference, Renter, Phone, Email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
@@ -287,124 +512,222 @@ export default function UsagePage() {
         </div>
       </div>
 
-      {/* Internal Usages List */}
+      {/* Rentals Table */}
       <Card>
         <CardContent className="p-0">
           <div className="responsive-table-wrapper">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                  <th className="py-3 px-4">Issue Ref</th>
-                  <th className="py-3 px-4">Responsible Person</th>
-                  <th className="py-3 px-4">Purpose</th>
-                  <th className="py-3 px-4">Issued Instrument / Gear</th>
-                  <th className="py-3 px-4">Issue Date</th>
-                  <th className="py-3 px-4">Expected Return</th>
+                  <th className="py-3 px-4">Agreement Ref</th>
+                  <th className="py-3 px-4">Renter / Customer</th>
+                  <th className="py-3 px-4">Rented Instrument & Accessories</th>
+                  <th className="py-3 px-4">Rental Plan & Terms</th>
+                  <th className="py-3 px-4">Rent Paid / Remaining</th>
+                  <th className="py-3 px-4">Return / Renewal</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
+                  <th className="py-3 px-4 text-center">Tracking & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {isLoading ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-400">
-                      Loading usage records...
+                      Loading rental agreements...
                     </td>
                   </tr>
                 ) : usages.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-500">
-                      No internal equipment loans matching this filter.
+                      No customer rentals or instrument loans matching this filter.
                     </td>
                   </tr>
                 ) : (
                   usages.map((u) => {
                     const isReturned = u.status === 'RETURNED';
-                    const isOverdue = u.isOverdue || (!isReturned && new Date(u.expectedReturnDate) < new Date());
+                    const isOverdue =
+                      u.isOverdue || (!isReturned && new Date(u.expectedReturnDate) < new Date());
+
+                    const accessories = u.includedAccessories || [];
+                    const paid = u.totalRentPaid || 0;
+                    const due = u.totalRentDue || 0;
 
                     return (
                       <tr
                         key={u._id}
-                        className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 ${
+                        className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${
                           isOverdue ? 'bg-rose-500/5' : ''
                         }`}
                       >
-                        <td className="py-3 px-4 font-mono font-bold text-amber-500">
-                          {u.issueReference}
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-amber-500 block">
+                            {u.issueReference}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {u.isRental ? 'Rental Plan' : u.purpose}
+                          </span>
                         </td>
+
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900 dark:text-white">
                             {u.assignedPerson}
                           </div>
-                          <div className="text-[11px] text-slate-400">
-                            {u.assignedPersonContact || 'No contact specified'}
-                          </div>
+                          {u.assignedPersonContact && (
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              <span>{u.assignedPersonContact}</span>
+                            </div>
+                          )}
+                          {u.customerEmail && (
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                              <Mail className="h-3 w-3 text-indigo-400" />
+                              <span>{u.customerEmail}</span>
+                            </div>
+                          )}
                         </td>
+
                         <td className="py-3 px-4">
-                          <Badge variant="outline" className="text-[10px] font-semibold">
-                            {u.purpose}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="space-y-0.5">
+                          <div className="space-y-1">
                             {u.items.map((it, idx) => (
                               <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                • {it.product?.name} (x{it.quantityIssued})
+                                <span className="font-semibold">{it.product?.name}</span>
                                 {it.serializedItemId && (
-                                  <span className="ml-1.5 font-mono text-amber-500 font-bold">
-                                    [{(it.serializedItemId as any).assetId || 'Serialized'}]
+                                  <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
+                                    [{(it.serializedItemId as any).assetId || 'Unit'}]
                                   </span>
                                 )}
                               </div>
                             ))}
+
+                            {/* Detailing: Bundled accessories tags */}
+                            {accessories.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {accessories.map((acc, aidx) => (
+                                  <span
+                                    key={aidx}
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                                  >
+                                    <Tag className="h-2.5 w-2.5" />
+                                    <span>{acc}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic">No bundled accessories</span>
+                            )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-500">{formatDate(u.issueDate)}</td>
+
+                        <td className="py-3 px-4">
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-amber-500">
+                              {formatCurrency(u.monthlyRent || 0)} / mo
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              Lock-in: <strong>{u.lockInPeriodMonths || 3} Months</strong>
+                            </div>
+                            <div className="text-[11px] text-indigo-500 font-medium">
+                              Deposit: {formatCurrency(u.securityDeposit || 0)}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-xs font-bold">
+                              <span className="text-emerald-500">{formatCurrency(paid)}</span>
+                              <span className="text-slate-400">/</span>
+                              <span className="text-slate-700 dark:text-slate-300">
+                                {formatCurrency(paid + due)}
+                              </span>
+                            </div>
+                            {due > 0 ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                ₹{due.toLocaleString()} Due
+                              </span>
+                            ) : (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
+                                All Paid
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
                         <td className="py-3 px-4">
                           <span
                             className={
-                              isOverdue ? 'font-bold text-rose-500 flex items-center gap-1' : 'text-slate-700 dark:text-slate-300'
+                              isOverdue
+                                ? 'font-bold text-rose-500 flex items-center gap-1'
+                                : 'text-slate-700 dark:text-slate-300'
                             }
                           >
                             {isOverdue && <AlertTriangle className="h-3 w-3 shrink-0" />}
-                            {formatDateTime(u.expectedReturnDate)}
+                            {formatDate(u.expectedReturnDate)}
                           </span>
                         </td>
+
                         <td className="py-3 px-4">
                           <Badge
                             variant={isReturned ? 'success' : isOverdue ? 'danger' : 'info'}
                             className="text-[10px]"
                           >
-                            {isReturned ? 'RETURNED' : isOverdue ? 'OVERDUE' : 'ACTIVE LOAN'}
+                            {isReturned ? 'RETURNED' : isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
                           </Badge>
                         </td>
+
                         <td className="py-3 px-4 text-center">
-                          {!isReturned && canIssueUsage() ? (
-                            <div className="flex items-center justify-center gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => openReturnModal(u)}
-                                className="h-7 text-[11px] font-bold gap-1"
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                                <span>Inspect & Return</span>
-                              </Button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Track Rent & Monthly Ledger button */}
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => openLedgerModal(u)}
+                              className="h-7 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                              title="Track Monthly Rent Payments & Ledger"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              <span>Track Rent</span>
+                            </Button>
+
+                            {/* Email Payment Reminder button */}
+                            {!isReturned && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => openExtendModal(u)}
-                                className="h-7 text-[11px]"
-                                title="Extend Return Date"
+                                onClick={() => handleSendReminder(u)}
+                                className="h-7 text-[11px] text-indigo-400 hover:text-indigo-300 border-indigo-500/30 gap-1"
+                                title="Send Email Reminder"
                               >
-                                <CalendarPlus className="h-3.5 w-3.5" />
+                                <Mail className="h-3 w-3" />
+                                <span className="hidden sm:inline">Reminder</span>
                               </Button>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-emerald-500 font-bold flex items-center justify-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> Completed
-                            </span>
-                          )}
+                            )}
+
+                            {!isReturned && canIssueUsage() && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openReturnModal(u)}
+                                  className="h-7 text-[11px] gap-1"
+                                  title="Inspect & Return Instrument"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Return</span>
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openExtendModal(u)}
+                                  className="h-7 text-[11px]"
+                                  title="Extend Duration / Renewal"
+                                >
+                                  <CalendarPlus className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -416,12 +739,12 @@ export default function UsagePage() {
         </CardContent>
       </Card>
 
-      {/* Issue Equipment Modal */}
+      {/* Rent Instrument / Loan Agreement Modal */}
       <Modal
         isOpen={isIssueModalOpen}
         onClose={() => setIsIssueModalOpen(false)}
-        title="Issue Equipment for Academy Activities"
-        description="Loan instruments or accessories for music classes, student practice, rehearsals, or demos."
+        title="Rent Instrument & Create Agreement"
+        description="Configure 3-month lock-in period, security deposit, monthly rent, and bundled accessory detailing."
         maxWidth="2xl"
       >
         <form onSubmit={handleIssueSubmit} className="space-y-4">
@@ -431,56 +754,107 @@ export default function UsagePage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Loan Purpose *
-              </label>
-              <select
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value as any)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-semibold text-amber-500"
-              >
-                <option value="CLASS">Music Academy Class</option>
-                <option value="PRACTICE">Student Practice Studio</option>
-                <option value="REHEARSAL">Band Rehearsal Room</option>
-                <option value="DEMONSTRATION">Student / Teacher Demonstration</option>
-                <option value="EVENT">Academy Concert / Live Event</option>
-                <option value="REPAIR">Setup / Inspection</option>
-              </select>
-            </div>
-
+          {/* Customer / Renter Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <Input
-              label="Expected Return Date & Time *"
-              type="datetime-local"
+              label="Renter / Customer Name *"
               required
-              value={expectedReturnDate}
-              onChange={(e) => setExpectedReturnDate(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Responsible Person (Student / Teacher) *"
-              required
-              placeholder="e.g. Aarav Mehta (Batch 4)"
+              placeholder="e.g. Rohan Deshmukh"
               value={assignedPerson}
               onChange={(e) => setAssignedPerson(e.target.value)}
             />
 
             <Input
-              label="Contact Phone Number"
-              placeholder="+91 98234 56789"
+              label="Phone Number"
+              placeholder="+91 98765 43210"
               value={assignedPersonContact}
               onChange={(e) => setAssignedPersonContact(e.target.value)}
             />
+
+            <Input
+              label="Email Address (For Rent Reminders) *"
+              type="email"
+              required
+              placeholder="rohan@example.com"
+              value={customerEmail}
+              onChange={(e) => setCustomerEmail(e.target.value)}
+            />
           </div>
 
-          {/* Product & Serialized Asset Selection */}
+          {/* Rental Agreement & Lock-in Period */}
           <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-500">
+                Rental Plan & Lock-In Period
+              </span>
+              <span className="text-[11px] text-slate-500">Standard retail agreement: 3 months</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Lock-In Duration
+                </label>
+                <div className="flex gap-1">
+                  {[1, 3, 6, 12].map((m) => (
+                    <button
+                      type="button"
+                      key={m}
+                      onClick={() => applyLockInMonths(m)}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                        lockInPeriodMonths === m
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                          : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                      }`}
+                    >
+                      {m}M
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  Monthly Rent (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={monthlyRent}
+                  onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  Security Deposit (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={securityDeposit}
+                  onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right"
+                />
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
+              <span>Expected Return / Renewal Date:</span>
+              <strong className="text-slate-800 dark:text-slate-200">
+                {expectedReturnDate ? new Date(expectedReturnDate).toLocaleDateString() : 'N/A'} ({lockInPeriodMonths} months tenure)
+              </strong>
+            </div>
+          </div>
+
+          {/* Instrument / Product Selection */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3">
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Select Instrument / Product *
+                Select Instrument *
               </label>
               <select
                 required
@@ -518,46 +892,72 @@ export default function UsagePage() {
                     .filter((su) => (su.product?._id || su.product) === selectedProduct._id)
                     .map((su) => (
                       <option key={su._id} value={su._id}>
-                        {su.assetId} — Condition: {su.condition} (Serial:{' '}
-                        {su.manufacturerSerial || 'N/A'})
+                        {su.assetId} — Condition: {su.condition} (Serial: {su.manufacturerSerial || 'N/A'})
                       </option>
                     ))}
                 </select>
               </div>
             )}
+          </div>
 
-            {selectedProduct && selectedProduct.trackingMode === 'QUANTITY' && (
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <Input
-                  label="Quantity to Issue *"
-                  type="number"
-                  min="1"
-                  max={selectedProduct.availableForSale}
-                  value={issueQuantity}
-                  onChange={(e) => setIssueQuantity(parseInt(e.target.value, 10) || 1)}
-                />
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Condition
-                  </label>
-                  <select
-                    value={issueCondition}
-                    onChange={(e) => setIssueCondition(e.target.value)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+          {/* Included Accessories & Detailing Checklist */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2.5">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Bundled Accessories & Detailing Checklist
+              </span>
+              <span className="text-[11px] text-slate-500">e.g. Keyboard Stand, Power Adapter, Bag</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              {COMMON_ACCESSORIES.map((acc) => {
+                const isChecked = includedAccessories.includes(acc);
+                return (
+                  <div
+                    key={acc}
+                    onClick={() => toggleAccessory(acc)}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs font-semibold transition-colors ${
+                      isChecked
+                        ? 'bg-amber-500/10 border-amber-500 text-amber-500'
+                        : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                    }`}
                   >
-                    <option value="NEW">NEW</option>
-                    <option value="MINT">MINT</option>
-                    <option value="GOOD">GOOD</option>
-                    <option value="FAIR">FAIR</option>
-                  </select>
-                </div>
-              </div>
-            )}
+                    {isChecked ? (
+                      <CheckSquare className="h-4 w-4 shrink-0 text-amber-500" />
+                    ) : (
+                      <Square className="h-4 w-4 shrink-0 text-slate-400" />
+                    )}
+                    <span>{acc}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Custom Accessory Add */}
+            <div className="flex gap-2 pt-2">
+              <input
+                type="text"
+                placeholder="+ Add other item (e.g. Sheet Music Stand, Strap)..."
+                value={customAccessoryInput}
+                onChange={(e) => setCustomAccessoryInput(e.target.value)}
+                onKeyDown={handleAddCustomAccessory}
+                className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddCustomAccessory}
+                className="h-8 text-xs font-bold"
+              >
+                + Add Item
+              </Button>
+            </div>
           </div>
 
           <Input
-            label="Notes / Special Instructions"
-            placeholder="e.g. For beginner acoustic batch, please return to Studio 2"
+            label="Agreement Remarks / Special Terms"
+            placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by StereoBliss."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -567,10 +967,275 @@ export default function UsagePage() {
               Cancel
             </Button>
             <Button type="submit" variant="default" isLoading={isIssuing} className="font-bold">
-              Issue Instrument
+              Confirm & Issue Rental Agreement
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Monthly Rent Payment Tracker & Ledger Modal */}
+      <Modal
+        isOpen={!!selectedRentalForLedger}
+        onClose={() => setSelectedRentalForLedger(null)}
+        title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
+        description="Track month-by-month rent payments, pending balances, bundled accessories, and send email reminders."
+        maxWidth="2xl"
+      >
+        {selectedRentalForLedger && (
+          <div className="space-y-6 text-xs text-slate-900 dark:text-white">
+            {paymentError && (
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 font-semibold text-red-500">
+                {paymentError}
+              </div>
+            )}
+
+            {reminderFeedback && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 font-semibold text-emerald-500 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{reminderFeedback}</span>
+              </div>
+            )}
+
+            {/* Renter & Financial Summary Header */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Renter</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm">
+                  {selectedRentalForLedger.assignedPerson}
+                </span>
+                <span className="text-[11px] text-slate-400 block">{selectedRentalForLedger.customerEmail}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Security Deposit</span>
+                <span className="font-bold text-indigo-400 text-sm">
+                  {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
+                </span>
+                <span className="text-[10px] text-slate-500 block">Refundable</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Rent Paid</span>
+                <span className="font-bold text-emerald-500 text-sm">
+                  {formatCurrency(selectedRentalForLedger.totalRentPaid || 0)}
+                </span>
+                <span className="text-[10px] text-slate-500 block">Received to date</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Remaining Due</span>
+                <span className="font-bold text-rose-500 text-sm">
+                  {formatCurrency(selectedRentalForLedger.totalRentDue || 0)}
+                </span>
+                <span className="text-[10px] text-slate-500 block">Outstanding rent</span>
+              </div>
+            </div>
+
+            {/* Bundled Accessories Detailing Banner */}
+            <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-1">
+              <span className="font-bold text-slate-600 dark:text-slate-400 text-[11px] block">
+                Bundled Items & Accessories with Instrument:
+              </span>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {(selectedRentalForLedger.includedAccessories || []).map((acc, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                  >
+                    <Check className="h-3 w-3" />
+                    <span>{acc}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Month-by-Month Schedule Table */}
+            <div className="space-y-2">
+              <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                Month-by-Month Rental Payment Schedule ({selectedRentalForLedger.monthlyPayments?.length || 0} Months)
+              </h4>
+
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
+                      <th className="py-2.5 px-3">Billing Month</th>
+                      <th className="py-2.5 px-3">Due Date</th>
+                      <th className="py-2.5 px-3 text-right">Rent Due</th>
+                      <th className="py-2.5 px-3 text-right">Paid Amount</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3">Payment Info</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {(selectedRentalForLedger.monthlyPayments || []).map((p, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                        <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                          {p.billingMonth}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500">
+                          {formatDate(p.dueDate)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500">
+                          {formatCurrency(p.amountDue)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-500">
+                          {formatCurrency(p.amountPaid || 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <Badge
+                            variant={p.status === 'PAID' ? 'success' : 'danger'}
+                            className="text-[10px]"
+                          >
+                            {p.status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500">
+                          {p.paymentMethod ? (
+                            <span>
+                              {p.paymentMethod} {p.transactionRef ? `(${p.transactionRef})` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">Pending payment</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Record Monthly Payment Form */}
+            <form
+              onSubmit={handleRecordPayment}
+              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-3"
+            >
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
+                  Record Monthly Rent Payment
+                </span>
+                <span className="text-[11px] text-slate-500">Instant ledger update</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Amount to Pay (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Billing Month
+                  </label>
+                  <select
+                    value={selectedBillingMonth}
+                    onChange={(e) => setSelectedBillingMonth(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                  >
+                    <option value="">Next Due Month</option>
+                    {(selectedRentalForLedger.monthlyPayments || []).map((p, i) => (
+                      <option key={i} value={p.billingMonth}>
+                        {p.billingMonth} ({p.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={rentalPaymentMethod}
+                    onChange={(e) => setRentalPaymentMethod(e.target.value as any)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500"
+                  >
+                    <option value="UPI">UPI (GPay / PhonePe)</option>
+                    <option value="CARD">Debit / Credit Card</option>
+                    <option value="CASH">Cash</option>
+                    <option value="BANK_TRANSFER">Bank IMPS</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    UPI / Txn Reference
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. UPI-998822"
+                    value={rentalTransactionRef}
+                    onChange={(e) => setRentalTransactionRef(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSendReminder(selectedRentalForLedger)}
+                  isLoading={isSendingReminder}
+                  className="gap-1.5 text-indigo-400 border-indigo-500/30"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>Send Email Reminder Now</span>
+                </Button>
+
+                <Button
+                  type="submit"
+                  variant="default"
+                  size="sm"
+                  isLoading={isRecordingPayment}
+                  className="gap-1.5 font-bold"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Confirm Rent Payment</span>
+                </Button>
+              </div>
+            </form>
+
+            {/* Reminder History Log */}
+            {selectedRentalForLedger.remindersSent && selectedRentalForLedger.remindersSent.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
+                  Reminder Dispatch Log
+                </span>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {selectedRentalForLedger.remindersSent.map((r, i) => (
+                    <div
+                      key={i}
+                      className="p-2 rounded bg-slate-100 dark:bg-slate-900 text-[11px] flex justify-between items-center"
+                    >
+                      <span>
+                        Sent to <strong>{r.sentTo}</strong> ({r.channel})
+                      </span>
+                      <span className="text-slate-400">{formatDateTime(r.sentAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setSelectedRentalForLedger(null)}>
+                Close Ledger
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Return & Inspection Modal */}
@@ -578,7 +1243,7 @@ export default function UsagePage() {
         isOpen={!!returnModalUsage}
         onClose={() => setReturnModalUsage(null)}
         title={`Return Inspection — ${returnModalUsage?.issueReference}`}
-        description="Inspect physical condition of returned equipment and set release disposition."
+        description="Inspect physical condition of returned equipment, bundled accessories, and process deposit release."
         maxWidth="2xl"
       >
         {returnModalUsage && (
@@ -590,11 +1255,14 @@ export default function UsagePage() {
             )}
 
             <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs">
-              <span className="text-slate-500">Loaned to:</span>{' '}
+              <span className="text-slate-500">Rented to:</span>{' '}
               <strong className="text-slate-900 dark:text-white">
                 {returnModalUsage.assignedPerson}
               </strong>{' '}
-              for <strong>{returnModalUsage.purpose}</strong>
+              | Deposit to reconcile:{' '}
+              <strong className="text-indigo-400">
+                {formatCurrency(returnModalUsage.securityDeposit || 0)}
+              </strong>
             </div>
 
             <div className="space-y-4">
@@ -668,7 +1336,7 @@ export default function UsagePage() {
                     </div>
 
                     <Input
-                      placeholder="Inspection notes (e.g. Minor scratches on back, strings still good)"
+                      placeholder="Inspection notes (e.g. Stand & adapter returned in great condition)"
                       value={insp.notes}
                       onChange={(e) => {
                         setInspectionOutcomes({
@@ -687,19 +1355,19 @@ export default function UsagePage() {
                 Cancel
               </Button>
               <Button type="submit" variant="default" isLoading={isReturning} className="font-bold">
-                Confirm Return & Apply Stock Transition
+                Confirm Return & Reconcile Deposit
               </Button>
             </div>
           </form>
         )}
       </Modal>
 
-      {/* Extend Loan Modal */}
+      {/* Extend Rental Modal */}
       <Modal
         isOpen={!!extendModalUsage}
         onClose={() => setExtendModalUsage(null)}
-        title="Extend Loan Return Deadline"
-        description={`Extend schedule for loan ${extendModalUsage?.issueReference}`}
+        title="Extend Rental Return Deadline"
+        description={`Extend schedule for rental ${extendModalUsage?.issueReference}`}
         maxWidth="md"
       >
         {extendModalUsage && (
@@ -721,7 +1389,7 @@ export default function UsagePage() {
             <Input
               label="Reason for Extension *"
               required
-              placeholder="e.g. Student requested 1 extra week for annual festival rehearsal"
+              placeholder="e.g. Customer renewed rental agreement for another 3 months"
               value={extensionReason}
               onChange={(e) => setExtensionReason(e.target.value)}
             />
@@ -731,7 +1399,7 @@ export default function UsagePage() {
                 Cancel
               </Button>
               <Button type="submit" variant="default" isLoading={isExtending} className="font-bold">
-                Confirm Extension
+                Confirm Renewal Extension
               </Button>
             </div>
           </form>

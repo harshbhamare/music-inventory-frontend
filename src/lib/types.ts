@@ -45,6 +45,7 @@ export interface Product {
   _id: string;
   name: string;
   sku: string;
+  hsnCode?: string;
   category: Category | string;
   brand: string;
   modelName?: string;
@@ -149,6 +150,10 @@ export interface SaleLineItem {
   quantity: number;
   unitPrice: number;
   discount: number;
+  taxableAmount?: number;
+  hsnCode?: string;
+  cgstAmount?: number;
+  sgstAmount?: number;
   total: number;
   serializedItemIds?: SerializedItem[];
 }
@@ -163,12 +168,18 @@ export interface Sale {
   lineItems: SaleLineItem[];
   subtotal: number;
   discountTotal: number;
+  taxableAmount?: number;
+  cgstRate?: number;
+  cgstAmount?: number;
+  sgstRate?: number;
+  sgstAmount?: number;
   taxTotal: number;
   grandTotal: number;
   paymentStatus: 'PENDING' | 'PAID' | 'PARTIAL' | 'REFUNDED';
   paymentMethod: 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
   saleStatus: 'DRAFT' | 'CONFIRMED' | 'CANCELLED' | 'RETURNED' | 'PARTIALLY_RETURNED';
   notes?: string;
+  remarks?: string;
   soldBy: User;
   confirmedAt: string;
   createdAt: string;
@@ -182,6 +193,28 @@ export interface InternalUsageItem {
   issueCondition: ItemCondition;
 }
 
+export interface RentalMonthlyPayment {
+  _id?: string;
+  monthIndex: number;
+  billingMonth: string;
+  dueDate: string;
+  amountDue: number;
+  amountPaid: number;
+  paidAt?: string;
+  paymentMethod?: string;
+  transactionRef?: string;
+  status: 'PAID' | 'DUE' | 'OVERDUE';
+  notes?: string;
+}
+
+export interface RentalReminder {
+  _id?: string;
+  sentAt: string;
+  sentTo: string;
+  channel: string;
+  message: string;
+}
+
 export interface InternalUsage {
   _id: string;
   issueReference: string;
@@ -189,6 +222,7 @@ export interface InternalUsage {
   customPurposeDetail?: string;
   assignedPerson: string;
   assignedPersonContact?: string;
+  customerEmail?: string;
   location: StockLocation;
   items: InternalUsageItem[];
   issueDate: string;
@@ -198,6 +232,15 @@ export interface InternalUsage {
   isOverdue?: boolean;
   notes?: string;
   issuedBy: User;
+  isRental?: boolean;
+  lockInPeriodMonths?: number;
+  securityDeposit?: number;
+  monthlyRent?: number;
+  includedAccessories?: string[];
+  monthlyPayments?: RentalMonthlyPayment[];
+  totalRentPaid?: number;
+  totalRentDue?: number;
+  remindersSent?: RentalReminder[];
   extensions: Array<{
     extendedDate: string;
     reason: string;

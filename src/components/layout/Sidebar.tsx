@@ -57,10 +57,10 @@ export function Sidebar() {
       visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
-      title: 'Academy Loans',
+      title: 'Rent Instrument',
       href: '/usage',
-      icon: GraduationCap,
-      badge: 'Loans',
+      icon: Music2,
+      badge: 'Rentals',
       visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {

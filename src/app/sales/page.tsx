@@ -40,6 +40,7 @@ export default function SalesPage() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'CASH' | 'BANK_TRANSFER'>('UPI');
   const [notes, setNotes] = useState('');
+  const [remarks, setRemarks] = useState('');
 
   const [cartItems, setCartItems] = useState<
     Array<{
@@ -47,6 +48,7 @@ export default function SalesPage() {
       quantity: number;
       unitPrice: number;
       discount: number;
+      hsnCode: string;
       selectedSerialIds: string[];
     }>
   >([]);
@@ -125,6 +127,7 @@ export default function SalesPage() {
           quantity: 1,
           unitPrice: product.defaultSellingPrice,
           discount: 0,
+          hsnCode: (product as any).hsnCode || '9202',
           selectedSerialIds: [],
         },
       ]);
@@ -158,7 +161,11 @@ export default function SalesPage() {
 
   const subtotal = cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const discountTotal = cartItems.reduce((acc, i) => acc + (i.discount || 0) * i.quantity, 0);
-  const grandTotal = Math.max(0, subtotal - discountTotal);
+  const taxableAmount = Math.max(0, subtotal - discountTotal);
+  const cgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
+  const sgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
+  const totalGst = Math.round((cgstAmount + sgstAmount) * 100) / 100;
+  const grandTotal = Math.round((taxableAmount + totalGst) * 100) / 100;
 
   const handleCreateSale = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,9 +198,11 @@ export default function SalesPage() {
         location: selectedLocation,
         paymentMethod,
         notes: notes.trim() || undefined,
+        remarks: remarks.trim() || undefined,
         idempotencyKey: `sale-${Date.now()}`,
         lineItems: cartItems.map((i) => ({
           product: i.product._id,
+          hsnCode: i.hsnCode || (i.product as any).hsnCode || '9202',
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           discount: i.discount || 0,
@@ -209,6 +218,7 @@ export default function SalesPage() {
       setCustomerPhone('');
       setCustomerEmail('');
       setNotes('');
+      setRemarks('');
       fetchSales();
       fetchInventoryForSale();
       setActiveInvoice(res.sale);
@@ -355,7 +365,7 @@ export default function SalesPage() {
           )}
 
           {/* Customer Details & Payment */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <Input
               label="Customer Name *"
               required
@@ -388,12 +398,19 @@ export default function SalesPage() {
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
                 className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-amber-500"
               >
-                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
+                <option value="UPI">UPI (GPay/PhonePe)</option>
                 <option value="CARD">Credit / Debit Card</option>
                 <option value="CASH">Cash</option>
                 <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
               </select>
             </div>
+
+            <Input
+              label="Remarks / Bill Notes"
+              placeholder="e.g. 1-Yr Warranty, Packaged"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+            />
           </div>
 
           {/* Item Selector & Cart */}
@@ -470,8 +487,8 @@ export default function SalesPage() {
                           </button>
                         </div>
 
-                        {/* Pricing and Quantity controls */}
-                        <div className="grid grid-cols-3 gap-3">
+                        {/* Pricing, Quantity & HSN controls */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           <div>
                             <label className="text-[10px] text-slate-500">Quantity</label>
                             <input
@@ -508,7 +525,7 @@ export default function SalesPage() {
                           </div>
 
                           <div>
-                            <label className="text-[10px] text-slate-500">Per-Unit Discount (₹)</label>
+                            <label className="text-[10px] text-slate-500">Discount (₹)</label>
                             <input
                               type="number"
                               min="0"
@@ -521,6 +538,19 @@ export default function SalesPage() {
                                 )
                               }
                               className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-slate-500">HSN Code</label>
+                            <input
+                              type="text"
+                              value={item.hsnCode}
+                              onChange={(e) =>
+                                handleCartItemChange(idx, 'hsnCode', e.target.value)
+                              }
+                              placeholder="9202"
+                              className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-mono font-bold text-amber-500 text-xs"
                             />
                           </div>
                         </div>
@@ -566,10 +596,10 @@ export default function SalesPage() {
                 </div>
               )}
 
-              {/* Total & Checkout summary */}
-              <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 space-y-1.5 text-xs">
+              {/* Total & Checkout GST summary */}
+              <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 space-y-1.5 text-xs border border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between text-slate-500">
-                  <span>Subtotal:</span>
+                  <span>Gross Subtotal:</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
                 {discountTotal > 0 && (
@@ -578,6 +608,22 @@ export default function SalesPage() {
                     <span>-{formatCurrency(discountTotal)}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-slate-700 dark:text-slate-300 font-medium">
+                  <span>Taxable Value:</span>
+                  <span>{formatCurrency(taxableAmount)}</span>
+                </div>
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>Central GST (CGST 9%):</span>
+                  <span>+{formatCurrency(cgstAmount)}</span>
+                </div>
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>State GST (SGST 9%):</span>
+                  <span>+{formatCurrency(sgstAmount)}</span>
+                </div>
+                <div className="flex justify-between text-slate-500 text-[11px] border-t border-slate-200 dark:border-slate-800 pt-1">
+                  <span>Total Tax (18% GST):</span>
+                  <span>+{formatCurrency(totalGst)}</span>
+                </div>
                 <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
                   <span>Grand Total Payable:</span>
                   <span className="text-amber-500">{formatCurrency(grandTotal)}</span>
@@ -611,15 +657,16 @@ export default function SalesPage() {
               {/* Invoice Header */}
               <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-amber-500">STEREOBLISS</h2>
-                  <p className="text-xs text-slate-500">Retail Inventory Store & Pro Audio</p>
-                  <p className="text-xs text-slate-500">Main Retail Showroom & Academy</p>
-                  <p className="text-xs text-slate-500">Email: sales@stereobliss.com</p>
+                  <h2 className="text-xl font-black text-amber-500 tracking-tight">STEREOBLISS</h2>
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Retail Inventory Store & Pro Audio Gear</p>
+                  <p className="text-[11px] text-slate-500">GSTIN: 27AABCS1429B1Z8 | State Code: 27 (Maharashtra)</p>
+                  <p className="text-[11px] text-slate-500">Main Retail Showroom & Academy | Email: sales@stereobliss.com</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-slate-900 dark:text-white">
-                    INVOICE #{activeInvoice.invoiceNumber}
+                  <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    TAX INVOICE
                   </div>
+                  <div className="text-xs font-mono font-bold text-amber-500">#{activeInvoice.invoiceNumber}</div>
                   <div className="text-xs text-slate-500">Date: {formatDateTime(activeInvoice.createdAt)}</div>
                   <div className="text-xs text-slate-500">Payment: {activeInvoice.paymentMethod}</div>
                   <div className="text-xs text-emerald-500 font-bold">Status: {activeInvoice.paymentStatus}</div>
@@ -627,62 +674,112 @@ export default function SalesPage() {
               </div>
 
               {/* Customer Info */}
-              <div className="text-xs">
-                <span className="font-bold text-slate-500">Billed To:</span>
-                <div className="font-semibold text-slate-900 dark:text-white">{activeInvoice.customerName}</div>
-                {activeInvoice.customerPhone && <div className="text-slate-500">{activeInvoice.customerPhone}</div>}
-                {activeInvoice.customerEmail && <div className="text-slate-500">{activeInvoice.customerEmail}</div>}
+              <div className="grid grid-cols-2 gap-4 text-xs p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                <div>
+                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">Billed To:</span>
+                  <div className="font-bold text-slate-900 dark:text-white text-sm">{activeInvoice.customerName}</div>
+                  {activeInvoice.customerPhone && <div className="text-slate-500">Phone: {activeInvoice.customerPhone}</div>}
+                  {activeInvoice.customerEmail && <div className="text-slate-500">Email: {activeInvoice.customerEmail}</div>}
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">Billing Notes / Remarks:</span>
+                  <div className="text-slate-700 dark:text-slate-300 italic">
+                    {activeInvoice.remarks || activeInvoice.notes || 'Standard Retail Sale (Official GST Invoice)'}
+                  </div>
+                </div>
               </div>
 
-              {/* Invoice Line Items */}
-              <table className="w-full text-xs text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                    <th className="py-2">Item</th>
-                    <th className="py-2 text-center">Qty</th>
-                    <th className="py-2 text-right">Unit Price</th>
-                    <th className="py-2 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {activeInvoice.lineItems?.map((li, i) => (
-                    <tr key={i}>
-                      <td className="py-2 font-medium">
-                        {li.product?.name}
-                        {li.serializedItemIds && li.serializedItemIds.length > 0 && (
-                          <div className="text-[10px] font-mono text-amber-500">
-                            Asset IDs: {li.serializedItemIds.map((u: any) => u.assetId || u).join(', ')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2 text-center">{li.quantity}</td>
-                      <td className="py-2 text-right">{formatCurrency(li.unitPrice)}</td>
-                      <td className="py-2 text-right font-bold">{formatCurrency(li.total)}</td>
+              {/* Invoice Line Items Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold text-[10px] uppercase">
+                      <th className="py-2">Item Description</th>
+                      <th className="py-2 text-center">HSN/SAC</th>
+                      <th className="py-2 text-center">Qty</th>
+                      <th className="py-2 text-right">Unit Price</th>
+                      <th className="py-2 text-right">Taxable Val</th>
+                      <th className="py-2 text-right">CGST (9%)</th>
+                      <th className="py-2 text-right">SGST (9%)</th>
+                      <th className="py-2 text-right">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {activeInvoice.lineItems?.map((li, i) => {
+                      const itemTaxable = li.taxableAmount || (li.total - ((li.total * 0.18) / 1.18));
+                      const itemCgst = li.cgstAmount || Math.round(itemTaxable * 0.09 * 100) / 100;
+                      const itemSgst = li.sgstAmount || Math.round(itemTaxable * 0.09 * 100) / 100;
 
-              {/* Totals */}
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-1 text-xs">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal:</span>
-                  <span>{formatCurrency(activeInvoice.subtotal)}</span>
-                </div>
-                {activeInvoice.discountTotal > 0 && (
-                  <div className="flex justify-between text-emerald-500 font-semibold">
-                    <span>Discount:</span>
-                    <span>-{formatCurrency(activeInvoice.discountTotal)}</span>
+                      return (
+                        <tr key={i}>
+                          <td className="py-2 font-medium">
+                            <div>{li.product?.name}</div>
+                            {li.serializedItemIds && li.serializedItemIds.length > 0 && (
+                              <div className="text-[10px] font-mono text-amber-500">
+                                Asset IDs: {li.serializedItemIds.map((u: any) => u.assetId || u).join(', ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 text-center font-mono text-[11px] text-slate-500">
+                            {li.hsnCode || (li.product as any)?.hsnCode || '9202'}
+                          </td>
+                          <td className="py-2 text-center font-bold">{li.quantity}</td>
+                          <td className="py-2 text-right">{formatCurrency(li.unitPrice)}</td>
+                          <td className="py-2 text-right">{formatCurrency(itemTaxable)}</td>
+                          <td className="py-2 text-right text-amber-600 dark:text-amber-400 font-mono">
+                            {formatCurrency(itemCgst)}
+                          </td>
+                          <td className="py-2 text-right text-amber-600 dark:text-amber-400 font-mono">
+                            {formatCurrency(itemSgst)}
+                          </td>
+                          <td className="py-2 text-right font-black text-slate-900 dark:text-white">
+                            {formatCurrency(li.total)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* GST Breakdown & Totals */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-[11px]">
+                  <div className="font-bold text-slate-700 dark:text-slate-300">GST Rate Summary:</div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Central GST (CGST @ 9%):</span>
+                    <span className="font-mono">{formatCurrency(activeInvoice.cgstAmount || Math.round(((activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)) * 0.09) * 100) / 100)}</span>
                   </div>
-                )}
-                <div className="flex justify-between text-sm font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <span>Total Amount Paid:</span>
-                  <span className="text-amber-500">{formatCurrency(activeInvoice.grandTotal)}</span>
+                  <div className="flex justify-between text-slate-500">
+                    <span>State GST (SGST @ 9%):</span>
+                    <span className="font-mono">{formatCurrency(activeInvoice.sgstAmount || Math.round(((activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)) * 0.09) * 100) / 100)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-amber-500 pt-1 border-t border-slate-200 dark:border-slate-800">
+                    <span>Total Tax (18%):</span>
+                    <span className="font-mono">{formatCurrency((activeInvoice.taxTotal || (activeInvoice.grandTotal - (activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)))))}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 self-center">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Taxable Subtotal:</span>
+                    <span className="font-semibold">{formatCurrency(activeInvoice.taxableAmount || activeInvoice.subtotal - (activeInvoice.discountTotal || 0))}</span>
+                  </div>
+                  {activeInvoice.discountTotal > 0 && (
+                    <div className="flex justify-between text-emerald-500 font-semibold">
+                      <span>Discount Given:</span>
+                      <span>-{formatCurrency(activeInvoice.discountTotal)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <span>Grand Total Payable:</span>
+                    <span className="text-amber-500">{formatCurrency(activeInvoice.grandTotal)}</span>
+                  </div>
                 </div>
               </div>
 
               <div className="text-[11px] text-center text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800">
-                Thank you for choosing StereoBliss! Premium Instruments & Pro Audio Gear.
+                Thank you for choosing StereoBliss Retail! All musical instruments are covered under authorized manufacturer & store warranty.
               </div>
             </div>
 

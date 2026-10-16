@@ -99,7 +99,7 @@ export default function DashboardPage() {
             Operational Dashboard
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time inventory levels, academy instrument loans, and retail sales tracking.
+            Real-time inventory levels, customer instrument rentals, and retail sales tracking.
           </p>
         </div>
 
@@ -205,11 +205,11 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* In Academy Use */}
+        {/* Active Rentals & Loans */}
         <Card className="border-l-4 border-l-indigo-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              In Academy Use
+              Active Rentals & Loans
             </span>
             <GraduationCap className="h-4 w-4 text-indigo-500" />
           </CardHeader>
@@ -218,7 +218,7 @@ export default function DashboardPage() {
               {kpis?.serializedInUseCount ?? 0}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Instruments deployed in classes & studios
+              Customer rented instruments & internal loans
             </p>
           </CardContent>
         </Card>
@@ -379,7 +379,7 @@ export default function DashboardPage() {
               <Button variant="outline" className="w-full justify-between">
                 <span className="flex items-center gap-2">
                   <GraduationCap className="h-4 w-4 text-indigo-500" />
-                  <span>Issue Instrument for Academy</span>
+                  <span>Rent Instrument / Issue Loan</span>
                 </span>
                 <ArrowUpRight className="h-4 w-4" />
               </Button>
