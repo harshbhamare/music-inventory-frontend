@@ -602,7 +602,7 @@ export default function SalesPage() {
         isOpen={!!activeInvoice}
         onClose={() => setActiveInvoice(null)}
         title={`Retail Tax Invoice — ${activeInvoice?.invoiceNumber}`}
-        description="SoundStock Studio & Retail Official Receipt"
+        description="StereoBliss - Retail Inventory Official Receipt"
         maxWidth="2xl"
       >
         {activeInvoice && (
@@ -611,10 +611,10 @@ export default function SalesPage() {
               {/* Invoice Header */}
               <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-amber-500">SOUNDSTOCK</h2>
-                  <p className="text-xs text-slate-500">Studio & Retail Instrument Store</p>
-                  <p className="text-xs text-slate-500">Central Academy & Main Showroom</p>
-                  <p className="text-xs text-slate-500">Email: sales@soundstock.io</p>
+                  <h2 className="text-xl font-extrabold text-amber-500">STEREOBLISS</h2>
+                  <p className="text-xs text-slate-500">Retail Inventory Store & Pro Audio</p>
+                  <p className="text-xs text-slate-500">Main Retail Showroom & Academy</p>
+                  <p className="text-xs text-slate-500">Email: sales@stereobliss.com</p>
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-bold text-slate-900 dark:text-white">
@@ -682,7 +682,7 @@ export default function SalesPage() {
               </div>
 
               <div className="text-[11px] text-center text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800">
-                Thank you for choosing SoundStock! Quality Instruments & Sound Solutions.
+                Thank you for choosing StereoBliss! Premium Instruments & Pro Audio Gear.
               </div>
             </div>
 

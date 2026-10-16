@@ -47,43 +47,43 @@ export function Sidebar() {
       href: '/intake',
       icon: Truck,
       badge: 'Stock In',
-      visible: hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER', 'INVENTORY_STAFF'),
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Sales & Billing',
       href: '/sales',
       icon: ShoppingCart,
       badge: 'POS',
-      visible: hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF'),
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Academy Loans',
       href: '/usage',
       icon: GraduationCap,
       badge: 'Loans',
-      visible: true,
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Stock Movements',
       href: '/movements',
       icon: ArrowLeftRight,
-      visible: true,
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Reports & Summary',
       href: '/reports',
       icon: BarChart3,
-      visible: true,
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
   ];
 
-  // Administration items
+  // Administration items (Main Features: Super Admin Only)
   const adminNavItems = [
     {
       title: 'Team & Roles',
       href: '/users',
       icon: ShieldCheck,
-      visible: hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER'),
+      visible: hasRole('SUPER_ADMIN'),
     },
     {
       title: 'Settings',
@@ -93,28 +93,28 @@ export function Sidebar() {
     },
   ];
 
-  // Phase 3 Advanced Modules (Kept cleanly grouped & optional so Phase 2 is uncluttered)
+  // Operations & Maintenance Modules
   const phase3NavItems = [
     {
       title: 'Returns & Repairs',
       href: '/returns-maintenance',
       icon: Wrench,
-      phase: 'Phase 3',
-      visible: true,
+      phase: 'Ops',
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Suppliers Directory',
       href: '/suppliers',
       icon: Users2,
-      phase: 'Phase 3',
-      visible: hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER'),
+      phase: 'Ops',
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
     {
       title: 'Activity Audit Log',
       href: '/audit-logs',
       icon: History,
-      phase: 'Phase 3',
-      visible: hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER'),
+      phase: 'Ops',
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
   ];
 
@@ -132,14 +132,14 @@ export function Sidebar() {
         <div>
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white">
-              SOUNDSTOCK
+              STEREOBLISS
             </span>
             <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20">
-              Phase 2
+              Retail
             </span>
           </div>
           <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Studio & Retail Inventory
+            Retail Inventory
           </p>
         </div>
       </div>
@@ -299,8 +299,8 @@ export function Sidebar() {
               </div>
               <div className="truncate">
                 <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{user.name}</p>
-                <p className="truncate text-[10px] text-slate-500 dark:text-amber-400 font-semibold">
-                  {user.role.replace('_', ' ')}
+                <p className="truncate text-[10px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider">
+                  {user.role === 'SUPER_ADMIN' ? 'Superadmin' : 'Manager'}
                 </p>
               </div>
             </div>

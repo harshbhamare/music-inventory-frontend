@@ -1,7 +1,7 @@
 {
-  "name": "soundstock-frontend",
+  "name": "stereobliss-retail-inventory-frontend",
   "version": "1.0.0",
-  "description": "SoundStock Inventory & Studio Management System",
+  "description": "stereobliss - retail inventory System",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",

@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Users2, Plus, Phone, Mail, MapPin, Search, Edit2, Trash2, Building2 } from 'lucide-react';
 
 export default function SuppliersPage() {
-  const { canManageCatalogue } = useAuth();
+  const { canManageSuppliers, isSuperAdmin } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -130,7 +130,7 @@ export default function SuppliersPage() {
           </p>
         </div>
 
-        {canManageCatalogue() && (
+        {canManageSuppliers() && (
           <Button
             size="sm"
             variant="default"
@@ -207,28 +207,32 @@ export default function SuppliersPage() {
                 </CardContent>
               </div>
 
-              {canManageCatalogue() && (
+              {(canManageSuppliers() || isSuperAdmin()) && (
                 <div className="flex items-center justify-end gap-2 p-3 border-t border-slate-100 dark:border-slate-800">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleOpenEdit(s)}
-                    className="h-7 px-2.5 text-xs gap-1"
-                  >
-                    <Edit2 className="h-3 w-3" />
-                    <span>Edit</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDeleteSupplier(s)}
-                    className="h-7 px-2.5 text-xs gap-1 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>Remove</span>
-                  </Button>
+                  {canManageSuppliers() && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenEdit(s)}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                      <span>Edit</span>
+                    </Button>
+                  )}
+                  {isSuperAdmin() && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteSupplier(s)}
+                      className="h-7 px-2.5 text-xs gap-1 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>Remove</span>
+                    </Button>
+                  )}
                 </div>
               )}
             </Card>

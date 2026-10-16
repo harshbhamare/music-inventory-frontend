@@ -246,7 +246,7 @@ export default function ReturnsMaintenancePage() {
           }`}
         >
           <ShieldCheck className="h-4 w-4" />
-          <span>Manager Approval Queue</span>
+          <span>Superadmin Approvals</span>
           {adjustments.filter((a) => a.status === 'PENDING_APPROVAL').length > 0 && (
             <span className="ml-1 rounded-full bg-rose-500 text-white px-2 py-0.5 text-xs font-bold">
               {adjustments.filter((a) => a.status === 'PENDING_APPROVAL').length}
@@ -384,7 +384,7 @@ export default function ReturnsMaintenancePage() {
                     <th className="py-3 px-4">Reason</th>
                     <th className="py-3 px-4">Requested By</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-center">Manager Decision</th>
+                    <th className="py-3 px-4 text-center">Superadmin Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -493,7 +493,7 @@ export default function ReturnsMaintenancePage() {
           <CardHeader>
             <CardTitle className="text-base">Submit Inventory Adjustment Request</CardTitle>
             <p className="text-xs text-slate-500">
-              Submit write-offs, physical count discrepancies, or damage loss for manager review.
+              Submit write-offs, physical count discrepancies, or damage loss for Superadmin approval.
             </p>
           </CardHeader>
           <CardContent>

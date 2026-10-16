@@ -521,26 +521,30 @@ export default function InventoryPage() {
                                 <SlidersHorizontal className="h-3 w-3" />
                                 <span>Adjust</span>
                               </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenEditProduct(p)}
-                                title="Edit Product Details"
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteProduct(p)}
-                                title="Remove Product"
-                                className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              {canManageCatalogue() && (
+                                <>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleOpenEditProduct(p)}
+                                    title="Edit Product Details"
+                                    className="h-7 px-2 text-xs"
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDeleteProduct(p)}
+                                    title="Remove Product"
+                                    className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -19,7 +19,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Load persisted theme or default to light for best readability
     try {
-      const saved = localStorage.getItem('soundstock_theme') as Theme | null;
+      const saved = (localStorage.getItem('stereobliss_theme') || localStorage.getItem('soundstock_theme')) as Theme | null;
       if (saved === 'dark' || saved === 'light') {
         setThemeState(saved);
         applyTheme(saved);
@@ -47,6 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(newTheme);
     applyTheme(newTheme);
     try {
+      localStorage.setItem('stereobliss_theme', newTheme);
       localStorage.setItem('soundstock_theme', newTheme);
     } catch (_) {}
   };

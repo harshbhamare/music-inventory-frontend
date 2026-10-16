@@ -13,7 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ShieldCheck, Plus, UserCheck, ShieldAlert, Key } from 'lucide-react';
 
 export default function UsersPage() {
-  const { user: currentUser, canManageSettings } = useAuth();
+  const { user: currentUser, canManageSettings, isSuperAdmin } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -22,7 +22,7 @@ export default function UsersPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('INVENTORY_STAFF');
+  const [role, setRole] = useState<UserRole>('MANAGER');
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -76,6 +76,20 @@ export default function UsersPage() {
     }
   };
 
+  if (!isSuperAdmin()) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 mb-4">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Superadmin Access Required</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-1.5">
+          User account management and role configuration are restricted to Superadmin accounts only.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -84,7 +98,7 @@ export default function UsersPage() {
             User Accounts & Roles
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Role-based access control, employee credentials, and account statuses.
+            Manage profile roles and system access for StereoBliss - Retail Inventory.
           </p>
         </div>
 
@@ -125,14 +139,8 @@ export default function UsersPage() {
                 ) : (
                   users.map((u) => {
                     const isSelf = u._id === currentUser?.id;
-                    const roleColor =
-                      u.role === 'SUPER_ADMIN'
-                        ? 'default'
-                        : u.role === 'INVENTORY_MANAGER'
-                        ? 'info'
-                        : u.role === 'SALES_STAFF'
-                        ? 'success'
-                        : 'secondary';
+                    const roleColor = u.role === 'SUPER_ADMIN' ? 'default' : 'info';
+                    const roleDisplay = u.role === 'SUPER_ADMIN' ? 'SUPERADMIN' : 'MANAGER';
 
                     return (
                       <tr key={u._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
@@ -149,8 +157,8 @@ export default function UsersPage() {
                           {u.email}
                         </td>
                         <td className="py-3 px-4">
-                          <Badge variant={roleColor as any} className="text-[10px]">
-                            {u.role.replace('_', ' ')}
+                          <Badge variant={roleColor as any} className="text-[10px] font-bold">
+                            {roleDisplay}
                           </Badge>
                         </td>
                         <td className="py-3 px-4">
@@ -188,7 +196,7 @@ export default function UsersPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Create Staff User"
-        description="Provision access to the SoundStock Inventory Management System."
+        description="Provision access to StereoBliss - Retail Inventory."
         maxWidth="md"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
@@ -210,7 +218,7 @@ export default function UsersPage() {
             label="Email Address *"
             type="email"
             required
-            placeholder="vikram@soundstock.io"
+            placeholder="vikram@stereobliss.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -233,15 +241,8 @@ export default function UsersPage() {
               onChange={(e) => setRole(e.target.value as any)}
               className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-amber-500"
             >
-              <option value="SUPER_ADMIN">Super Admin (All permissions & settings)</option>
-              <option value="INVENTORY_MANAGER">
-                Inventory Manager (Intake, Approvals, Catalogue)
-              </option>
-              <option value="SALES_STAFF">Sales Staff (POS, Sales & Customer Returns)</option>
-              <option value="INVENTORY_STAFF">
-                Inventory Staff (Intake & Academy Instrument Loans)
-              </option>
-              <option value="VIEWER">Viewer / Management (Read-only access)</option>
+              <option value="SUPER_ADMIN">Superadmin (Main Features, Full Control & Settings)</option>
+              <option value="MANAGER">Manager (Stock Tracking, POS & Count Updates)</option>
             </select>
           </div>
 

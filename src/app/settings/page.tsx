@@ -150,6 +150,14 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {!isSuperAdmin() && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center justify-between">
+          <span>
+            <strong>Manager Access:</strong> Store configuration, data reset, and automated email dispatching require <strong>Superadmin</strong> privileges.
+          </span>
+        </div>
+      )}
+
       {message && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800 dark:text-amber-400">
           {message}
@@ -280,6 +288,7 @@ export default function SettingsPage() {
               <Input
                 label="Store / Academy Name"
                 required
+                disabled={!canManageSettings()}
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
               />
@@ -288,6 +297,7 @@ export default function SettingsPage() {
                 label="Official Contact Email"
                 type="email"
                 required
+                disabled={!canManageSettings()}
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
               />
@@ -296,12 +306,14 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Contact Phone"
+                disabled={!canManageSettings()}
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
               />
 
               <Input
                 label="Physical Address"
+                disabled={!canManageSettings()}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
@@ -310,15 +322,17 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
               <Input
                 label="Currency Symbol"
+                disabled={!canManageSettings()}
                 value={currencySymbol}
                 onChange={(e) => setCurrencySymbol(e.target.value)}
               />
 
               <Input
-                label="Manager Approval Threshold (Units)"
+                label="Superadmin Approval Threshold (Units)"
                 type="number"
                 min="1"
-                helperText="Adjustments exceeding this quantity require manager sign-off"
+                disabled={!canManageSettings()}
+                helperText="Adjustments exceeding this quantity require Superadmin approval"
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
               />
@@ -329,8 +343,9 @@ export default function SettingsPage() {
                 </label>
                 <select
                   value={timeZone}
+                  disabled={!canManageSettings()}
                   onChange={(e) => setTimeZone(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <option value="Asia/Kolkata">Asia/Kolkata (IST +5:30)</option>
                   <option value="UTC">UTC</option>
@@ -353,37 +368,38 @@ export default function SettingsPage() {
       </Card>
 
       {/* Transactional Email Integration & Test */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Mail className="h-4 w-4 text-indigo-500" />
-            <span>Email Report Notifications & Test</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Daily stock summaries and overdue loan alerts are dispatched automatically via background jobs.
-            Use the form below to send an immediate verification email to any address.
-          </p>
+      {isSuperAdmin() && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Mail className="h-4 w-4 text-indigo-500" />
+              <span>Email Report Notifications & Test</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Daily stock summaries and overdue loan alerts are dispatched automatically via background jobs.
+              Use the form below to send an immediate verification email to any address.
+            </p>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder="Enter test email address (or leave empty to send to your email)"
-              type="email"
-              value={testEmailAddress}
-              onChange={(e) => setTestEmailAddress(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              variant="default"
-              onClick={handleTestEmail}
-              isLoading={isSendingTest}
-              className="font-bold gap-1.5 shrink-0"
-            >
-              <Send className="h-4 w-4" />
-              <span>Send Test Notification</span>
-            </Button>
-          </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                placeholder="Enter test email address (or leave empty to send to your email)"
+                type="email"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                variant="default"
+                onClick={handleTestEmail}
+                isLoading={isSendingTest}
+                className="font-bold gap-1.5 shrink-0"
+              >
+                <Send className="h-4 w-4" />
+                <span>Send Test Notification</span>
+              </Button>
+            </div>
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -404,6 +420,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

@@ -5,8 +5,8 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { AppShell } from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
-  title: 'SoundStock — Inventory & Studio Management System',
-  description: 'Accessible, modern inventory management for musical instruments, retail sales, and academy loan operations.',
+  title: 'stereobliss - retail inventory',
+  description: 'Modern, streamlined retail inventory and stock tracking system.',
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                var savedTheme = localStorage.getItem('soundstock_theme');
+                var savedTheme = localStorage.getItem('stereobliss_theme') || localStorage.getItem('soundstock_theme');
                 if (savedTheme === 'dark') {
                   document.documentElement.classList.add('dark');
                 } else {

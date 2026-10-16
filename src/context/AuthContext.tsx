@@ -15,9 +15,14 @@ interface AuthContextType {
   canReceiveStock: () => boolean;
   canMakeSales: () => boolean;
   canIssueUsage: () => boolean;
+  canUpdateStock: () => boolean;
+  canManageSuppliers: () => boolean;
+  canManageMaintenance: () => boolean;
   canApproveAdjustments: () => boolean;
   canManageSettings: () => boolean;
+  canManageUsers: () => boolean;
   isSuperAdmin: () => boolean;
+  isManager: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,7 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.get<{ user: User }>('/auth/me');
       if (res && res.user) {
-        setUser(res.user);
+        // Normalize role if legacy role present
+        const normalizedRole =
+          res.user.role === 'INVENTORY_MANAGER' ? 'MANAGER' : res.user.role;
+        setUser({ ...res.user, role: normalizedRole as UserRole });
       } else {
         setUser(null);
       }
@@ -49,8 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const res = await api.post<{ user: User; token: string }>('/auth/login', { email, password });
-    setUser(res.user);
+    const normalizedRole =
+      res.user.role === 'INVENTORY_MANAGER' ? 'MANAGER' : res.user.role;
+    setUser({ ...res.user, role: normalizedRole as UserRole });
     if (res.token && typeof window !== 'undefined') {
+      localStorage.setItem('stereobliss_token', res.token);
       localStorage.setItem('soundstock_token', res.token);
     }
     router.push('/dashboard');
@@ -63,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('stereobliss_token');
       localStorage.removeItem('soundstock_token');
     }
     setUser(null);
@@ -71,16 +83,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = (...roles: UserRole[]): boolean => {
     if (!user) return false;
-    return roles.includes(user.role);
+    const current = (user.role === 'INVENTORY_MANAGER' ? 'MANAGER' : user.role) as UserRole;
+    return roles.includes(current) || roles.includes(user.role);
   };
 
-  const canManageCatalogue = () => hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER');
-  const canReceiveStock = () => hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER', 'INVENTORY_STAFF');
-  const canMakeSales = () => hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF');
-  const canIssueUsage = () => hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER', 'INVENTORY_STAFF');
-  const canApproveAdjustments = () => hasRole('SUPER_ADMIN', 'INVENTORY_MANAGER');
-  const canManageSettings = () => hasRole('SUPER_ADMIN');
+  // Main features: Super Admin ONLY
   const isSuperAdmin = () => hasRole('SUPER_ADMIN');
+  const canManageCatalogue = () => isSuperAdmin(); // Product creation, deletion & master catalog specs
+  const canManageSettings = () => isSuperAdmin(); // Settings, tax, thresholds, database wipe
+  const canManageUsers = () => isSuperAdmin(); // User accounts, provisioning, role assignment
+  const canApproveAdjustments = () => isSuperAdmin(); // Review & approve write-offs and adjustments
+
+  // Operational tracking and updating features: Manager & Super Admin
+  const isManager = () => hasRole('MANAGER') || hasRole('INVENTORY_MANAGER');
+  const canReceiveStock = () => hasRole('SUPER_ADMIN', 'MANAGER');
+  const canMakeSales = () => hasRole('SUPER_ADMIN', 'MANAGER');
+  const canIssueUsage = () => hasRole('SUPER_ADMIN', 'MANAGER');
+  const canUpdateStock = () => hasRole('SUPER_ADMIN', 'MANAGER');
+  const canManageSuppliers = () => hasRole('SUPER_ADMIN', 'MANAGER');
+  const canManageMaintenance = () => hasRole('SUPER_ADMIN', 'MANAGER');
 
   return (
     <AuthContext.Provider
@@ -94,9 +115,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canReceiveStock,
         canMakeSales,
         canIssueUsage,
+        canUpdateStock,
+        canManageSuppliers,
+        canManageMaintenance,
         canApproveAdjustments,
         canManageSettings,
+        canManageUsers,
         isSuperAdmin,
+        isManager,
       }}
     >
       {children}

@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@soundstock.io');
+  const [email, setEmail] = useState('admin@stereobliss.com');
   const [password, setPassword] = useState('Stock@2026');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -53,15 +53,15 @@ export default function LoginPage() {
           </div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              SOUNDSTOCK
+              STEREOBLISS
             </h1>
             <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
               <Sparkles className="h-3 w-3" />
-              <span>Phase 2</span>
+              <span>Retail</span>
             </span>
           </div>
           <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-1.5">
-            Studio Inventory & Academy Asset Management
+            StereoBliss — Retail Inventory
           </p>
         </div>
 
@@ -82,7 +82,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="staff@soundstock.io"
+                placeholder="staff@stereobliss.com"
               />
             </div>
 
@@ -98,55 +98,39 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" size="lg" className="w-full mt-2 font-bold shadow-md" isLoading={isLoading}>
-              <span>Sign In to SoundStock</span>
+              <span>Sign In to StereoBliss</span>
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
 
-          {/* Quick Demo Role Presets */}
+          {/* Quick Demo Role Presets: Exactly Two Profile Roles */}
           <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 text-center">
-              Quick Role Demo Presets (Password: Stock@2026)
+              Profile Role Demo Presets (Password: Stock@2026)
             </p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 type="button"
-                onClick={() => handleRolePreset('admin@soundstock.io')}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors"
+                onClick={() => handleRolePreset('admin@stereobliss.com')}
+                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
               >
-                <span className="font-bold text-amber-600 dark:text-amber-400">Super Admin</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">Full Access</span>
+                <span className="font-extrabold text-amber-600 dark:text-amber-400 text-xs">Super Admin</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Main Features & Settings</span>
               </button>
               <button
                 type="button"
-                onClick={() => handleRolePreset('manager@soundstock.io')}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors"
+                onClick={() => handleRolePreset('manager@stereobliss.com')}
+                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
               >
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">Manager</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">Approvals</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRolePreset('sales@soundstock.io')}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors"
-              >
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">Sales Staff</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">POS</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRolePreset('staff@soundstock.io')}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors"
-              >
-                <span className="font-bold text-sky-600 dark:text-sky-400">Academy Staff</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">Loans</span>
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">Manager</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Tracking, POS & Updates</span>
               </button>
             </div>
           </div>
         </div>
 
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6 font-medium">
-          © {new Date().getFullYear()} SoundStock Systems. All rights reserved.
+          © {new Date().getFullYear()} StereoBliss - Retail Inventory. All rights reserved.
         </p>
       </div>
     </div>
