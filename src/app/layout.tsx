@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { SettingsProvider } from '@/context/SettingsContext';
 import { AppShell } from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
-  title: 'stereobliss - retail inventory',
-  description: 'Modern, streamlined retail inventory and stock tracking system.',
+  title: 'Muziclub Inventory - Retail & Studio Asset Management',
+  description: 'Streamlined retail inventory, musical instruments, and stock tracking system for Muziclub.',
 };
 
 export default function RootLayout({
@@ -42,7 +43,9 @@ export default function RootLayout({
       <body className="font-['Plus_Jakarta_Sans',sans-serif] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-150">
         <ThemeProvider>
           <AuthProvider>
-            <AppShell>{children}</AppShell>
+            <SettingsProvider>
+              <AppShell>{children}</AppShell>
+            </SettingsProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

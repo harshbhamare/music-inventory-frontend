@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import {
   LayoutDashboard,
   Boxes,
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils';
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout, hasRole } = useAuth();
+  const { companyName } = useSettings();
   const [showPhase3, setShowPhase3] = useState(false);
 
   // Phase 2 Core Modules — Streamlined & accessible
@@ -131,15 +133,15 @@ export function Sidebar() {
         </div>
         <div>
           <div className="flex items-center gap-1.5">
-            <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white">
-              STEREOBLISS
+            <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white truncate max-w-[140px]">
+              {companyName ? companyName.toUpperCase() : 'MUZICLUB'}
             </span>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20">
+            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20 shrink-0">
               Retail
             </span>
           </div>
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Retail Inventory
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[170px]">
+            Inventory & Asset Ops
           </p>
         </div>
       </div>

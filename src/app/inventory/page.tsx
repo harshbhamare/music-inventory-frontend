@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api, getApiUrl } from '@/lib/api';
-import { Product, SerializedItem, Category, Supplier } from '@/lib/types';
+import { Product, SerializedItem, Category, Supplier, StockLocation } from '@/lib/types';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -26,7 +26,29 @@ import {
   RefreshCw,
   Sparkles,
   Palette,
+  Package,
+  Layers,
+  MapPin,
+  Calculator,
+  ShieldCheck,
+  Check,
+  TrendingUp,
+  HelpCircle,
+  Info,
 } from 'lucide-react';
+
+const POPULAR_BRANDS = [
+  'Muziclub',
+  'Yamaha',
+  'Fender',
+  'Roland',
+  'Ibanez',
+  'Casio',
+  "D'Addario",
+  'Shure',
+  'Gibson',
+  'Cort',
+];
 
 const COLOR_PRESETS = [
   { name: 'Black', hex: '#18181b', border: '#3f3f46' },
@@ -91,6 +113,7 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedTrackingMode, setSelectedTrackingMode] = useState('');
@@ -107,13 +130,21 @@ export default function InventoryPage() {
 
   // New product form
   const [newProdName, setNewProdName] = useState('');
+  const [newProdBrand, setNewProdBrand] = useState('Muziclub');
+  const [newProdModel, setNewProdModel] = useState('');
   const [newProdColor, setNewProdColor] = useState('');
   const [newProdSku, setNewProdSku] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
+  const [newProdTrackingMode, setNewProdTrackingMode] = useState<'QUANTITY' | 'SERIALIZED'>('SERIALIZED');
+  const [newProdInitialStock, setNewProdInitialStock] = useState('1');
+  const [newProdLocation, setNewProdLocation] = useState('');
+  const [newProdSerials, setNewProdSerials] = useState('');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdSupplier, setNewProdSupplier] = useState('');
   const [newProdThreshold, setNewProdThreshold] = useState('5');
+  const [newProdUnit, setNewProdUnit] = useState('pcs');
+  const [newProdHsn, setNewProdHsn] = useState('9202');
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSku, setIsFetchingSku] = useState(false);
@@ -158,17 +189,24 @@ export default function InventoryPage() {
 
   const fetchMetadata = async () => {
     try {
-      const [catsRes, supsRes] = await Promise.all([
+      const [catsRes, supsRes, locsRes] = await Promise.all([
         api.get<{ categories: Category[] }>('/meta/categories'),
         api.get<{ suppliers: Supplier[] }>('/meta/suppliers'),
+        api.get<{ locations: StockLocation[] }>('/meta/locations'),
       ]);
       setCategories(catsRes.categories || []);
       setSuppliers(supsRes.suppliers || []);
+      const locList = locsRes.locations || [];
+      setLocations(locList);
       if (catsRes.categories && catsRes.categories.length > 0 && !newProdCategory) {
         setNewProdCategory(catsRes.categories[0]._id);
       }
+      if (locList.length > 0 && !newProdLocation) {
+        const defaultLoc = locList.find((l) => l.isDefault) || locList[0];
+        setNewProdLocation(defaultLoc._id);
+      }
     } catch (err) {
-      console.error('Failed to load categories/suppliers:', err);
+      console.error('Failed to load categories/suppliers/locations:', err);
     }
   };
 
@@ -322,12 +360,23 @@ export default function InventoryPage() {
   const handleOpenAddProduct = async () => {
     setFormError('');
     setNewProdName('');
+    setNewProdBrand('Muziclub');
+    setNewProdModel('');
     setNewProdColor('');
     setNewProdCost('');
     setNewProdPrice('');
     setNewProdThreshold('5');
+    setNewProdTrackingMode('SERIALIZED');
+    setNewProdInitialStock('1');
+    setNewProdSerials('');
+    setNewProdUnit('pcs');
+    setNewProdHsn('9202');
     if (categories.length > 0 && !newProdCategory) {
       setNewProdCategory(categories[0]._id);
+    }
+    if (locations.length > 0) {
+      const defaultLoc = locations.find((l) => l.isDefault) || locations[0];
+      setNewProdLocation(defaultLoc._id);
     }
     await fetchNextSku();
     setIsAddModalOpen(true);
@@ -340,16 +389,32 @@ export default function InventoryPage() {
     setIsSaving(true);
 
     try {
+      const initStockNum = Math.max(0, parseInt(newProdInitialStock, 10) || 0);
+      let serialsArr: string[] | undefined = undefined;
+      if (newProdTrackingMode === 'SERIALIZED' && newProdSerials.trim()) {
+        serialsArr = newProdSerials
+          .split(/[\n,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
       await api.post('/products', {
         name: newProdName.trim(),
+        brand: newProdBrand.trim() || 'Muziclub',
+        modelName: newProdModel.trim() || undefined,
         color: newProdColor.trim() || undefined,
         sku: newProdSku.trim().toUpperCase() || undefined,
         category: newProdCategory || categories[0]?._id,
-        trackingMode: 'QUANTITY',
+        trackingMode: newProdTrackingMode,
         purchaseCost: parseFloat(newProdCost) || 0,
         defaultSellingPrice: parseFloat(newProdPrice) || 0,
         supplier: newProdSupplier || undefined,
         minStockThreshold: parseInt(newProdThreshold, 10) || 5,
+        unitOfMeasure: newProdUnit.trim() || 'pcs',
+        hsnCode: newProdHsn.trim() || '9202',
+        initialStock: initStockNum,
+        destinationLocation: newProdLocation || undefined,
+        initialSerialNumbers: serialsArr,
       });
 
       setIsAddModalOpen(false);
@@ -358,7 +423,11 @@ export default function InventoryPage() {
       setNewProdSku('');
       setNewProdCost('');
       setNewProdPrice('');
+      setNewProdSerials('');
       fetchProducts();
+      if (activeTab === 'serialized' || newProdTrackingMode === 'SERIALIZED') {
+        fetchSerializedItems();
+      }
     } catch (err: any) {
       setFormError(err.message || 'Failed to create product.');
     } finally {
@@ -858,291 +927,217 @@ export default function InventoryPage() {
         isOpen={!!editingProduct}
         onClose={() => setEditingProduct(null)}
         title={`Edit Product — ${editingProduct?.name}`}
-        description="Update pricing, supplier, or product catalogue details."
-        maxWidth="lg"
+        description="Update pricing, supplier, brand, or product catalogue specifications."
+        maxWidth="2xl"
       >
-        <form onSubmit={handleSaveEditProduct} className="space-y-4">
+        <form onSubmit={handleSaveEditProduct} className="space-y-5">
           {editError && (
             <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
               {editError}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Section 1: Identification */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <Tag className="h-4 w-4 text-amber-500" />
+              <span>Product Identity</span>
+            </div>
+
             <Input
               label="Product Name *"
               required
               value={editProdName}
               onChange={(e) => setEditProdName(e.target.value)}
             />
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Category
-              </label>
-              <select
-                value={editProdCategory}
-                onChange={(e) => setEditProdCategory(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
-              >
-                {categories.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
 
-          {/* Product Colour Field */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Palette className="h-3.5 w-3.5 text-amber-500" />
-                <span>Product Colour</span>
-              </label>
-              {editProdColor && (
-                <button
-                  type="button"
-                  onClick={() => setEditProdColor('')}
-                  className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  Brand / Manufacturer
+                </label>
+                <input
+                  type="text"
+                  value={editProdBrand}
+                  onChange={(e) => setEditProdBrand(e.target.value)}
+                  placeholder="e.g. Muziclub, Yamaha, Fender"
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  Model / Series Name
+                </label>
+                <input
+                  type="text"
+                  value={editProdModel}
+                  onChange={(e) => setEditProdModel(e.target.value)}
+                  placeholder="e.g. F310, CT-X700, EXL110"
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Category
+                </label>
+                <select
+                  value={editProdCategory}
+                  onChange={(e) => setEditProdCategory(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
                 >
-                  Clear Colour
-                </button>
-              )}
+                  {categories.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  SKU Code
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  disabled
+                  value={editingProduct?.sku || 'N/A'}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/50 font-mono font-bold text-amber-600 dark:text-amber-400 cursor-not-allowed"
+                />
+              </div>
             </div>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="e.g. Gloss Black, Sunburst, Natural Wood"
-                value={editProdColor}
-                onChange={(e) => setEditProdColor(e.target.value)}
-                className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+          </div>
+
+          {/* Section 2: Pricing & Margins */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <Calculator className="h-4 w-4 text-emerald-500" />
+              <span>Pricing & Profit Margins</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input
+                label="Purchase Cost (₹) *"
+                type="number"
+                min="0"
+                required
+                value={editProdCost}
+                onChange={(e) => setEditProdCost(e.target.value)}
               />
-              <span
-                className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
-                style={getColorStyle(editProdColor)}
+              <Input
+                label="Selling Price (₹) *"
+                type="number"
+                min="0"
+                required
+                value={editProdPrice}
+                onChange={(e) => setEditProdPrice(e.target.value)}
+              />
+              <Input
+                label="Low Stock Threshold"
+                type="number"
+                min="1"
+                value={editProdThreshold}
+                onChange={(e) => setEditProdThreshold(e.target.value)}
               />
             </div>
-            {/* Colour Preset Buttons */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {COLOR_PRESETS.map((cp) => (
-                <button
-                  key={cp.name}
-                  type="button"
-                  onClick={() => setEditProdColor(cp.name)}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
-                    editProdColor.toLowerCase() === cp.name.toLowerCase()
-                      ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-400"
-                  )}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
-                  <span>{cp.name}</span>
-                </button>
-              ))}
+
+            {/* Edit Margin Widget */}
+            {(() => {
+              const c = parseFloat(editProdCost) || 0;
+              const p = parseFloat(editProdPrice) || 0;
+              const profit = p - c;
+              const margin = p > 0 ? ((profit / p) * 100).toFixed(1) : '0.0';
+              const markup = c > 0 ? ((profit / c) * 100).toFixed(1) : '0.0';
+              return (
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs">
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Unit Gross Profit</span>
+                    <span className={cn('font-bold text-sm', profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
+                      {profit >= 0 ? `+${formatCurrency(profit)}` : `-${formatCurrency(Math.abs(profit))}`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Profit Margin</span>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">{margin}%</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Cost Markup</span>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">{markup}%</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Section 3: Attributes & Supplier */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <Palette className="h-4 w-4 text-amber-500" />
+              <span>Attributes & Supplier</span>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input
-              label="Purchase Cost (₹) *"
-              type="number"
-              min="0"
-              required
-              value={editProdCost}
-              onChange={(e) => setEditProdCost(e.target.value)}
-            />
-            <Input
-              label="Selling Price (₹) *"
-              type="number"
-              min="0"
-              required
-              value={editProdPrice}
-              onChange={(e) => setEditProdPrice(e.target.value)}
-            />
-            <Input
-              label="Low Stock Alert Threshold"
-              type="number"
-              min="1"
-              value={editProdThreshold}
-              onChange={(e) => setEditProdThreshold(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Preferred Supplier
-            </label>
-            <select
-              value={editProdSupplier}
-              onChange={(e) => setEditProdSupplier(e.target.value)}
-              className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
-            >
-              <option value="">No Supplier Assigned</option>
-              {suppliers.map((s) => (
-                <option key={s._id} value={s._id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="outline" onClick={() => setEditingProduct(null)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="default" isLoading={isEditingSaving} className="font-bold">
-              Save Changes
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* ADD NEW PRODUCT MODAL */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add Product to Catalogue"
-        description="Register a new retail product into the master inventory catalogue."
-        maxWidth="xl"
-      >
-        <form onSubmit={handleCreateProduct} className="space-y-4">
-          {formError && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
-              {formError}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Product Name *"
-              required
-              placeholder="e.g. 1/4 Inch Instrument Cable 3m"
-              value={newProdName}
-              onChange={(e) => setNewProdName(e.target.value)}
-            />
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  SKU Code (Auto-Incremented)
+                  Finish / Colour
                 </label>
-                <button
-                  type="button"
-                  onClick={fetchNextSku}
-                  disabled={isFetchingSku}
-                  title="Generate next sequential SKU"
-                  className="text-[11px] font-bold text-amber-500 hover:text-amber-600 flex items-center gap-1 transition-colors"
-                >
-                  <RefreshCw className={cn('h-3 w-3', isFetchingSku && 'animate-spin')} />
-                  <span>Refresh</span>
-                </button>
+                {editProdColor && (
+                  <button
+                    type="button"
+                    onClick={() => setEditProdColor('')}
+                    className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                  >
+                    Clear Colour
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <input
                   type="text"
-                  required
-                  readOnly
-                  value={newProdSku || 'Generating...'}
-                  className="w-full h-10 px-3 pr-16 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 font-mono font-bold text-amber-600 dark:text-amber-400 cursor-default"
+                  placeholder="e.g. Gloss Black, Sunburst, Natural Wood"
+                  value={editProdColor}
+                  onChange={(e) => setEditProdColor(e.target.value)}
+                  className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
                 />
-                <span className="absolute right-2.5 top-2.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                  Auto
-                </span>
+                <span
+                  className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
+                  style={getColorStyle(editProdColor)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {COLOR_PRESETS.map((cp) => (
+                  <button
+                    key={cp.name}
+                    type="button"
+                    onClick={() => setEditProdColor(cp.name)}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer',
+                      editProdColor.toLowerCase() === cp.name.toLowerCase()
+                        ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:border-slate-400'
+                    )}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
+                    <span>{cp.name}</span>
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
 
-          {/* Product Colour Field */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Palette className="h-3.5 w-3.5 text-amber-500" />
-                <span>Product Colour</span>
-              </label>
-              {newProdColor && (
-                <button
-                  type="button"
-                  onClick={() => setNewProdColor('')}
-                  className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
-                >
-                  Clear Colour
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="e.g. Sunburst, Gloss Black, Natural Wood, Arctic White"
-                value={newProdColor}
-                onChange={(e) => setNewProdColor(e.target.value)}
-                className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-              />
-              <span
-                className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
-                style={getColorStyle(newProdColor)}
-              />
-            </div>
-            {/* Colour Preset Buttons */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {COLOR_PRESETS.map((cp) => (
-                <button
-                  key={cp.name}
-                  type="button"
-                  onClick={() => setNewProdColor(cp.name)}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
-                    newProdColor.toLowerCase() === cp.name.toLowerCase()
-                      ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-400"
-                  )}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
-                  <span>{cp.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Category *
+                Preferred Supplier
               </label>
               <select
-                required
-                value={newProdCategory}
-                onChange={(e) => setNewProdCategory(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                value={editProdSupplier}
+                onChange={(e) => setEditProdSupplier(e.target.value)}
+                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
               >
-                {categories.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Preferred Supplier
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsQuickSupplierOpen(true)}
-                  className="text-xs font-bold text-amber-500 hover:text-amber-600"
-                >
-                  + Add New
-                </button>
-              </div>
-              <select
-                value={newProdSupplier}
-                onChange={(e) => setNewProdSupplier(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
-              >
-                <option value="">Select Supplier (Optional)</option>
+                <option value="">No Supplier Assigned</option>
                 {suppliers.map((s) => (
                   <option key={s._id} value={s._id}>
                     {s.name}
@@ -1152,48 +1147,524 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input
-              label="Purchase Cost (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 450"
-              value={newProdCost}
-              onChange={(e) => setNewProdCost(e.target.value)}
-            />
-
-            <Input
-              label="Selling Price (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 750"
-              value={newProdPrice}
-              onChange={(e) => setNewProdPrice(e.target.value)}
-            />
-
-            <Input
-              label="Low Stock Alert Threshold"
-              type="number"
-              min="1"
-              value={newProdThreshold}
-              onChange={(e) => setNewProdThreshold(e.target.value)}
-            />
-          </div>
-
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
-            <span>Tracking Mode: <strong>Bulk (Quantity-based)</strong></span>
-            <span className="text-[11px] font-semibold text-slate-500">Unit: pcs/pack</span>
-          </div>
-
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setEditingProduct(null)}>
               Cancel
             </Button>
-            <Button type="submit" variant="default" isLoading={isSaving} className="font-bold">
-              Save Product
+            <Button type="submit" variant="default" isLoading={isEditingSaving} className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950">
+              Save Changes
             </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ADD NEW PRODUCT MODAL — PROFESSIONAL MULTI-SECTION REDESIGN */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Register Product & Opening Inventory"
+        description="Add a new musical instrument or retail accessory with live profit margins and initial stock balance."
+        maxWidth="2xl"
+      >
+        <form onSubmit={handleCreateProduct} className="space-y-5">
+          {formError && (
+            <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3.5 text-xs font-semibold text-red-500 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
+          {/* SECTION 1: Product Identification */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              <Tag className="h-4 w-4 text-amber-500" />
+              <span>1. Product Identity & Classification</span>
+            </div>
+
+            <Input
+              label="Product Name *"
+              required
+              placeholder="e.g. Yamaha F310 Acoustic Guitar, Natural Finish"
+              value={newProdName}
+              onChange={(e) => setNewProdName(e.target.value)}
+            />
+
+            {/* Brand with Quick Selection Chips */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Brand / Manufacturer *
+                </label>
+                <span className="text-[11px] text-slate-400">Select or type custom brand</span>
+              </div>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Muziclub, Yamaha, Fender, Roland"
+                value={newProdBrand}
+                onChange={(e) => setNewProdBrand(e.target.value)}
+                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+              />
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {POPULAR_BRANDS.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setNewProdBrand(b)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer',
+                      newProdBrand.toLowerCase() === b.toLowerCase()
+                        ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:border-slate-400'
+                    )}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  Model / Series Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. F310, CT-X700, EXL110"
+                  value={newProdModel}
+                  onChange={(e) => setNewProdModel(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Category *
+                </label>
+                <select
+                  required
+                  value={newProdCategory}
+                  onChange={(e) => setNewProdCategory(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                >
+                  {categories.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    SKU Code
+                  </label>
+                  <button
+                    type="button"
+                    onClick={fetchNextSku}
+                    disabled={isFetchingSku}
+                    title="Generate next sequential SKU"
+                    className="text-[11px] font-bold text-amber-500 hover:text-amber-600 flex items-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className={cn('h-3 w-3', isFetchingSku && 'animate-spin')} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    readOnly
+                    value={newProdSku || 'Generating...'}
+                    className="w-full h-10 px-3 pr-14 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 font-mono font-bold text-amber-600 dark:text-amber-400 cursor-default"
+                  />
+                  <span className="absolute right-2 top-2 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                    Auto
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: Inventory Policy & Opening Stock */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                <Boxes className="h-4 w-4 text-amber-500" />
+                <span>2. Inventory Policy & Opening Stock</span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500">
+                Controls physical asset serialization
+              </span>
+            </div>
+
+            {/* Tracking Mode Radio Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setNewProdTrackingMode('SERIALIZED')}
+                className={cn(
+                  'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
+                  newProdTrackingMode === 'SERIALIZED'
+                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 ring-2 ring-amber-500/40 shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700'
+                )}
+              >
+                <div className={cn(
+                  'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold',
+                  newProdTrackingMode === 'SERIALIZED' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                )}>
+                  🎸
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      Serialized Instrument / Asset
+                    </span>
+                    {newProdTrackingMode === 'SERIALIZED' && (
+                      <Check className="h-4 w-4 text-amber-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Track individual instruments with unique serial numbers, AST asset tags, warranty, and condition. Ideal for Guitars, Keyboards, Drums, Amps, Microphones.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNewProdTrackingMode('QUANTITY')}
+                className={cn(
+                  'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
+                  newProdTrackingMode === 'QUANTITY'
+                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 ring-2 ring-amber-500/40 shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700'
+                )}
+              >
+                <div className={cn(
+                  'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold',
+                  newProdTrackingMode === 'QUANTITY' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                )}>
+                  📦
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      Bulk Quantity (Packs/Pieces)
+                    </span>
+                    {newProdTrackingMode === 'QUANTITY' && (
+                      <Check className="h-4 w-4 text-amber-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Track aggregate stock counts on hand. Ideal for consumables and accessories: Strings, Picks, Cables, Straps, Adaptors, Drumsticks.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Opening Stock Intake Sub-panel */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                    Initial Opening Stock (Units)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newProdInitialStock}
+                    onChange={(e) => setNewProdInitialStock(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-10 px-3 text-sm font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Directly credits your store inventory and updates dashboard valuation.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                    Storage Outlet / Location
+                  </label>
+                  <select
+                    value={newProdLocation}
+                    onChange={(e) => setNewProdLocation(e.target.value)}
+                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                  >
+                    {locations.map((loc) => (
+                      <option key={loc._id} value={loc._id}>
+                        {loc.name} ({loc.code})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Default destination branch for initial inventory intake.
+                  </p>
+                </div>
+              </div>
+
+              {/* Serial Numbers Input for Serialized Items */}
+              {newProdTrackingMode === 'SERIALIZED' && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Manufacturer Serial Numbers (Optional)
+                    </label>
+                    <span className="text-[11px] text-amber-500 font-medium">
+                      AST Asset IDs auto-generated
+                    </span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. SN-YAM-2026-001, SN-YAM-2026-002 (separate with commas or newlines)"
+                    value={newProdSerials}
+                    onChange={(e) => setNewProdSerials(e.target.value)}
+                    className="w-full p-2.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Leave blank or partially filled to let the system generate sequential tags (e.g. AST-0001, AST-0002).
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SECTION 3: Pricing & Live Profitability Intelligence */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              <Calculator className="h-4 w-4 text-emerald-500" />
+              <span>3. Pricing & Profitability Calculator</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Purchase Cost per Unit (₹) *"
+                type="number"
+                min="0"
+                required
+                placeholder="e.g. 9200"
+                value={newProdCost}
+                onChange={(e) => setNewProdCost(e.target.value)}
+              />
+
+              <Input
+                label="Default Selling Price (₹) *"
+                type="number"
+                min="0"
+                required
+                placeholder="e.g. 11500"
+                value={newProdPrice}
+                onChange={(e) => setNewProdPrice(e.target.value)}
+              />
+            </div>
+
+            {/* Live Profit Margin Intelligence Card */}
+            {(() => {
+              const cost = parseFloat(newProdCost) || 0;
+              const price = parseFloat(newProdPrice) || 0;
+              const initUnits = Math.max(0, parseInt(newProdInitialStock, 10) || 0);
+              const profit = price - cost;
+              const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : '0.0';
+              const markup = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0.0';
+              const totalCostVal = initUnits * cost;
+              const totalRetailVal = initUnits * price;
+              const isProfitable = profit > 0;
+              const isNegative = price > 0 && cost > 0 && profit < 0;
+
+              return (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Live Profitability Analysis
+                    </span>
+                    <span
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wider',
+                        isNegative
+                          ? 'bg-red-500/10 text-red-500'
+                          : isProfitable
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                      )}
+                    >
+                      {isNegative ? 'Loss Alert' : isProfitable ? `${margin}% Margin` : 'Break-Even'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
+                      <span className="text-slate-500 block text-[11px]">Unit Gross Profit</span>
+                      <span className={cn('text-base font-extrabold', profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
+                        {profit >= 0 ? `+${formatCurrency(profit)}` : `-${formatCurrency(Math.abs(profit))}`}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
+                      <span className="text-slate-500 block text-[11px]">Profit Margin</span>
+                      <span className="text-base font-extrabold text-slate-900 dark:text-white">
+                        {margin}%
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
+                      <span className="text-slate-500 block text-[11px]">Opening Valuation (Cost)</span>
+                      <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                        {formatCurrency(totalCostVal)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
+                      <span className="text-slate-500 block text-[11px]">Potential Retail Value</span>
+                      <span className="text-base font-extrabold text-slate-900 dark:text-white">
+                        {formatCurrency(totalRetailVal)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* SECTION 4: Attributes & Supplier */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              <Palette className="h-4 w-4 text-amber-500" />
+              <span>4. Product Attributes & Supplier</span>
+            </div>
+
+            {/* Product Colour / Finish */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Colour / Finish
+                </label>
+                {newProdColor && (
+                  <button
+                    type="button"
+                    onClick={() => setNewProdColor('')}
+                    className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                  >
+                    Clear Colour
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="e.g. Natural Gloss, Sunburst, Ebony Black, Arctic White"
+                  value={newProdColor}
+                  onChange={(e) => setNewProdColor(e.target.value)}
+                  className="w-full h-10 px-3 pl-9 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                />
+                <span
+                  className="absolute left-2.5 top-2.5 h-5 w-5 rounded-full ring-1 ring-black/20 shadow-sm"
+                  style={getColorStyle(newProdColor)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {COLOR_PRESETS.map((cp) => (
+                  <button
+                    key={cp.name}
+                    type="button"
+                    onClick={() => setNewProdColor(cp.name)}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer',
+                      newProdColor.toLowerCase() === cp.name.toLowerCase()
+                        ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:border-slate-400'
+                    )}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
+                    <span>{cp.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Preferred Supplier
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickSupplierOpen(true)}
+                    className="text-xs font-bold text-amber-500 hover:text-amber-600"
+                  >
+                    + Add New
+                  </button>
+                </div>
+                <select
+                  value={newProdSupplier}
+                  onChange={(e) => setNewProdSupplier(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                >
+                  <option value="">Select Supplier (Optional)</option>
+                  {suppliers.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Low Stock Threshold
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newProdThreshold}
+                  onChange={(e) => setNewProdThreshold(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Unit of Measure
+                </label>
+                <select
+                  value={newProdUnit}
+                  onChange={(e) => setNewProdUnit(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
+                >
+                  <option value="pcs">Pieces (pcs)</option>
+                  <option value="pack">Pack</option>
+                  <option value="set">Set</option>
+                  <option value="box">Box</option>
+                  <option value="pair">Pair</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Modal Action Footer */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="text-xs text-slate-500 font-medium">
+              Mode: <strong className="text-amber-500">{newProdTrackingMode}</strong> • Opening Stock:{' '}
+              <strong className="text-slate-900 dark:text-white">{newProdInitialStock || 0} units</strong>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isSaving}
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md gap-1.5"
+              >
+                <PackagePlus className="h-4 w-4" />
+                <span>Save & Register Product</span>
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>

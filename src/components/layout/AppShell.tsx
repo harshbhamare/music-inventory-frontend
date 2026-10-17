@@ -3,12 +3,14 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Loader2 } from 'lucide-react';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
+  const { companyName } = useSettings();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -27,7 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950 text-amber-500">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm font-semibold tracking-wider text-slate-600 dark:text-slate-400">Loading StereoBliss - Retail Inventory...</p>
+          <p className="text-sm font-semibold tracking-wider text-slate-600 dark:text-slate-400">Loading {companyName || 'Muziclub Inventory'}...</p>
         </div>
       </div>
     );
