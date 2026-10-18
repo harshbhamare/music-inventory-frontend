@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
 import { Users2, Plus, Phone, Mail, MapPin, Search, Edit2, Trash2, Building2 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function SuppliersPage() {
   const { canManageSuppliers, isSuperAdmin } = useAuth();
@@ -121,13 +122,16 @@ export default function SuppliersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Suppliers & Vendors
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Directory of instrument distributors, manufacturers, and accessory vendors.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Suppliers & Vendors
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Directory of verified instrument distributors, manufacturers, and accessory vendors.
+            </p>
+          </div>
         </div>
 
         {canManageSuppliers() && (

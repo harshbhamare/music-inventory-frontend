@@ -36,9 +36,10 @@ import {
   HelpCircle,
   Info,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 const POPULAR_BRANDS = [
-  'Muziclub',
+  'Stereobliss',
   'Yamaha',
   'Fender',
   'Roland',
@@ -130,7 +131,7 @@ export default function InventoryPage() {
 
   // New product form
   const [newProdName, setNewProdName] = useState('');
-  const [newProdBrand, setNewProdBrand] = useState('Muziclub');
+  const [newProdBrand, setNewProdBrand] = useState('Stereobliss');
   const [newProdModel, setNewProdModel] = useState('');
   const [newProdColor, setNewProdColor] = useState('');
   const [newProdSku, setNewProdSku] = useState('');
@@ -360,7 +361,7 @@ export default function InventoryPage() {
   const handleOpenAddProduct = async () => {
     setFormError('');
     setNewProdName('');
-    setNewProdBrand('Muziclub');
+    setNewProdBrand('Stereobliss');
     setNewProdModel('');
     setNewProdColor('');
     setNewProdCost('');
@@ -400,7 +401,7 @@ export default function InventoryPage() {
 
       await api.post('/products', {
         name: newProdName.trim(),
-        brand: newProdBrand.trim() || 'Muziclub',
+        brand: newProdBrand.trim() || 'Stereobliss',
         modelName: newProdModel.trim() || undefined,
         color: newProdColor.trim() || undefined,
         sku: newProdSku.trim().toUpperCase() || undefined,
@@ -466,13 +467,16 @@ export default function InventoryPage() {
     <div className="space-y-6">
       {/* Header & Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Catalogue & Inventory
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage musical instruments, bulk accessories, stock counts, and serial numbers.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Catalogue & Inventory
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Manage musical instruments, bulk accessories, stock counts, and serial numbers.
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -960,7 +964,7 @@ export default function InventoryPage() {
                   type="text"
                   value={editProdBrand}
                   onChange={(e) => setEditProdBrand(e.target.value)}
-                  placeholder="e.g. Muziclub, Yamaha, Fender"
+                  placeholder="e.g. Stereobliss, Yamaha, Fender"
                   className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
                 />
               </div>
@@ -1200,7 +1204,7 @@ export default function InventoryPage() {
               <input
                 type="text"
                 required
-                placeholder="e.g. Muziclub, Yamaha, Fender, Roland"
+                placeholder="e.g. Stereobliss, Yamaha, Fender, Roland"
                 value={newProdBrand}
                 onChange={(e) => setNewProdBrand(e.target.value)}
                 className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"

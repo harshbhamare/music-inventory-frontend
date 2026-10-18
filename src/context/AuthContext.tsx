@@ -87,12 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return roles.includes(current) || roles.includes(user.role);
   };
 
-  // Main features: Super Admin ONLY
+  // Main features: Super Admin & Manager
   const isSuperAdmin = () => hasRole('SUPER_ADMIN');
-  const canManageCatalogue = () => isSuperAdmin(); // Product creation, deletion & master catalog specs
-  const canManageSettings = () => isSuperAdmin(); // Settings, tax, thresholds, database wipe
+  const canManageCatalogue = () => hasRole('SUPER_ADMIN', 'MANAGER'); // Product creation, deletion & master catalog specs
+  const canManageSettings = () => hasRole('SUPER_ADMIN', 'MANAGER'); // Settings, store details, cron customizations & report schedules
   const canManageUsers = () => isSuperAdmin(); // User accounts, provisioning, role assignment
-  const canApproveAdjustments = () => isSuperAdmin(); // Review & approve write-offs and adjustments
+  const canApproveAdjustments = () => hasRole('SUPER_ADMIN', 'MANAGER'); // Review & approve write-offs and adjustments
 
   // Operational tracking and updating features: Manager & Super Admin
   const isManager = () => hasRole('MANAGER') || hasRole('INVENTORY_MANAGER');

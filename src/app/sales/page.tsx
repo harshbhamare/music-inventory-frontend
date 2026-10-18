@@ -23,6 +23,7 @@ import {
   CreditCard,
   UserCheck,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function SalesPage() {
   const { canMakeSales } = useAuth();
@@ -237,13 +238,16 @@ export default function SalesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Sales & Point of Sale (POS)
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Live stock lookup, retail sales transactions, customer invoices, and returns.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Sales & Point of Sale (POS)
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Live stock lookup, retail sales transactions, customer invoices, and returns.
+            </p>
+          </div>
         </div>
 
         {canMakeSales() && (
@@ -660,7 +664,7 @@ export default function SalesPage() {
         isOpen={!!activeInvoice}
         onClose={() => setActiveInvoice(null)}
         title={`Retail Tax Invoice — ${activeInvoice?.invoiceNumber}`}
-        description="StereoBliss - Retail Inventory Official Receipt"
+        description="Stereobliss Retail Official Receipt"
         maxWidth="2xl"
       >
         {activeInvoice && (
@@ -668,11 +672,16 @@ export default function SalesPage() {
             <div id="printable-invoice" className="p-6 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950 space-y-4 shadow-sm">
               {/* Invoice Header */}
               <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <h2 className="text-xl font-black text-amber-500 tracking-tight">STEREOBLISS</h2>
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Retail Inventory Store & Pro Audio Gear</p>
-                  <p className="text-[11px] text-slate-500">GSTIN: 27AABCS1429B1Z8 | State Code: 27 (Maharashtra)</p>
-                  <p className="text-[11px] text-slate-500">Main Retail Showroom & Academy | Email: sales@stereobliss.com</p>
+                <div className="flex items-center gap-3.5">
+                  <div className="h-12 w-12 rounded-xl bg-white p-1 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center shrink-0">
+                    <img src="/logo.png" alt="Stereobliss" className="h-full w-full object-contain" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-amber-500 tracking-tight">STEREOBLISS RETAIL</h2>
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Retail Inventory Store & Pro Audio Gear</p>
+                    <p className="text-[11px] text-slate-500">GSTIN: 27AABCS1429B1Z8 | State Code: 27 (Maharashtra)</p>
+                    <p className="text-[11px] text-slate-500">Main Retail Showroom & Outlet | Email: sales@stereobliss.com</p>
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
@@ -798,7 +807,7 @@ export default function SalesPage() {
               </div>
 
               <div className="text-[11px] text-center text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800">
-                Thank you for choosing StereoBliss Retail! All musical instruments are covered under authorized manufacturer & store warranty.
+                Thank you for choosing Stereobliss Retail! All musical instruments are covered under authorized manufacturer & store warranty.
               </div>
             </div>
 

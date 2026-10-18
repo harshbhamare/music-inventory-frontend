@@ -29,6 +29,7 @@ import {
   MapPin,
   Sparkles,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface SystemInfo {
   counts: {
@@ -101,12 +102,12 @@ export default function SettingsPage() {
       const loc = setRes?.defaultLocation;
 
       if (s) {
-        setCompanyName(s.companyName || 'Muziclub Inventory');
-        setStoreName(s.storeName || loc?.name || 'Muziclub Central Studio & Academy');
+        setCompanyName(s.companyName || 'Stereobliss Retail');
+        setStoreName(s.storeName || loc?.name || 'Stereobliss Central Store');
         setStoreCode(s.storeCode || loc?.code || 'CENTRAL');
-        setContactEmail(s.contactEmail || 'contact@muziclub.com');
+        setContactEmail(s.contactEmail || 'contact@stereobliss.com');
         setContactPhone(s.contactPhone || '+91 98765 43210');
-        setAddress(s.address || loc?.address || 'Aundh & Hinjawadi, Pune, Maharashtra, India');
+        setAddress(s.address || loc?.address || 'Central Studio Campus, Floor 1, Pune, Maharashtra');
         setCurrencySymbol(s.currencySymbol || '₹');
         setThreshold(String(s.managerApprovalThresholdValue || 3));
         setLowStockDefault(String(s.lowStockAlertThresholdDefault || 5));
@@ -286,23 +287,24 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-          <Settings className="h-6 w-6 text-amber-500" />
-          <span>System Configuration & Store Management</span>
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Manage your organization identity, retail store details, automated background cron schedules, and notification mailing lists.
-        </p>
+      <div className="flex items-center gap-3">
+        <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Settings className="h-6 w-6 text-amber-500" />
+            <span>System Configuration & Store Management</span>
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Manage your organization identity, retail store details, automated background cron schedules, and notification mailing lists.
+          </p>
+        </div>
       </div>
 
-      {!isSuperAdmin() && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center justify-between shadow-sm">
-          <span>
-            <strong>Manager Access:</strong> Organization settings, automated background jobs, and data wiping require <strong>Superadmin</strong> privileges.
-          </span>
-        </div>
-      )}
+      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
+        <span>
+          <strong>Operational Access:</strong> Superadmins and Managers can configure store details, manage notification mailing lists, and adjust automated background cron schedules.
+        </span>
+      </div>
 
       {message && (
         <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800 dark:text-amber-400 shadow-sm">
@@ -376,13 +378,33 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="pt-4">
+          {/* Active Brand Logo Preview */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 mb-5">
+            <div className="flex items-center gap-4">
+              <BrandLogo size="lg" variant="badge" className="shadow-md" />
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Stereobliss Retail Brand Identity</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">Active Everywhere</span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Official logo active in Sidebar, Top Header, Login page, Loading screen, Reports, and System Favicon.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>frontend/logo/logo.png</span>
+            </div>
+          </div>
+
           <form onSubmit={handleSaveSettings} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Organization / Company Name *"
                 required
                 disabled={!canManageSettings()}
-                placeholder="e.g. Muziclub Inventory"
+                placeholder="e.g. Stereobliss Retail"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 helperText="Displayed in system sidebar, brand headers, and exported invoices."
@@ -393,7 +415,7 @@ export default function SettingsPage() {
                 type="email"
                 required
                 disabled={!canManageSettings()}
-                placeholder="e.g. contact@muziclub.com"
+                placeholder="e.g. contact@stereobliss.com"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
                 helperText="Primary communication and transactional email sender."
@@ -406,7 +428,7 @@ export default function SettingsPage() {
                   label="Primary Store / Outlet Name *"
                   required
                   disabled={!canManageSettings()}
-                  placeholder="e.g. Muziclub Central Studio & Academy"
+                  placeholder="e.g. Stereobliss Central Store"
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
                   helperText="Name of your default stock location & retail outlet."
@@ -417,7 +439,7 @@ export default function SettingsPage() {
                 label="Store Outlet Code *"
                 required
                 disabled={!canManageSettings()}
-                placeholder="e.g. CENTRAL or HINJ"
+                placeholder="e.g. CENTRAL or STEREO"
                 value={storeCode}
                 onChange={(e) => setStoreCode(e.target.value.toUpperCase())}
                 helperText="Short code for stock movements and receipts."
@@ -689,7 +711,7 @@ export default function SettingsPage() {
                       <div className="flex gap-2">
                         <input
                           type="email"
-                          placeholder="Type recipient email (e.g. accounts@muziclub.com) and press Enter or click Add"
+                          placeholder="Type recipient email (e.g. accounts@stereobliss.com) and press Enter or click Add"
                           value={newRecipientInputs[config._id] || ''}
                           onChange={(e) => setNewRecipientInputs((prev) => ({ ...prev, [config._id]: e.target.value }))}
                           onKeyDown={(e) => {

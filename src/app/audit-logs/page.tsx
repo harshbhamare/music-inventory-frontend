@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { History, RefreshCw, Search } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -43,13 +44,16 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            System Activity & Audit Logs
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Complete traceability of sensitive operations, security changes, and staff actions.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              System Activity & Audit Logs
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Complete traceability of sensitive operations, security changes, and staff actions.
+            </p>
+          </div>
         </div>
 
         <Button variant="outline" size="sm" onClick={fetchLogs} title="Refresh">

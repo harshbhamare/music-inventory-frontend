@@ -24,6 +24,7 @@ import {
   ArrowUpRight,
   ShieldAlert,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import {
   BarChart,
   Bar,
@@ -94,13 +95,16 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Operational Dashboard
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time inventory levels, customer instrument rentals, and retail sales tracking.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Operational Dashboard
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Real-time inventory levels, customer instrument rentals, and retail sales tracking.
+            </p>
+          </div>
         </div>
 
         {/* Date Filter Controls & Refresh */}

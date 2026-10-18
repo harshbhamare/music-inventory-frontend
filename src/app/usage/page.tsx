@@ -39,6 +39,7 @@ import {
   SlidersHorizontal,
   PlusCircle,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 const COMMON_ACCESSORIES = [
   'Heavy-Duty Stand',
@@ -536,14 +537,17 @@ export default function UsagePage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <Music2 className="h-6 w-6 text-amber-500" />
-            <span>Rent Instrument & Instrument Loans</span>
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              <Music2 className="h-6 w-6 text-amber-500" />
+              <span>Rent Instrument & Instrument Loans</span>
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
+            </p>
+          </div>
         </div>
 
         {canIssueUsage() && (
@@ -1100,7 +1104,7 @@ export default function UsagePage() {
 
           <Input
             label="Agreement Remarks / Special Terms"
-            placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by StereoBliss."
+            placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by Stereobliss."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />

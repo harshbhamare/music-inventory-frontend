@@ -48,8 +48,14 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 shadow-xl shadow-amber-500/25 mb-4">
-            <Music2 className="h-8 w-8 stroke-[2.5]" />
+          <div className="mb-4 flex items-center justify-center">
+            <div className="rounded-2xl bg-white p-3 shadow-2xl border border-slate-200/90 dark:border-slate-700/80 transition-all hover:scale-105 duration-300">
+              <img
+                src="/logo.png"
+                alt="Stereobliss"
+                className="h-14 w-auto object-contain max-w-[210px]"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -61,7 +67,7 @@ export default function LoginPage() {
             </span>
           </div>
           <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-1.5">
-            StereoBliss — Retail Inventory
+            Stereobliss Retail — Musical Instrument & Audio Inventory
           </p>
         </div>
 
@@ -98,7 +104,7 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" size="lg" className="w-full mt-2 font-bold shadow-md" isLoading={isLoading}>
-              <span>Sign In to StereoBliss</span>
+              <span>Sign In to Stereobliss</span>
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
@@ -130,7 +136,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6 font-medium">
-          © {new Date().getFullYear()} StereoBliss - Retail Inventory. All rights reserved.
+          © {new Date().getFullYear()} Stereobliss - Retail Inventory. All rights reserved.
         </p>
       </div>
     </div>

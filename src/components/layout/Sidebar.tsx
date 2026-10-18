@@ -23,6 +23,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -91,7 +92,7 @@ export function Sidebar() {
       title: 'Settings',
       href: '/settings',
       icon: Settings,
-      visible: hasRole('SUPER_ADMIN'),
+      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
     },
   ];
 
@@ -127,14 +128,12 @@ export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 transition-colors">
       {/* Brand Header */}
-      <div className="flex h-16 items-center gap-3 px-5 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 shadow-md shadow-amber-500/20">
-          <Music2 className="h-5 w-5 stroke-[2.5]" />
-        </div>
+      <div className="flex h-16 items-center gap-3 px-4 border-b border-slate-200 dark:border-slate-800">
+        <BrandLogo size="md" variant="badge" className="shadow-md" />
         <div>
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white truncate max-w-[140px]">
-              {companyName ? companyName.toUpperCase() : 'MUZICLUB'}
+              {companyName ? companyName.toUpperCase() : 'STEREOBLISS'}
             </span>
             <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20 shrink-0">
               Retail

@@ -47,8 +47,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (res) {
         setSettings((prev) => ({
           ...prev,
-          companyName: res.companyName || 'Muziclub Inventory',
-          storeName: res.storeName || 'Muziclub Central Studio & Academy',
+          companyName: res.companyName || 'Stereobliss Retail',
+          storeName: res.storeName || 'Stereobliss Central Store',
           currencySymbol: res.currencySymbol || '₹',
           timeZone: (res as any).timeZone || 'Asia/Kolkata',
         }));
@@ -63,8 +63,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           const loc = s.defaultLocation;
           setSettings({
             ...s,
-            companyName: s.companyName || 'Muziclub Inventory',
-            storeName: s.storeName || (loc && typeof loc === 'object' ? loc.name : 'Muziclub Central Studio & Academy'),
+            companyName: s.companyName || 'Stereobliss Retail',
+            storeName: s.storeName || (loc && typeof loc === 'object' ? loc.name : 'Stereobliss Central Store'),
             storeCode: s.storeCode || (loc && typeof loc === 'object' ? loc.code : 'CENTRAL'),
             currencySymbol: s.currencySymbol || '₹',
           });
@@ -83,8 +83,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const loc = updated.defaultLocation;
     const normalized: AppSettingData = {
       ...updated,
-      companyName: updated.companyName || data.companyName || 'Muziclub Inventory',
-      storeName: updated.storeName || data.storeName || (loc && typeof loc === 'object' ? loc.name : 'Muziclub Central Studio & Academy'),
+      companyName: updated.companyName || data.companyName || 'Stereobliss Retail',
+      storeName: updated.storeName || data.storeName || (loc && typeof loc === 'object' ? loc.name : 'Stereobliss Central Store'),
       storeCode: updated.storeCode || data.storeCode || (loc && typeof loc === 'object' ? loc.code : 'CENTRAL'),
       currencySymbol: updated.currencySymbol || data.currencySymbol || '₹',
     };
@@ -92,8 +92,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return normalized;
   };
 
-  const companyName = settings?.companyName || 'Muziclub Inventory';
-  const storeName = settings?.storeName || 'Muziclub Central Studio & Academy';
+  const companyName = settings?.companyName || 'Stereobliss Retail';
+  const storeName = settings?.storeName || 'Stereobliss Central Store';
   const currencySymbol = settings?.currencySymbol || '₹';
   const timeZone = settings?.timeZone || 'Asia/Kolkata';
 

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
 import { ShieldCheck, Plus, UserCheck, ShieldAlert, Key } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function UsersPage() {
   const { user: currentUser, canManageSettings, isSuperAdmin } = useAuth();
@@ -93,13 +94,16 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            User Accounts & Roles
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage profile roles and system access for StereoBliss - Retail Inventory.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              User Accounts & Roles
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Stereobliss Retail — Manage profile roles and staff access for Stereobliss Inventory.
+            </p>
+          </div>
         </div>
 
         {canManageSettings() && (
@@ -196,7 +200,7 @@ export default function UsersPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Create Staff User"
-        description="Provision access to StereoBliss - Retail Inventory."
+        description="Provision access to Stereobliss - Retail Inventory."
         maxWidth="md"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
