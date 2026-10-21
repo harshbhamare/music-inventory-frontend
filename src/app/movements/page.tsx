@@ -97,7 +97,7 @@ export default function MovementsPage() {
               <option value="PURCHASE_RECEIPT">Purchase Receipt (+ Intake)</option>
               <option value="SALE">Customer Sale (- Outflow)</option>
               <option value="SALE_RETURN">Sale Return (+ Return to Stock)</option>
-              <option value="INTERNAL_ISSUE">Internal Usage Issue (Academy)</option>
+              <option value="INTERNAL_ISSUE">Internal Usage / Rental Issue</option>
               <option value="INTERNAL_RETURN">Internal Usage Return</option>
               <option value="MAINTENANCE_OUT">Maintenance Out</option>
               <option value="MAINTENANCE_IN">Maintenance In</option>

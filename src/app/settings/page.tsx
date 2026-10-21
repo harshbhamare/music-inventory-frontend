@@ -102,12 +102,26 @@ export default function SettingsPage() {
       const loc = setRes?.defaultLocation;
 
       if (s) {
-        setCompanyName(s.companyName || 'Stereobliss Retail');
-        setStoreName(s.storeName || loc?.name || 'Stereobliss Central Store');
+        const cName = s.companyName && !/soundstock|muziclub/i.test(s.companyName) ? s.companyName : 'Stereobliss Retail';
+        const stName =
+          s.storeName && !/central studio|academy/i.test(s.storeName)
+            ? s.storeName
+            : loc?.name && !/central studio|academy/i.test(loc.name)
+            ? loc.name
+            : 'Stereobliss Central Store';
+        const addr =
+          s.address && !/central studio/i.test(s.address)
+            ? s.address
+            : loc?.address && !/central studio/i.test(loc.address)
+            ? loc.address
+            : 'Stereobliss Central Store, Pune, Maharashtra, India';
+
+        setCompanyName(cName);
+        setStoreName(stName);
         setStoreCode(s.storeCode || loc?.code || 'CENTRAL');
         setContactEmail(s.contactEmail || 'contact@stereobliss.com');
         setContactPhone(s.contactPhone || '+91 98765 43210');
-        setAddress(s.address || loc?.address || 'Central Studio Campus, Floor 1, Pune, Maharashtra');
+        setAddress(addr);
         setCurrencySymbol(s.currencySymbol || '₹');
         setThreshold(String(s.managerApprovalThresholdValue || 3));
         setLowStockDefault(String(s.lowStockAlertThresholdDefault || 5));

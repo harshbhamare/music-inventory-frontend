@@ -10,7 +10,6 @@ import {
   Truck,
   ArrowLeftRight,
   ShoppingCart,
-  GraduationCap,
   Wrench,
   Users2,
   BarChart3,
@@ -133,7 +132,9 @@ export function Sidebar() {
         <div>
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white truncate max-w-[140px]">
-              {companyName ? companyName.toUpperCase() : 'STEREOBLISS'}
+              {companyName && !/soundstock|muziclub/i.test(companyName)
+                ? companyName.replace(/retail/i, '').trim().toUpperCase() || 'STEREOBLISS'
+                : 'STEREOBLISS'}
             </span>
             <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20 shrink-0">
               Retail

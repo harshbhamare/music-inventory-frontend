@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({ ...res.user, role: normalizedRole as UserRole });
     if (res.token && typeof window !== 'undefined') {
       localStorage.setItem('stereobliss_token', res.token);
-      localStorage.setItem('soundstock_token', res.token);
+      localStorage.removeItem('soundstock_token');
     }
     router.push('/dashboard');
   };

@@ -752,7 +752,7 @@ export default function InventoryPage() {
               >
                 <option value="">All Lifecycle Statuses</option>
                 <option value="AVAILABLE">Available</option>
-                <option value="ISSUED_INTERNAL">Issued (Academy)</option>
+                <option value="ISSUED_INTERNAL">Issued (Rentals)</option>
                 <option value="MAINTENANCE">Maintenance</option>
                 <option value="QUARANTINED">Quarantined</option>
                 <option value="SOLD">Sold</option>

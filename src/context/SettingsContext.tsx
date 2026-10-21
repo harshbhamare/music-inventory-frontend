@@ -32,6 +32,24 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
+function sanitizeCompanyName(val?: string | null): string {
+  if (!val) return 'Stereobliss Retail';
+  const trimmed = val.trim();
+  if (/soundstock|muziclub/i.test(trimmed)) {
+    return 'Stereobliss Retail';
+  }
+  return trimmed;
+}
+
+function sanitizeStoreName(val?: string | null): string {
+  if (!val) return 'Stereobliss Central Store';
+  const trimmed = val.trim();
+  if (/central studio|academy/i.test(trimmed)) {
+    return 'Stereobliss Central Store';
+  }
+  return trimmed;
+}
+
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettingData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,15 +65,26 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (res) {
         setSettings((prev) => ({
           ...prev,
-          companyName: res.companyName || 'Stereobliss Retail',
-          storeName: res.storeName || 'Stereobliss Central Store',
+          companyName: sanitizeCompanyName(res.companyName),
+          storeName: sanitizeStoreName(res.storeName),
           currencySymbol: res.currencySymbol || '₹',
           timeZone: (res as any).timeZone || 'Asia/Kolkata',
         }));
       }
 
       // Try authenticated settings if token present
-      const token = typeof window !== 'undefined' ? localStorage.getItem('stereobliss_token') || localStorage.getItem('soundstock_token') : null;
+      let token: string | null = null;
+      if (typeof window !== 'undefined') {
+        token = localStorage.getItem('stereobliss_token');
+        if (!token && localStorage.getItem('soundstock_token')) {
+          token = localStorage.getItem('soundstock_token');
+          if (token) {
+            localStorage.setItem('stereobliss_token', token);
+            localStorage.removeItem('soundstock_token');
+          }
+        }
+      }
+
       if (token) {
         const fullRes = await api.get<{ setting: AppSettingData }>('/meta/settings').catch(() => null);
         if (fullRes?.setting) {
@@ -63,8 +92,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           const loc = s.defaultLocation;
           setSettings({
             ...s,
-            companyName: s.companyName || 'Stereobliss Retail',
-            storeName: s.storeName || (loc && typeof loc === 'object' ? loc.name : 'Stereobliss Central Store'),
+            companyName: sanitizeCompanyName(s.companyName),
+            storeName: sanitizeStoreName(s.storeName || (loc && typeof loc === 'object' ? loc.name : null)),
             storeCode: s.storeCode || (loc && typeof loc === 'object' ? loc.code : 'CENTRAL'),
             currencySymbol: s.currencySymbol || '₹',
           });
@@ -83,8 +112,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const loc = updated.defaultLocation;
     const normalized: AppSettingData = {
       ...updated,
-      companyName: updated.companyName || data.companyName || 'Stereobliss Retail',
-      storeName: updated.storeName || data.storeName || (loc && typeof loc === 'object' ? loc.name : 'Stereobliss Central Store'),
+      companyName: sanitizeCompanyName(updated.companyName || data.companyName),
+      storeName: sanitizeStoreName(updated.storeName || data.storeName || (loc && typeof loc === 'object' ? loc.name : null)),
       storeCode: updated.storeCode || data.storeCode || (loc && typeof loc === 'object' ? loc.code : 'CENTRAL'),
       currencySymbol: updated.currencySymbol || data.currencySymbol || '₹',
     };
@@ -92,8 +121,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return normalized;
   };
 
-  const companyName = settings?.companyName || 'Stereobliss Retail';
-  const storeName = settings?.storeName || 'Stereobliss Central Store';
+  const companyName = sanitizeCompanyName(settings?.companyName);
+  const storeName = sanitizeStoreName(settings?.storeName);
   const currencySymbol = settings?.currencySymbol || '₹';
   const timeZone = settings?.timeZone || 'Asia/Kolkata';
 

@@ -36,7 +36,12 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                var savedTheme = localStorage.getItem('stereobliss_theme') || localStorage.getItem('soundstock_theme');
+                var savedTheme = localStorage.getItem('stereobliss_theme');
+                if (!savedTheme && localStorage.getItem('soundstock_theme')) {
+                  savedTheme = localStorage.getItem('soundstock_theme');
+                  localStorage.setItem('stereobliss_theme', savedTheme);
+                  localStorage.removeItem('soundstock_theme');
+                }
                 if (savedTheme === 'dark') {
                   document.documentElement.classList.add('dark');
                 } else {

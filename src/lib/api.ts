@@ -43,7 +43,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // Get token from localStorage if present (bearer fallback in client)
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('stereobliss_token') || localStorage.getItem('soundstock_token');
+    let token = localStorage.getItem('stereobliss_token');
+    if (!token && localStorage.getItem('soundstock_token')) {
+      token = localStorage.getItem('soundstock_token');
+      if (token) {
+        localStorage.setItem('stereobliss_token', token);
+        localStorage.removeItem('soundstock_token');
+      }
+    }
     if (token && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }
