@@ -23,8 +23,12 @@ import {
   ArrowUpRight,
   ShoppingCart,
   Truck,
+  Check,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { useAuth } from '@/context/AuthContext';
 import {
   BarChart,
   Bar,
@@ -94,11 +98,22 @@ export default function ReportsPage() {
     results: any[];
   } | null>(null);
 
-  // Email report configs & logs
+  // Email report configs, recipient input & logs
+  const { user } = useAuth();
   const [reportConfigs, setReportConfigs] = useState<any[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatusMessage, setEmailStatusMessage] = useState('');
+  const [emailSuccess, setEmailSuccess] = useState<boolean>(true);
+  const [selectedReportType, setSelectedReportType] = useState<string>('DAILY_STOCK_SUMMARY');
+  const [recipientEmail, setRecipientEmail] = useState<string>('');
+  const [reportNotes, setReportNotes] = useState<string>('');
+
+  useEffect(() => {
+    if (!recipientEmail && user?.email) {
+      setRecipientEmail(user.email);
+    }
+  }, [user]);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -127,6 +142,9 @@ export default function ReportsPage() {
         ]);
         setReportConfigs(confRes.configs || []);
         setEmailLogs(logsRes.logs || []);
+        if (!recipientEmail && user?.email) {
+          setRecipientEmail(user.email);
+        }
       }
     } catch (err) {
       console.error('Failed to load report data:', err);
@@ -135,23 +153,50 @@ export default function ReportsPage() {
     }
   };
 
-  const handleTriggerEmail = async (action: 'summary' | 'overdue' | 'test') => {
+  const handleSendEmailReport = async () => {
+    const target = (recipientEmail || user?.email || '').trim();
+    if (!target || !target.includes('@')) {
+      setEmailSuccess(false);
+      setEmailStatusMessage('Please provide a valid recipient email address (e.g. hustlerxeroindia@gmail.com).');
+      return;
+    }
+
     setIsSendingEmail(true);
     setEmailStatusMessage('');
     try {
-      if (action === 'summary') {
-        await api.post('/reports/send-summary');
-        setEmailStatusMessage('✅ Daily Stock Summary email report dispatched successfully.');
-      } else if (action === 'overdue') {
-        await api.post('/reports/send-overdue-reminders');
-        setEmailStatusMessage('✅ Overdue instrument loan notice dispatched successfully.');
-      } else if (action === 'test') {
-        await api.post('/reports/email-test');
-        setEmailStatusMessage('✅ Test email notification dispatched successfully.');
-      }
-      fetchReportData();
+      const res = await api.post<{ success: boolean; message: string; data?: any }>('/reports/send-email-report', {
+        reportType: selectedReportType,
+        recipientEmail: target,
+        notes: reportNotes.trim() || undefined,
+      });
+
+      setEmailSuccess(true);
+      setEmailStatusMessage(res.message || `✅ Email report successfully dispatched to ${target}!`);
+      const logsRes = await api.get<{ logs: any[] }>('/reports/email-logs');
+      setEmailLogs(logsRes.logs || []);
     } catch (err: any) {
-      setEmailStatusMessage(`❌ Error: ${err.message || 'Failed to dispatch email'}`);
+      setEmailSuccess(false);
+      setEmailStatusMessage(`❌ ${err.message || 'Failed to dispatch email report via Gmail SMTP.'}`);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleSendQuickTest = async () => {
+    const target = (recipientEmail || user?.email || 'hustlerxeroindia@gmail.com').trim();
+    setIsSendingEmail(true);
+    setEmailStatusMessage('');
+    try {
+      const res = await api.post<{ success: boolean; message: string }>('/reports/email-test', {
+        recipientEmail: target,
+      });
+      setEmailSuccess(true);
+      setEmailStatusMessage(res.message || `✅ Test email successfully sent to ${target}`);
+      const logsRes = await api.get<{ logs: any[] }>('/reports/email-logs');
+      setEmailLogs(logsRes.logs || []);
+    } catch (err: any) {
+      setEmailSuccess(false);
+      setEmailStatusMessage(`❌ ${err.message || 'Failed to send test email.'}`);
     } finally {
       setIsSendingEmail(false);
     }
@@ -206,6 +251,16 @@ export default function ReportsPage() {
             </Button>
           )}
 
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setActiveTab('emailReports')}
+            className="gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
+          >
+            <Mail className="h-4 w-4" />
+            <span>Send Email Report</span>
+          </Button>
+
           <Button variant="outline" size="sm" onClick={fetchReportData} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -259,7 +314,7 @@ export default function ReportsPage() {
           }`}
         >
           <Mail className="h-4 w-4" />
-          <span>Automated Email Reports</span>
+          <span>Send Email Reports</span>
         </button>
       </div>
 
@@ -782,105 +837,263 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tab 4: Automated Email Reports & Delivery */}
+      {/* Tab 4: Send Email Reports & Delivery */}
       {activeTab === 'emailReports' && (
         <div className="space-y-6">
+          {/* Status Feedback Banner */}
           {emailStatusMessage && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800 dark:text-amber-400">
-              {emailStatusMessage}
+            <div
+              className={`p-4 rounded-xl border flex items-start justify-between gap-3 text-xs font-semibold transition-all ${
+                emailSuccess
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {emailSuccess ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0" />
+                )}
+                <span>{emailStatusMessage}</span>
+              </div>
+              <button
+                onClick={() => setEmailStatusMessage('')}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           )}
 
-          {/* Action Trigger Card */}
-          <Card>
-            <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Send className="h-4 w-4 text-amber-500" />
-                <span>Manual Email Dispatch Triggers</span>
-              </CardTitle>
+          {/* Interactive Send Email Report Console */}
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-white">
+                    <Mail className="h-5 w-5 text-amber-500" />
+                    <span>Send Email Report</span>
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Select any store report and dispatch it immediately to any recipient email via verified Gmail SMTP.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 w-fit">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Gmail SMTP Active (hustlerxeroindia@gmail.com)</span>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-4">
-              <p className="text-xs text-slate-500">
-                Trigger transactional notifications immediately to verified recipient lists.
-              </p>
-              <div className="flex flex-wrap gap-3">
+            <CardContent className="p-4 sm:p-6 space-y-6">
+              {/* Step 1: Recipient Email Input */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Send className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Recipient Email Address *</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className="text-slate-400">Quick Fill:</span>
+                    {user?.email && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientEmail(user.email)}
+                        className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10 hover:text-amber-600 transition-colors font-medium"
+                      >
+                        My Email ({user.email})
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRecipientEmail('hustlerxeroindia@gmail.com')}
+                      className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10 hover:text-amber-600 transition-colors font-medium"
+                    >
+                      Store Admin (Gmail)
+                    </button>
+                    {recipientEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientEmail('')}
+                        className="text-slate-400 hover:text-rose-500 px-1 font-medium"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="Enter recipient email address (e.g. manager@domain.com, user@gmail.com)"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Multiple addresses can be separated by commas (e.g. <code>director@muziclub.com, admin@muziclub.com</code>).
+                </p>
+              </div>
+
+              {/* Step 2: Choose Report Type */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Select Report Type</span>
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    {
+                      id: 'DAILY_STOCK_SUMMARY',
+                      title: 'Daily Stock Summary',
+                      badge: 'Core Stock',
+                      icon: Boxes,
+                      color: 'text-amber-500',
+                      description: 'On-hand stock, units available for sale, valuation at purchase cost, and low stock items list.',
+                    },
+                    {
+                      id: 'WEEKLY_SALES_SUMMARY',
+                      title: 'Weekly Sales Performance',
+                      badge: 'Revenue',
+                      icon: ShoppingCart,
+                      color: 'text-emerald-500',
+                      description: 'Last 7 days revenue in ₹, completed customer sales orders, and average order value.',
+                    },
+                    {
+                      id: 'OVERDUE_USAGE_REMINDER',
+                      title: 'Overdue Rentals & Loans',
+                      badge: 'Operations',
+                      icon: AlertTriangle,
+                      color: 'text-rose-500',
+                      description: 'Active instrument loans and student rentals that have passed their expected return date.',
+                    },
+                    {
+                      id: 'LOW_STOCK_ALERT',
+                      title: 'Low Stock Buffer Alert',
+                      badge: 'Reorder Needed',
+                      icon: ShieldAlert,
+                      color: 'text-red-500',
+                      description: 'Products at or below minimum safety thresholds with SKU codes and safety buffer levels.',
+                    },
+                    {
+                      id: 'VALUATION_REPORT',
+                      title: 'Inventory Valuation Report',
+                      badge: 'Financial Worth',
+                      icon: BarChart3,
+                      color: 'text-indigo-500',
+                      description: 'Full cost valuation, projected retail valuation, potential gross margin, and category breakdown.',
+                    },
+                    {
+                      id: 'TEST_EMAIL',
+                      title: 'Gmail Diagnostic Ping',
+                      badge: 'System Verification',
+                      icon: Send,
+                      color: 'text-cyan-500',
+                      description: 'Instant test email confirming Gmail App Password authentication and live SMTP dispatch.',
+                    },
+                  ].map((rpt) => {
+                    const isSelected = selectedReportType === rpt.id;
+                    const Icon = rpt.icon;
+                    return (
+                      <div
+                        key={rpt.id}
+                        onClick={() => setSelectedReportType(rpt.id)}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/10 ring-2 ring-amber-500/20'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900/60'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${rpt.color} shrink-0`} />
+                            <h4 className="font-bold text-xs text-slate-900 dark:text-white">
+                              {rpt.title}
+                            </h4>
+                          </div>
+                          <Badge
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="text-[9px] px-1.5 py-0"
+                          >
+                            {rpt.badge}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 line-clamp-2">
+                          {rpt.description}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 3: Optional Remarks / Notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Custom Remarks / Note for Recipient (Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Prepared for Pune store manager weekly audit..."
+                  value={reportNotes}
+                  onChange={(e) => setReportNotes(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
-                  size="sm"
+                  size="default"
                   variant="default"
                   isLoading={isSendingEmail}
-                  onClick={() => handleTriggerEmail('summary')}
-                  className="font-bold gap-1.5 text-xs"
+                  onClick={handleSendEmailReport}
+                  className="font-bold gap-2 text-xs sm:text-sm bg-amber-500 hover:bg-amber-600 text-slate-950 px-5 shadow-xs"
                 >
-                  <Mail className="h-4 w-4" />
-                  <span>Send Daily Stock Summary Now</span>
+                  <Send className="h-4 w-4" />
+                  <span>
+                    Send {selectedReportType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())} to Recipient
+                  </span>
                 </Button>
 
                 <Button
-                  size="sm"
+                  size="default"
                   variant="outline"
                   isLoading={isSendingEmail}
-                  onClick={() => handleTriggerEmail('overdue')}
-                  className="gap-1.5 text-xs"
+                  onClick={handleSendQuickTest}
+                  className="gap-1.5 text-xs font-semibold"
                 >
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span>Send Overdue Usage Alerts</span>
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  isLoading={isSendingEmail}
-                  onClick={() => handleTriggerEmail('test')}
-                  className="gap-1.5 text-xs"
-                >
-                  <Send className="h-4 w-4 text-indigo-500" />
-                  <span>Send Config Test Email</span>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span>Send Diagnostic Test Email</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Automated Schedule Configs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {reportConfigs.map((cfg) => (
-              <Card key={cfg._id} className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-sm font-bold text-slate-900 dark:text-white">
-                        {cfg.name}
-                      </CardTitle>
-                      <div className="text-[11px] font-mono text-amber-500 mt-0.5">
-                        Cron: {cfg.cronSchedule}
-                      </div>
-                    </div>
-                    <Badge variant={cfg.enabled ? 'success' : 'outline'} className="text-[10px]">
-                      {cfg.enabled ? 'Active Schedule' : 'Paused'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs">
-                  <div>
-                    <span className="text-slate-400">Recipients:</span>
-                    <div className="text-slate-700 dark:text-slate-300 font-medium truncate">
-                      {cfg.recipients?.join(', ') || 'No recipients assigned'}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Last Dispatched:</span>
-                    <div className="text-slate-600 dark:text-slate-400">
-                      {cfg.lastRunAt ? formatDateTime(cfg.lastRunAt) : 'Not yet dispatched'}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
           {/* Email Delivery Audit Trail */}
-          <Card>
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-              <CardTitle className="text-base">Email Delivery Audit Trail</CardTitle>
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base text-slate-900 dark:text-white">Email Delivery Audit Trail</CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Complete timestamped log of transactional report dispatches and provider message IDs.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchReportData}
+                className="gap-1.5 text-xs font-medium"
+                title="Refresh delivery logs"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh Logs</span>
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <div className="responsive-table-wrapper">
@@ -898,28 +1111,35 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                     {emailLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          No email dispatch records found.
+                        <td colSpan={6} className="py-12 text-center text-slate-400">
+                          <Mail className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                          <p className="font-semibold text-slate-600 dark:text-slate-400">No email dispatches recorded yet.</p>
+                          <p className="text-xs text-slate-400 mt-0.5">Use the form above to send your first report to any email address.</p>
                         </td>
                       </tr>
                     ) : (
                       emailLogs.map((log) => (
-                        <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-4 text-slate-500">
+                        <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
                             {formatDateTime(log.sentAt || log.createdAt)}
                           </td>
                           <td className="py-3 px-4">
-                            <Badge variant="outline" className="text-[10px]">
+                            <Badge variant="outline" className="text-[10px] font-mono">
                               {log.reportType}
                             </Badge>
                           </td>
-                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-semibold">
                             {log.recipients?.join(', ')}
                           </td>
-                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 truncate max-w-xs">
-                            {log.subject}
+                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 max-w-xs">
+                            <div className="truncate font-medium">{log.subject}</div>
+                            {log.errorDetails && (
+                              <div className="text-[10px] text-rose-500 truncate mt-0.5" title={log.errorDetails}>
+                                Error: {log.errorDetails}
+                              </div>
+                            )}
                           </td>
-                          <td className="py-3 px-4 text-center">
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
                             <Badge
                               variant={
                                 log.status === 'SENT'
@@ -933,7 +1153,7 @@ export default function ReportsPage() {
                               {log.status}
                             </Badge>
                           </td>
-                          <td className="py-3 px-4 font-mono text-[11px] text-slate-400">
+                          <td className="py-3 px-4 font-mono text-[11px] text-slate-400 max-w-[150px] truncate">
                             {log.providerReference || '—'}
                           </td>
                         </tr>

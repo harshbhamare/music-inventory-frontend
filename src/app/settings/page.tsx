@@ -548,16 +548,25 @@ export default function SettingsPage() {
                 <Clock className="h-4 w-4 text-amber-500" />
                 <span>Automated Background Jobs & Mailing Schedules (Cron)</span>
               </CardTitle>
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                Dynamic Node-Cron Active
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                Background Cron Paused
               </span>
             </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-6">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Configure automatic background schedules to dispatch inventory summaries, overdue rental alerts, and sales performance reports.
-              Admins can customize the exact timing (hour & minute), toggle schedules, and specify <strong>one or multiple recipient emails</strong>.
-            </p>
+            <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <strong>Automatic Cron Runner Paused:</strong> Background cron dispatches have been disabled per system configuration.
+                You can send instant, on-demand email reports to any recipient email address with one click.
+              </div>
+              <a
+                href="/reports"
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shadow-xs"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>Go to Send Email Reports</span>
+              </a>
+            </div>
 
             <div className="space-y-6">
               {reportConfigs.map((config) => {
