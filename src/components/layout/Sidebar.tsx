@@ -18,8 +18,6 @@ import {
   Settings,
   Music2,
   LogOut,
-  ChevronDown,
-  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -28,9 +26,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout, hasRole } = useAuth();
   const { companyName } = useSettings();
-  const [showPhase3, setShowPhase3] = useState(false);
 
-  // Phase 2 Core Modules — Streamlined & accessible
+  // Core Navigation Modules
   const coreNavItems = [
     {
       title: 'Dashboard',
@@ -95,31 +92,6 @@ export function Sidebar() {
     },
   ];
 
-  // Operations & Maintenance Modules
-  const phase3NavItems = [
-    {
-      title: 'Returns & Repairs',
-      href: '/returns-maintenance',
-      icon: Wrench,
-      phase: 'Ops',
-      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
-    },
-    {
-      title: 'Suppliers Directory',
-      href: '/suppliers',
-      icon: Users2,
-      phase: 'Ops',
-      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
-    },
-    {
-      title: 'Activity Audit Log',
-      href: '/audit-logs',
-      icon: History,
-      phase: 'Ops',
-      visible: hasRole('SUPER_ADMIN', 'MANAGER'),
-    },
-  ];
-
   const isCurrentActive = (href: string) => {
     return pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
   };
@@ -145,11 +117,10 @@ export function Sidebar() {
 
       {/* Navigation list */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
-        {/* Phase 2 Core Modules */}
+        {/* Core Operations */}
         <div>
-          <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Core Operations</span>
-            <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">P2</span>
+          <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Operations
           </div>
 
           <div className="space-y-1">
@@ -235,57 +206,6 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Optional Collapsible: Phase 3 Advanced Features */}
-        <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={() => setShowPhase3(!showPhase3)}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
-          >
-            <span className="flex items-center gap-1.5">
-              <Layers className="h-3 w-3" />
-              <span>Phase 3 Modules</span>
-            </span>
-            <ChevronDown
-              className={cn(
-                'h-3.5 w-3.5 transition-transform duration-200',
-                showPhase3 && 'rotate-180'
-              )}
-            />
-          </button>
-
-          {showPhase3 && (
-            <div className="mt-1 space-y-1 pl-1">
-              {phase3NavItems
-                .filter((item) => item.visible)
-                .map((item) => {
-                  const isActive = isCurrentActive(item.href);
-                  const Icon = item.icon;
-
-                  return (
-                    <a
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        'group flex items-center justify-between rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-150',
-                        isActive
-                          ? 'bg-slate-200 text-slate-950 dark:bg-slate-800 dark:text-white font-bold'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-200'
-                      )}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Icon className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{item.title}</span>
-                      </div>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-500">
-                        P3
-                      </span>
-                    </a>
-                  );
-                })}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* User profile footer */}

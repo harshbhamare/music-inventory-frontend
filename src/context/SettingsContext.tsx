@@ -11,6 +11,9 @@ export interface AppSettingData {
   contactEmail?: string;
   contactPhone?: string;
   address?: string;
+  gstin?: string;
+  stateName?: string;
+  stateCode?: string;
   currency?: string;
   currencySymbol?: string;
   timeZone?: string;

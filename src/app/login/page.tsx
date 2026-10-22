@@ -9,8 +9,8 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@stereobliss.com');
-  const [password, setPassword] = useState('Stock@2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -26,12 +26,6 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleRolePreset = (presetEmail: string) => {
-    setEmail(presetEmail);
-    setPassword('Stock@2026');
-    setErrorMessage('');
   };
 
   return (
@@ -88,7 +82,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="staff@stereobliss.com"
+                placeholder="e.g. admin@yourdomain.com"
               />
             </div>
 
@@ -104,35 +98,10 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" size="lg" className="w-full mt-2 font-bold shadow-md" isLoading={isLoading}>
-              <span>Sign In to Stereobliss</span>
+              <span>Sign In</span>
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
-
-          {/* Quick Demo Role Presets: Exactly Two Profile Roles */}
-          <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 text-center">
-              Profile Role Demo Presets (Password: Stock@2026)
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleRolePreset('admin@stereobliss.com')}
-                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
-              >
-                <span className="font-extrabold text-amber-600 dark:text-amber-400 text-xs">Super Admin</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Main Features & Settings</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRolePreset('manager@stereobliss.com')}
-                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
-              >
-                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">Manager</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Tracking, POS & Updates</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6 font-medium">

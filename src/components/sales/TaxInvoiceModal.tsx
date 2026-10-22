@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import QRCode from 'qrcode';
 import { Sale } from '@/lib/types';
 import { formatIndianDecimal, numberToIndianWords } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -58,8 +57,7 @@ interface TaxInvoiceModalProps {
 }
 
 export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps) {
-  const { companyName, storeName } = useSettings();
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const { companyName, storeName, settings } = useSettings();
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -74,12 +72,6 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
       setRecipientEmail(sale.customerEmail || '');
       setEmailStatus(null);
       setShowEmailForm(false);
-
-      // Generate authentic e-Invoice QR code
-      const qrPayload = `Seller:27ADDFS8650Q1Z6|Buyer:${sale.customerGstin || '27ADDFS8650Q1Z6'}|DocNo:${sale.invoiceNumber}|DocDt:${new Date(sale.createdAt).toLocaleDateString('en-GB')}|TotVal:${sale.grandTotal}|IRN:${sale.irn || '242b455eebf283a5c76a5689cd1bf14397ef25208f93a37'}`;
-      QRCode.toDataURL(qrPayload, { width: 140, margin: 1, errorCorrectionLevel: 'M' })
-        .then((url) => setQrCodeUrl(url))
-        .catch((err) => console.error('Failed to generate QR:', err));
     }
   }, [sale]);
 
@@ -104,15 +96,16 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
     ? companyName.replace(/retail/i, '').trim().toUpperCase() || 'STEREOBLISS'
     : 'STEREOBLISS';
 
-  const supplierAddress =
-    '2nd Floor Radhika Avenue, Wakad Nasik Road Circle, Near Jagtap Factory Beside Savitribai Phule Park, Pimple Saudagar, Pune MH 411027';
-  const supplierPhone = '7769987599';
-  const supplierGstin = '27ADDFS8650Q1Z6';
-  const supplierEmail = 'sales@stereobliss.com';
+  const supplierAddress = settings?.address || '';
+  const supplierPhone = settings?.contactPhone || '';
+  const supplierGstin = settings?.gstin || '';
+  const supplierEmail = settings?.contactEmail || '';
+  const supplierState = settings?.stateName || 'Maharashtra';
+  const supplierStateCode = settings?.stateCode || '27';
 
   const buyerName = sale.customerName || 'Customer / Dealer';
-  const buyerAddress = sale.customerAddress || supplierAddress;
-  const buyerGstin = sale.customerGstin || supplierGstin;
+  const buyerAddress = sale.customerAddress || supplierAddress || '-';
+  const buyerGstin = sale.customerGstin || (supplierGstin ? 'Unregistered / B2C' : 'N/A');
 
   const eWayBillNo = sale.eWayBillNo || '282295408497';
   const dispatchThrough = sale.dispatchThrough || 'XP India';
@@ -302,34 +295,26 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
             className="w-full mx-auto bg-white text-black p-5 sm:p-7 shadow-sm border border-black/80 font-sans text-xs space-y-0 leading-tight"
             style={{ maxWidth: '780px', color: '#000000', backgroundColor: '#ffffff' }}
           >
-            {/* 1. Header with e-Invoice QR Code */}
-            <div className="relative pb-3 text-center border-b border-black">
+            {/* 1. Header Section */}
+            <div className="pb-3 text-center border-b border-black">
               <h1 className="text-base font-black tracking-wider uppercase">TAX INVOICE</h1>
               <p className="text-[11px] font-normal text-slate-800">(ORIGINAL FOR RECIPIENT)</p>
 
-              {/* QR Code and e-Invoice Header on Right */}
-              <div className="absolute right-0 top-0 text-right flex flex-col items-center">
-                <span className="text-[9px] font-semibold">e-Invoice</span>
-                {qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="e-Invoice QR" className="h-16 w-16 object-contain border border-black mt-0.5" />
-                ) : (
-                  <div className="h-16 w-16 border border-black flex items-center justify-center text-[8px]">QR CODE</div>
-                )}
-              </div>
-
-              {/* IRN, Ack Details on Left */}
-              <div className="text-left text-[10px] space-y-0.5 pt-1 pr-20">
-                <div>
-                  <span className="font-semibold text-slate-700">IRN : </span>
+              {/* IRN, Ack Details */}
+              <div className="text-left text-[10px] space-y-0.5 pt-2">
+                <div className="flex items-start gap-1">
+                  <span className="font-semibold text-slate-700 shrink-0">IRN : </span>
                   <span className="font-mono font-bold text-[9px] break-all">{irn}</span>
                 </div>
-                <div>
-                  <span className="font-semibold text-slate-700">Ack No. : </span>
-                  <span className="font-mono font-bold">{ackNo}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-700">Ack Date : </span>
-                  <span className="font-mono font-bold">{ackDate}</span>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <span className="font-semibold text-slate-700">Ack No. : </span>
+                    <span className="font-mono font-bold">{ackNo}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-700">Ack Date : </span>
+                    <span className="font-mono font-bold">{ackDate}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,13 +327,13 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                 <div className="p-2 space-y-0.5">
                   <div className="font-bold text-xs uppercase">{supplierName}</div>
                   <div className="text-[10px] text-slate-800">{supplierAddress}</div>
-                  <div className="text-[10px]">Tel : {supplierPhone}</div>
+                  {supplierPhone && <div className="text-[10px]">Tel : {supplierPhone}</div>}
+                  {supplierEmail && <div className="text-[10px]">E-mail : {supplierEmail}</div>}
                   <div className="text-[10px]">
                     <span className="font-semibold">GSTIN/UIN : </span>
-                    <span className="font-bold">{supplierGstin}</span>
+                    <span className="font-bold">{supplierGstin || 'N/A'}</span>
                   </div>
-                  <div className="text-[10px]">State Name : Maharashtra, Code : 27</div>
-                  <div className="text-[10px]">E-mail : {supplierEmail}</div>
+                  <div className="text-[10px]">State Name : {supplierState}, Code : {supplierStateCode}</div>
                 </div>
 
                 {/* Consignee (Ship to) */}
