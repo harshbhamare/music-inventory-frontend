@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from './ThemeToggle';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface HeaderProps {
   onQuickAction?: (action: string) => void;
@@ -23,18 +22,15 @@ export function Header({ onQuickAction }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/90 transition-colors">
-      {/* Location & Brand Badge */}
+      {/* Location & Store Outlet */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <BrandLogo size="xs" variant="badge" className="shadow-xs" />
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-800 dark:text-amber-400">
-            <MapPin className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-            <span>
-              {storeName && !/central studio|academy/i.test(storeName)
-                ? storeName
-                : 'Stereobliss Central Store'}
-            </span>
-          </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-800 dark:text-amber-400">
+          <MapPin className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <span>
+            {storeName && !/central studio|academy/i.test(storeName)
+              ? storeName
+              : 'Stereobliss Central Store'}
+          </span>
         </div>
       </div>
 

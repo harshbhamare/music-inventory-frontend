@@ -131,13 +131,10 @@ export function Sidebar() {
         <BrandLogo size="md" variant="badge" className="shadow-md" />
         <div>
           <div className="flex items-center gap-1.5">
-            <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white truncate max-w-[140px]">
+            <span className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white truncate max-w-[170px]">
               {companyName && !/soundstock|muziclub/i.test(companyName)
                 ? companyName.replace(/retail/i, '').trim().toUpperCase() || 'STEREOBLISS'
                 : 'STEREOBLISS'}
-            </span>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/20 shrink-0">
-              Retail
             </span>
           </div>
           <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[170px]">

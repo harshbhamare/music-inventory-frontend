@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { api, getApiUrl } from '@/lib/api';
 import { Sale, Product, SerializedItem, StockLocation } from '@/lib/types';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -22,8 +22,11 @@ import {
   Tag,
   CreditCard,
   UserCheck,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
 
 export default function SalesPage() {
   const { canMakeSales } = useAuth();
@@ -38,6 +41,11 @@ export default function SalesPage() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [dispatchThrough, setDispatchThrough] = useState('XP India');
+  const [destination, setDestination] = useState('PUNE');
+  const [eWayBillNo, setEWayBillNo] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'CASH' | 'BANK_TRANSFER'>('UPI');
   const [notes, setNotes] = useState('');
@@ -59,6 +67,19 @@ export default function SalesPage() {
 
   // Printable Invoice Modal
   const [activeInvoice, setActiveInvoice] = useState<Sale | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const handleQuickDownloadPdf = async (sale: Sale) => {
+    setDownloadingId(sale._id);
+    try {
+      await downloadInvoicePdf(sale._id, sale.invoiceNumber);
+    } catch (err: any) {
+      console.error('Quick PDF download failed:', err);
+      window.open(getApiUrl(`/sales/${sale._id}/pdf`), '_blank');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   useEffect(() => {
     fetchSales();
@@ -196,6 +217,11 @@ export default function SalesPage() {
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
         customerEmail: customerEmail.trim() || undefined,
+        customerGstin: customerGstin.trim().toUpperCase() || undefined,
+        customerAddress: customerAddress.trim() || undefined,
+        dispatchThrough: dispatchThrough.trim() || undefined,
+        destination: destination.trim() || undefined,
+        eWayBillNo: eWayBillNo.trim() || undefined,
         location: selectedLocation,
         paymentMethod,
         notes: notes.trim() || undefined,
@@ -218,6 +244,9 @@ export default function SalesPage() {
       setCustomerName('');
       setCustomerPhone('');
       setCustomerEmail('');
+      setCustomerGstin('');
+      setCustomerAddress('');
+      setEWayBillNo('');
       setNotes('');
       setRemarks('');
       fetchSales();
@@ -334,15 +363,31 @@ export default function SalesPage() {
                       <td className="py-3 px-4 text-slate-500">{sale.soldBy?.name || 'Staff'}</td>
                       <td className="py-3 px-4 text-slate-500">{formatDate(sale.createdAt)}</td>
                       <td className="py-3 px-4 text-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setActiveInvoice(sale)}
-                          className="h-7 text-[11px] gap-1"
-                        >
-                          <Receipt className="h-3 w-3" />
-                          <span>Invoice</span>
-                        </Button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setActiveInvoice(sale)}
+                            className="h-7 text-[11px] gap-1 font-bold shadow-xs"
+                          >
+                            <Receipt className="h-3 w-3" />
+                            <span>Tax Invoice</span>
+                          </Button>
+                          <button
+                            type="button"
+                            disabled={downloadingId === sale._id}
+                            onClick={() => handleQuickDownloadPdf(sale)}
+                            title="Download / Save PDF directly"
+                            className="inline-flex items-center justify-center h-7 px-2 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-amber-600 transition-colors disabled:opacity-50"
+                          >
+                            {downloadingId === sale._id ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
+                            ) : (
+                              <Download className="h-3 w-3" />
+                            )}
+                            <span className="ml-1">Save PDF</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -414,6 +459,37 @@ export default function SalesPage() {
               placeholder="e.g. 1-Yr Warranty, Packaged"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
+            />
+          </div>
+
+          {/* Dealer GST & Dispatch Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40">
+            <Input
+              label="Dealer / Buyer GSTIN"
+              placeholder="e.g. 27ADDFS8650Q1Z6"
+              value={customerGstin}
+              onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())}
+            />
+
+            <Input
+              label="Delivery / Billing Address"
+              placeholder="e.g. Pimple Saudagar, Pune 411027"
+              value={customerAddress}
+              onChange={(e) => setCustomerAddress(e.target.value)}
+            />
+
+            <Input
+              label="Dispatched Through"
+              placeholder="XP India / Hand Delivery"
+              value={dispatchThrough}
+              onChange={(e) => setDispatchThrough(e.target.value)}
+            />
+
+            <Input
+              label="Destination City"
+              placeholder="PUNE"
+              value={destination}
+              onChange={(e) => setDestination(e.target.value)}
             />
           </div>
 
@@ -659,170 +735,12 @@ export default function SalesPage() {
         </form>
       </Modal>
 
-      {/* Printable Invoice Modal */}
-      <Modal
+      {/* Authentic Indian GST Tax Invoice Modal */}
+      <TaxInvoiceModal
         isOpen={!!activeInvoice}
         onClose={() => setActiveInvoice(null)}
-        title={`Retail Tax Invoice — ${activeInvoice?.invoiceNumber}`}
-        description="Stereobliss Retail Official Receipt"
-        maxWidth="2xl"
-      >
-        {activeInvoice && (
-          <div className="space-y-6 text-slate-900 dark:text-white">
-            <div id="printable-invoice" className="p-6 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950 space-y-4 shadow-sm">
-              {/* Invoice Header */}
-              <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="h-12 w-12 rounded-xl bg-white p-1 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center shrink-0">
-                    <img src="/logo.png" alt="Stereobliss" className="h-full w-full object-contain" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-amber-500 tracking-tight">STEREOBLISS RETAIL</h2>
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Retail Inventory Store & Pro Audio Gear</p>
-                    <p className="text-[11px] text-slate-500">GSTIN: 27AABCS1429B1Z8 | State Code: 27 (Maharashtra)</p>
-                    <p className="text-[11px] text-slate-500">Main Retail Showroom & Outlet | Email: sales@stereobliss.com</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    TAX INVOICE
-                  </div>
-                  <div className="text-xs font-mono font-bold text-amber-500">#{activeInvoice.invoiceNumber}</div>
-                  <div className="text-xs text-slate-500">Date: {formatDateTime(activeInvoice.createdAt)}</div>
-                  <div className="text-xs text-slate-500">Payment: {activeInvoice.paymentMethod}</div>
-                  <div className="text-xs text-emerald-500 font-bold">Status: {activeInvoice.paymentStatus}</div>
-                </div>
-              </div>
-
-              {/* Customer Info */}
-              <div className="grid grid-cols-2 gap-4 text-xs p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-                <div>
-                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">Billed To:</span>
-                  <div className="font-bold text-slate-900 dark:text-white text-sm">{activeInvoice.customerName}</div>
-                  {activeInvoice.customerPhone && <div className="text-slate-500">Phone: {activeInvoice.customerPhone}</div>}
-                  {activeInvoice.customerEmail && <div className="text-slate-500">Email: {activeInvoice.customerEmail}</div>}
-                </div>
-                <div className="text-right">
-                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">Billing Notes / Remarks:</span>
-                  <div className="text-slate-700 dark:text-slate-300 italic">
-                    {activeInvoice.remarks || activeInvoice.notes || 'Standard Retail Sale (Official GST Invoice)'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Invoice Line Items Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold text-[10px] uppercase">
-                      <th className="py-2">Item Description</th>
-                      <th className="py-2 text-center">HSN/SAC</th>
-                      <th className="py-2 text-center">Qty</th>
-                      <th className="py-2 text-right">Unit Price</th>
-                      <th className="py-2 text-right">Taxable Val</th>
-                      <th className="py-2 text-right">CGST (9%)</th>
-                      <th className="py-2 text-right">SGST (9%)</th>
-                      <th className="py-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {activeInvoice.lineItems?.map((li, i) => {
-                      const itemTaxable = li.taxableAmount || (li.total - ((li.total * 0.18) / 1.18));
-                      const itemCgst = li.cgstAmount || Math.round(itemTaxable * 0.09 * 100) / 100;
-                      const itemSgst = li.sgstAmount || Math.round(itemTaxable * 0.09 * 100) / 100;
-
-                      return (
-                        <tr key={i}>
-                          <td className="py-2 font-medium">
-                            <div>
-                              <span>{li.product?.name}</span>
-                              {li.product?.color && (
-                                <span className="ml-1.5 text-[10px] font-bold text-slate-500">
-                                  ({li.product.color})
-                                </span>
-                              )}
-                            </div>
-                            {li.serializedItemIds && li.serializedItemIds.length > 0 && (
-                              <div className="text-[10px] font-mono text-amber-500">
-                                Asset IDs: {li.serializedItemIds.map((u: any) => u.assetId || u).join(', ')}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2 text-center font-mono text-[11px] text-slate-500">
-                            {li.hsnCode || (li.product as any)?.hsnCode || '9202'}
-                          </td>
-                          <td className="py-2 text-center font-bold">{li.quantity}</td>
-                          <td className="py-2 text-right">{formatCurrency(li.unitPrice)}</td>
-                          <td className="py-2 text-right">{formatCurrency(itemTaxable)}</td>
-                          <td className="py-2 text-right text-amber-600 dark:text-amber-400 font-mono">
-                            {formatCurrency(itemCgst)}
-                          </td>
-                          <td className="py-2 text-right text-amber-600 dark:text-amber-400 font-mono">
-                            {formatCurrency(itemSgst)}
-                          </td>
-                          <td className="py-2 text-right font-black text-slate-900 dark:text-white">
-                            {formatCurrency(li.total)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* GST Breakdown & Totals */}
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-[11px]">
-                  <div className="font-bold text-slate-700 dark:text-slate-300">GST Rate Summary:</div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Central GST (CGST @ 9%):</span>
-                    <span className="font-mono">{formatCurrency(activeInvoice.cgstAmount || Math.round(((activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)) * 0.09) * 100) / 100)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>State GST (SGST @ 9%):</span>
-                    <span className="font-mono">{formatCurrency(activeInvoice.sgstAmount || Math.round(((activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)) * 0.09) * 100) / 100)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-amber-500 pt-1 border-t border-slate-200 dark:border-slate-800">
-                    <span>Total Tax (18%):</span>
-                    <span className="font-mono">{formatCurrency((activeInvoice.taxTotal || (activeInvoice.grandTotal - (activeInvoice.taxableAmount || (activeInvoice.grandTotal / 1.18)))))}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 self-center">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Taxable Subtotal:</span>
-                    <span className="font-semibold">{formatCurrency(activeInvoice.taxableAmount || activeInvoice.subtotal - (activeInvoice.discountTotal || 0))}</span>
-                  </div>
-                  {activeInvoice.discountTotal > 0 && (
-                    <div className="flex justify-between text-emerald-500 font-semibold">
-                      <span>Discount Given:</span>
-                      <span>-{formatCurrency(activeInvoice.discountTotal)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <span>Grand Total Payable:</span>
-                    <span className="text-amber-500">{formatCurrency(activeInvoice.grandTotal)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-center text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800">
-                Thank you for choosing Stereobliss Retail! All musical instruments are covered under authorized manufacturer & store warranty.
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setActiveInvoice(null)}>
-                Close
-              </Button>
-              <Button variant="default" onClick={printInvoice} className="gap-1.5 font-bold">
-                <Printer className="h-4 w-4" />
-                <span>Print Invoice</span>
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        sale={activeInvoice}
+      />
     </div>
   );
 }

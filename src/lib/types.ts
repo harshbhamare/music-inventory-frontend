@@ -165,6 +165,14 @@ export interface Sale {
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
+  customerGstin?: string;
+  customerAddress?: string;
+  eWayBillNo?: string;
+  dispatchThrough?: string;
+  destination?: string;
+  irn?: string;
+  ackNo?: string;
+  ackDate?: string;
   location: StockLocation;
   lineItems: SaleLineItem[];
   subtotal: number;
