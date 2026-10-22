@@ -28,6 +28,12 @@ export default function LoginPage() {
     }
   };
 
+  const handleRolePreset = async (presetEmail: string, presetPassword = 'Stock@2026') => {
+    setEmail(presetEmail);
+    setPassword(presetPassword);
+    setErrorMessage('');
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 relative overflow-hidden transition-colors">
       {/* Top right theme toggle */}
@@ -82,7 +88,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. admin@yourdomain.com"
+                placeholder="e.g. admin@stereobliss.com"
               />
             </div>
 
@@ -102,6 +108,35 @@ export default function LoginPage() {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
+
+          {/* Quick Sign-in Presets */}
+          <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 text-center">
+              Quick Sign-in Presets (Password: Stock@2026)
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handleRolePreset('admin@stereobliss.com')}
+                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
+              >
+                <span className="font-extrabold text-amber-600 dark:text-amber-400 text-xs">Super Admin</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-full font-mono">
+                  admin@stereobliss.com
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRolePreset('manager@stereobliss.com')}
+                className="flex flex-col items-start p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700/60 dark:text-slate-200 transition-colors text-left"
+              >
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">Store Manager</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-full font-mono">
+                  manager@stereobliss.com
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6 font-medium">
