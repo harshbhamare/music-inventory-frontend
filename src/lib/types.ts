@@ -336,3 +336,32 @@ export interface DashboardMetrics {
   recentMovements: StockMovement[];
   salesTrend: Array<{ _id: string; revenue: number; count: number }>;
 }
+
+export interface RentalDueItem {
+  id: string;
+  issueReference: string;
+  assignedPerson: string;
+  customerEmail?: string;
+  assignedPersonContact?: string;
+  productName: string;
+  assetId?: string;
+  totalRentDue: number;
+  monthlyRent: number;
+  nextDueDate?: string;
+  daysOverdue: number;
+  status: 'OVERDUE' | 'DUE' | 'UPCOMING';
+  billingMonth?: string;
+  remindersSentCount: number;
+  lastReminderSentAt?: string;
+}
+
+export interface RentalDuesSummary {
+  summary: {
+    totalPendingAmount: number;
+    totalOverdueAmount: number;
+    overdueCount: number;
+    dueSoonCount: number;
+    totalRentalsWithDues: number;
+  };
+  items: RentalDueItem[];
+}

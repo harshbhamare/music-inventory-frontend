@@ -304,6 +304,9 @@ export default function UsagePage() {
       setSelectedRentalForLedger(res.usage);
       setRentalTransactionRef('');
       setRentalPaymentNotes('');
+      setReminderFeedback(
+        `Payment of ${formatCurrency(paymentAmount)} recorded successfully! An official payment receipt email has been dispatched to ${selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPerson} for accountability.`
+      );
       // Pre-fill next unpaid month if available
       const nextDue = res.usage.monthlyPayments?.find((p) => p.status !== 'PAID');
       if (nextDue) {

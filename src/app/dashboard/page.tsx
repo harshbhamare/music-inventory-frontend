@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { DashboardMetrics, StockMovement } from '@/lib/types';
+import { DashboardMetrics, StockMovement, RentalDuesSummary, RentalDueItem } from '@/lib/types';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +23,10 @@ import {
   Eye,
   ArrowUpRight,
   ShieldAlert,
+  Bell,
+  Mail,
+  SendHorizontal,
+  Send,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import {
@@ -37,8 +41,11 @@ import {
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [duesSummary, setDuesSummary] = useState<RentalDuesSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | '30days' | 'all'>('week');
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [reminderFeedback, setReminderFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMetrics();
@@ -70,14 +77,51 @@ export default function DashboardPage() {
         startDate = d.toISOString();
       }
 
-      const res = await api.get<DashboardMetrics>(
-        startDate ? `/reports/dashboard?startDate=${startDate}` : '/reports/dashboard'
-      );
-      setMetrics(res);
+      const [metricsRes, duesRes] = await Promise.all([
+        api.get<DashboardMetrics>(
+          startDate ? `/reports/dashboard?startDate=${startDate}` : '/reports/dashboard'
+        ),
+        api.get<{ data: RentalDuesSummary }>('/usage/dues-summary').catch(() => null),
+      ]);
+
+      setMetrics(metricsRes);
+      if (duesRes && duesRes.data) {
+        setDuesSummary(duesRes.data);
+      }
     } catch (err) {
       console.error('Failed to load dashboard metrics:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendDashboardReminder = async (item: RentalDueItem) => {
+    if (!item.customerEmail) {
+      alert(`No customer email registered for ${item.assignedPerson}. Please update email in the Rentals register.`);
+      return;
+    }
+
+    setSendingReminderId(item.id);
+    setReminderFeedback(null);
+
+    try {
+      const res = await api.post<{ success: boolean; sentTo: string; emailDispatched: boolean }>(
+        `/usage/${item.id}/send-reminder`,
+        { recipientEmail: item.customerEmail }
+      );
+
+      setReminderFeedback(`Payment reminder dispatched to ${res.sentTo} via Email!`);
+      setTimeout(() => setReminderFeedback(null), 4000);
+
+      // Refresh dues
+      const updated = await api.get<{ data: RentalDuesSummary }>('/usage/dues-summary');
+      if (updated && updated.data) {
+        setDuesSummary(updated.data);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to dispatch reminder email.');
+    } finally {
+      setSendingReminderId(null);
     }
   };
 
@@ -169,6 +213,122 @@ export default function DashboardPage() {
                 </Button>
               </a>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Rental Dues Notification & Reminder Center */}
+      {duesSummary && duesSummary.summary.totalRentalsWithDues > 0 && (
+        <div className="rounded-2xl border border-amber-200/80 bg-linear-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 backdrop-blur-xs dark:border-amber-900/50 dark:from-amber-950/30 dark:via-slate-900/40">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Rental Dues &amp; Payment Reminders
+                  </h3>
+                  <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-extrabold text-amber-700 dark:text-amber-300">
+                    {duesSummary.summary.totalRentalsWithDues} Pending
+                  </span>
+                  {duesSummary.summary.overdueCount > 0 && (
+                    <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold text-white animate-pulse">
+                      {duesSummary.summary.overdueCount} Overdue
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  Total outstanding rent:{' '}
+                  <strong className="text-slate-900 dark:text-slate-200 font-bold">
+                    {formatCurrency(duesSummary.summary.totalPendingAmount)}
+                  </strong>
+                  {duesSummary.summary.totalOverdueAmount > 0 && (
+                    <span>
+                      {' '}
+                      (Overdue:{' '}
+                      <strong className="text-rose-600 dark:text-rose-400">
+                        {formatCurrency(duesSummary.summary.totalOverdueAmount)}
+                      </strong>
+                      )
+                    </span>
+                  )}
+                  . Send direct payment reminder emails to renters with 1-click.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a href="/usage?status=OVERDUE">
+                <Button size="sm" variant="outline" className="text-xs font-semibold gap-1.5">
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Rental Register</span>
+                </Button>
+              </a>
+            </div>
+          </div>
+
+          {/* Feedback message */}
+          {reminderFeedback && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-fadeIn">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{reminderFeedback}</span>
+            </div>
+          )}
+
+          {/* Top Dues preview */}
+          <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {duesSummary.items.slice(0, 3).map((item) => {
+              const isOverdue = item.status === 'OVERDUE';
+              const isSending = sendingReminderId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900/80"
+                >
+                  <div className="min-w-0 flex-1 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
+                        {item.assignedPerson}
+                      </span>
+                      <span
+                        className={`rounded-sm px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
+                          isOverdue
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        {isOverdue ? `${item.daysOverdue}d overdue` : 'due soon'}
+                      </span>
+                    </div>
+                    <div className="truncate text-[11px] text-slate-500 mt-0.5">
+                      {item.productName} ({item.issueReference})
+                    </div>
+                    <div className="mt-1 font-extrabold text-xs text-amber-600 dark:text-amber-400">
+                      {formatCurrency(item.totalRentDue)}
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant={isOverdue ? 'default' : 'outline'}
+                    disabled={isSending}
+                    onClick={() => handleSendDashboardReminder(item)}
+                    className="h-7 text-[10px] font-bold shrink-0 gap-1 px-2"
+                    title={
+                      item.customerEmail
+                        ? `Send reminder email to ${item.customerEmail}`
+                        : 'No email registered'
+                    }
+                  >
+                    <SendHorizontal className={`h-3 w-3 ${isSending ? 'animate-spin' : ''}`} />
+                    <span>{isSending ? 'Sending...' : 'Remind'}</span>
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

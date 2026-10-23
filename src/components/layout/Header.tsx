@@ -11,14 +11,17 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 
 interface HeaderProps {
   onQuickAction?: (action: string) => void;
 }
 
 export function Header({ onQuickAction }: HeaderProps) {
-  const { user, canMakeSales, canReceiveStock, canIssueUsage } = useAuth();
+  const { user, canMakeSales, canReceiveStock, canIssueUsage, isSuperAdmin, isManager } = useAuth();
   const { storeName } = useSettings();
+
+  const canViewDues = isSuperAdmin() || isManager() || canIssueUsage();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/90 transition-colors">
@@ -62,6 +65,9 @@ export function Header({ onQuickAction }: HeaderProps) {
             </Button>
           </a>
         )}
+
+        {/* Notification Bell for Rental Dues & Reminders */}
+        {canViewDues && <NotificationBell />}
 
         {/* Theme Toggle Button */}
         <ThemeToggle />
