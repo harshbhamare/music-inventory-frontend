@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Sale } from '@/lib/types';
-import { formatIndianDecimal, numberToIndianWords } from '@/lib/utils';
+import { formatIndianDecimal } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { api, getApiUrl } from '@/lib/api';
-import { useSettings } from '@/context/SettingsContext';
 import {
   Download,
   Mail,
@@ -14,13 +13,12 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   Send,
   FileText,
 } from 'lucide-react';
 
 /**
- * Downloads the high-speed server-generated vector PDF invoice with auth credentials
+ * Downloads the high-speed server-generated vector PDF invoice matching reference_invoice.jpg
  */
 export async function downloadInvoicePdf(saleId: string, invoiceNumber: string) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('stereobliss_token') : null;
@@ -43,7 +41,7 @@ export async function downloadInvoicePdf(saleId: string, invoiceNumber: string) 
   const blobUrl = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = blobUrl;
-  link.download = `TaxInvoice-${invoiceNumber}.pdf`;
+  link.download = `Invoice-${invoiceNumber}.pdf`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -57,7 +55,6 @@ interface TaxInvoiceModalProps {
 }
 
 export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps) {
-  const { companyName, storeName, settings } = useSettings();
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -77,40 +74,9 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
 
   if (!isOpen || !sale) return null;
 
-  const invoiceDate = new Date(sale.createdAt);
-  const dateFormatted = invoiceDate.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: '2-digit',
-  });
-
-  const irn =
-    sale.irn ||
-    '242b455eebf283a5c76a5689cd1bf14397ef25208f93a37-164dd9b476407904d';
-  const ackNo = sale.ackNo || '122634809484159';
-  const ackDate = sale.ackDate
-    ? new Date(sale.ackDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
-    : dateFormatted;
-
-  const supplierName = companyName && !/soundstock|muziclub/i.test(companyName)
-    ? companyName.replace(/retail/i, '').trim().toUpperCase() || 'STEREOBLISS'
-    : 'STEREOBLISS';
-
-  const supplierAddress = settings?.address || '';
-  const supplierPhone = settings?.contactPhone || '';
-  const supplierGstin = settings?.gstin || '';
-  const supplierEmail = settings?.contactEmail || '';
-  const supplierState = settings?.stateName || 'Maharashtra';
-  const supplierStateCode = settings?.stateCode || '27';
-
-  const buyerName = sale.customerName || 'Customer / Dealer';
-  const buyerAddress = sale.customerAddress || supplierAddress || '-';
-  const buyerGstin = sale.customerGstin || (supplierGstin ? 'Unregistered / B2C' : 'N/A');
-
-  const eWayBillNo = sale.eWayBillNo || '282295408497';
-  const dispatchThrough = sale.dispatchThrough || 'XP India';
-  const destination = sale.destination || 'PUNE';
-  const paymentMethod = sale.paymentMethod || 'UPI';
+  const invoiceDate = new Date(sale.createdAt || Date.now());
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const dateFormatted = `${pad(invoiceDate.getDate())}/${pad(invoiceDate.getMonth() + 1)}/${invoiceDate.getFullYear()}`;
 
   const taxableAmount = sale.taxableAmount || (sale.subtotal - (sale.discountTotal || 0));
   const cgstAmount = sale.cgstAmount || Math.round(taxableAmount * 0.09 * 100) / 100;
@@ -140,7 +106,7 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
     setEmailStatus(null);
 
     try {
-      const res = await api.post<{ success: boolean; message: string }>(`/sales/${sale._id}/send-email`, {
+      await api.post<{ success: boolean; message: string }>(`/sales/${sale._id}/send-email`, {
         recipientEmail: recipientEmail.trim(),
         customNotes: customNotes.trim() || undefined,
       });
@@ -165,20 +131,20 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
       <div className="relative w-full max-w-4xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-auto">
         {/* Top Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 no-print">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[#0077c5] flex items-center justify-center">
               <FileText className="h-4 w-4" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Tax Invoice (e-Invoice Format) — #{sale.invoiceNumber}
+                Tax Invoice — #{sale.invoiceNumber}
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                GST compliant original invoice for customer / dealer records &amp; email PDF dispatch
+                Official Stereobliss Tax Invoice format for customer records, print, and PDF dispatch
               </p>
             </div>
           </div>
@@ -189,7 +155,7 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
               variant="default"
               onClick={handleDownloadPdf}
               isLoading={isDownloadingPdf}
-              className="gap-1.5 text-xs font-bold shadow-sm"
+              className="gap-1.5 text-xs font-bold shadow-sm bg-[#1a6eb7] hover:bg-[#155a96]"
               title="Save vector PDF directly to your device"
             >
               <Download className="h-3.5 w-3.5" />
@@ -227,16 +193,16 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
 
         {/* Email Send Form (collapsible / toggleable) */}
         {showEmailForm && (
-          <form onSubmit={handleSendEmail} className="p-4 bg-amber-500/5 border-b border-amber-500/20 space-y-3">
+          <form onSubmit={handleSendEmail} className="p-4 bg-amber-500/5 border-b border-amber-500/20 space-y-3 no-print">
             <div className="flex flex-col sm:flex-row items-end gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Recipient Email Address (Dealer or Customer) *
+                  Recipient Email Address (Customer) *
                 </label>
                 <Input
                   type="email"
                   required
-                  placeholder="e.g. dealer@company.com or customer@gmail.com"
+                  placeholder="e.g. customer@gmail.com"
                   value={recipientEmail}
                   onChange={(e) => setRecipientEmail(e.target.value)}
                   className="h-9 text-xs"
@@ -248,7 +214,7 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                   Optional Note / Reference
                 </label>
                 <Input
-                  placeholder="e.g. Please find your invoice attached for dispatch order."
+                  placeholder="e.g. Please find your invoice attached for your purchase."
                   value={customNotes}
                   onChange={(e) => setCustomNotes(e.target.value)}
                   className="h-9 text-xs"
@@ -260,7 +226,7 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                 variant="default"
                 size="sm"
                 isLoading={isSendingEmail}
-                className="font-bold gap-1.5 text-xs h-9 shrink-0"
+                className="font-bold gap-1.5 text-xs h-9 shrink-0 bg-[#1a6eb7] hover:bg-[#155a96]"
               >
                 <Send className="h-3.5 w-3.5" />
                 <span>Dispatch Email PDF</span>
@@ -272,7 +238,7 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
         {/* Status Alert Notification */}
         {emailStatus && (
           <div
-            className={`px-4 py-2 text-xs font-semibold flex items-center gap-2 ${
+            className={`px-4 py-2 text-xs font-semibold flex items-center gap-2 no-print ${
               emailStatus.type === 'success'
                 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-b border-emerald-500/20'
                 : 'bg-red-500/10 text-red-600 dark:text-red-400 border-b border-red-500/20'
@@ -287,288 +253,176 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
           </div>
         )}
 
-        {/* Scrollable Document Area with Authentic Invoice Styling */}
-        <div className="max-h-[75vh] overflow-y-auto p-4 sm:p-6 bg-slate-100/60 dark:bg-slate-950/60">
+        {/* Scrollable Document Area with Authentic Invoice Styling Matching reference_invoice.jpg */}
+        <div className="max-h-[78vh] overflow-y-auto p-4 sm:p-6 bg-slate-200/50 dark:bg-slate-950/80 print-container">
           <div
             ref={invoicePrintRef}
             id="printable-tax-invoice"
-            className="w-full mx-auto bg-white text-black p-5 sm:p-7 shadow-sm border border-black/80 font-sans text-xs space-y-0 leading-tight"
-            style={{ maxWidth: '780px', color: '#000000', backgroundColor: '#ffffff' }}
+            className="relative w-full mx-auto bg-white text-slate-900 shadow-md border border-slate-300 font-sans text-xs"
+            style={{
+              maxWidth: '780px',
+              minHeight: '1080px',
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+            }}
           >
-            {/* 1. Header Section */}
-            <div className="pb-3 text-center border-b border-black">
-              <h1 className="text-base font-black tracking-wider uppercase">TAX INVOICE</h1>
-              <p className="text-[11px] font-normal text-slate-800">(ORIGINAL FOR RECIPIENT)</p>
+            {/* Background Template: Stereobliss logo top-left & music notes icon bottom-right */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/templates/invoice_template.png"
+              alt="Stereobliss Invoice Template"
+              className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+              style={{ minHeight: '100%' }}
+            />
 
-              {/* IRN, Ack Details */}
-              <div className="text-left text-[10px] space-y-0.5 pt-2">
-                <div className="flex items-start gap-1">
-                  <span className="font-semibold text-slate-700 shrink-0">IRN : </span>
-                  <span className="font-mono font-bold text-[9px] break-all">{irn}</span>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div>
-                    <span className="font-semibold text-slate-700">Ack No. : </span>
-                    <span className="font-mono font-bold">{ackNo}</span>
+            {/* Invoice Content Layer */}
+            <div className="relative z-10 px-8 py-7 sm:px-10 sm:py-8 flex flex-col justify-between" style={{ minHeight: '1080px' }}>
+              <div>
+                {/* 1. Header: Stereobliss Logo on left (from template), Company Info on right */}
+                <div className="flex justify-between items-start pt-2">
+                  <div className="w-1/2">
+                    {/* Left space reserved for the Stereobliss logo on the background template */}
                   </div>
-                  <div>
-                    <span className="font-semibold text-slate-700">Ack Date : </span>
-                    <span className="font-mono font-bold">{ackDate}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Two Column Section: Seller/Buyer vs Dispatch Details */}
-            <div className="grid grid-cols-2 border-b border-black text-[11px]">
-              {/* Left Column: Supplier, Consignee, Buyer */}
-              <div className="border-r border-black divide-y divide-black">
-                {/* Supplier */}
-                <div className="p-2 space-y-0.5">
-                  <div className="font-bold text-xs uppercase">{supplierName}</div>
-                  <div className="text-[10px] text-slate-800">{supplierAddress}</div>
-                  {supplierPhone && <div className="text-[10px]">Tel : {supplierPhone}</div>}
-                  {supplierEmail && <div className="text-[10px]">E-mail : {supplierEmail}</div>}
-                  <div className="text-[10px]">
-                    <span className="font-semibold">GSTIN/UIN : </span>
-                    <span className="font-bold">{supplierGstin || 'N/A'}</span>
-                  </div>
-                  <div className="text-[10px]">State Name : {supplierState}, Code : {supplierStateCode}</div>
-                </div>
-
-                {/* Consignee (Ship to) */}
-                <div className="p-2 space-y-0.5">
-                  <div className="font-bold text-[10px] uppercase text-slate-700">Consignee (Ship to)</div>
-                  <div className="font-bold text-xs">{buyerName}</div>
-                  <div className="text-[10px] text-slate-800">{buyerAddress}</div>
-                  {sale.customerPhone && <div className="text-[10px]">Ph No : {sale.customerPhone}</div>}
-                  <div className="text-[10px]">
-                    <span className="font-semibold">GSTIN/UIN : </span>
-                    <span className="font-bold">{buyerGstin}</span>
-                  </div>
-                  <div className="text-[10px]">State Name : Maharashtra, Code : 27</div>
-                </div>
-
-                {/* Buyer (Bill to) */}
-                <div className="p-2 space-y-0.5">
-                  <div className="font-bold text-[10px] uppercase text-slate-700">Buyer (Bill to)</div>
-                  <div className="font-bold text-xs">{buyerName}</div>
-                  <div className="text-[10px] text-slate-800">{buyerAddress}</div>
-                  {sale.customerPhone && <div className="text-[10px]">Ph No : {sale.customerPhone}</div>}
-                  <div className="text-[10px]">
-                    <span className="font-semibold">GSTIN/UIN : </span>
-                    <span className="font-bold">{buyerGstin}</span>
-                  </div>
-                  <div className="text-[10px]">State Name : Maharashtra, Code : 27</div>
-                </div>
-              </div>
-
-              {/* Right Column: Invoice Details */}
-              <div className="divide-y divide-black text-[10px]">
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Invoice No.</span>
-                    <strong className="font-mono text-xs">{sale.invoiceNumber}</strong>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">e-Way Bill No.</span>
-                    <strong className="font-mono text-[11px]">{eWayBillNo}</strong>
+                  <div className="text-left space-y-0.5 text-[11px] text-slate-700 w-1/2 pl-6">
+                    <div className="font-extrabold text-[13px] tracking-wide text-black uppercase">STEREOBLISS</div>
+                    <div>2nd Floor, Radhika Avenue, Wakad- Nasik Road</div>
+                    <div>Next to Copa Vila</div>
+                    <div>9960540161</div>
+                    <div>harsh.bagle@muziclub.com</div>
+                    <div>www.muziclub.com</div>
+                    <div className="font-semibold text-black">GSTIN : 27ADDFS8850Q1Z6</div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Delivery Note</span>
-                    <span className="font-semibold">—</span>
+                {/* Horizontal Divider Line below Header */}
+                <hr className="border-t border-slate-300 mt-5 mb-5" />
+
+                {/* 2. BILL TO & INVOICE Details Section */}
+                <div className="flex justify-between items-start my-2">
+                  {/* Left: BILL TO */}
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">BILL TO</span>
+                    <div className="text-base font-bold text-slate-900">{sale.customerName}</div>
+                    {sale.customerPhone && <div className="text-xs text-slate-700">{sale.customerPhone}</div>}
+                    {sale.customerEmail && <div className="text-xs text-slate-700">{sale.customerEmail}</div>}
                   </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Dated</span>
-                    <strong className="font-bold text-[11px]">{dateFormatted}</strong>
+
+                  {/* Right: INVOICE details */}
+                  <div className="flex items-stretch gap-3 pl-6 w-1/2">
+                    <div className="w-[3px] bg-[#0077c5] rounded-full self-stretch shrink-0" />
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-black text-[#0077c5] tracking-tight leading-none uppercase">INVOICE</h2>
+                      <div className="grid grid-cols-[90px_1fr] text-xs pt-1.5 gap-y-1">
+                        <span className="font-bold text-slate-900">Invoice No.</span>
+                        <span className="text-slate-800 font-medium">{sale.invoiceNumber}</span>
+                        <span className="font-bold text-slate-900">Invoice Date</span>
+                        <span className="text-slate-800">{dateFormatted}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Reference No. &amp; Date.</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Mode/Terms of Payment</span>
-                    <strong className="font-bold">{paymentMethod}</strong>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Other References</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Dated</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Buyer's Order No.</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Dated</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Dispatch Doc No.</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Delivery Note Date</span>
-                    <span className="font-semibold">—</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 divide-x divide-black p-0">
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Dispatched through</span>
-                    <strong className="font-bold">{dispatchThrough}</strong>
-                  </div>
-                  <div className="p-1.5">
-                    <span className="block text-slate-600 text-[9px]">Destination</span>
-                    <strong className="font-bold">{destination}</strong>
-                  </div>
-                </div>
-
-                <div className="p-2 space-y-0.5">
-                  <span className="block text-slate-600 text-[9px]">Terms of Delivery</span>
-                  <div className="text-[10px] italic">
-                    {sale.remarks || sale.notes || 'Immediate Delivery, Official Warranty Included'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Table of Goods */}
-            <div className="border-b border-black">
-              <table className="w-full text-left border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-black text-[10px] font-bold uppercase">
-                    <th className="py-1 px-1.5 text-center w-8 border-r border-black">Sl<br/>No</th>
-                    <th className="py-1 px-2 border-r border-black">Description of Goods</th>
-                    <th className="py-1 px-2 text-center w-20 border-r border-black">HSN/SAC</th>
-                    <th className="py-1 px-2 text-center w-20 border-r border-black">Quantity</th>
-                    <th className="py-1 px-2 text-right w-24 border-r border-black">Rate</th>
-                    <th className="py-1 px-1 text-center w-10 border-r border-black">per</th>
-                    <th className="py-1 px-2 text-right w-28">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/20">
-                  {sale.lineItems?.map((li, index) => {
-                    const itemAmount = li.total || li.quantity * li.unitPrice;
-                    return (
-                      <tr key={index} className="align-top">
-                        <td className="py-1.5 px-1 text-center font-bold border-r border-black">{index + 1}</td>
-                        <td className="py-1.5 px-2 border-r border-black">
-                          <div className="font-bold text-slate-950">
-                            {li.product?.name}
-                            {li.product?.color && <span className="font-normal text-slate-600"> ({li.product.color})</span>}
-                          </div>
-                          {li.serializedItemIds && li.serializedItemIds.length > 0 && (
-                            <div className="text-[9px] font-mono text-slate-700">
-                              SN: {li.serializedItemIds.map((s: any) => s.assetId || s).join(', ')}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-mono text-[10px] border-r border-black">
-                          {li.hsnCode || (li.product as any)?.hsnCode || '92029000'}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-bold border-r border-black">{li.quantity} Nos.</td>
-                        <td className="py-1.5 px-2 text-right border-r border-black">{formatIndianDecimal(li.unitPrice)}</td>
-                        <td className="py-1.5 px-1 text-center border-r border-black">Nos</td>
-                        <td className="py-1.5 px-2 text-right font-bold">{formatIndianDecimal(itemAmount)}</td>
+                {/* 3. Line Items Table matching reference_invoice.jpg */}
+                <div className="mt-7 border border-slate-200 rounded-none overflow-hidden bg-white">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#1a6eb7] text-white font-bold text-[11px]">
+                        <th className="py-2 px-2.5 text-center w-10 border-r border-blue-400/40">#</th>
+                        <th className="py-2 px-3 border-r border-blue-400/40">Description</th>
+                        <th className="py-2 px-2.5 text-center w-28 border-r border-blue-400/40">HSN/SAC</th>
+                        <th className="py-2 px-2 text-center w-14 border-r border-blue-400/40">Qty</th>
+                        <th className="py-2 px-3 text-right w-24 border-r border-blue-400/40">Price (₹)</th>
+                        <th className="py-2 px-3 text-right w-24">Amount (₹)</th>
                       </tr>
-                    );
-                  })}
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {sale.lineItems?.map((li, index) => {
+                        const hsn = li.hsnCode || (li.product as any)?.hsnCode || '92029000';
+                        const itemAmount = li.total || li.quantity * li.unitPrice;
+                        return (
+                          <tr key={index} className="align-top">
+                            <td className="py-2.5 px-2.5 text-center text-slate-900 border-r border-slate-200">{index + 1}</td>
+                            <td className="py-2.5 px-3 border-r border-slate-200">
+                              <div className="font-bold text-slate-950">
+                                {li.product?.name}
+                                {li.product?.color && <span className="font-normal text-slate-600"> ({li.product.color})</span>}
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                HSN/SAC- {hsn}
+                                {li.serializedItemIds && li.serializedItemIds.length > 0 && (
+                                  <span> | SN: {li.serializedItemIds.map((s: any) => s.assetId || s.manufacturerSerial || s).join(', ')}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2.5 text-center text-slate-700 border-r border-slate-200">{hsn}</td>
+                            <td className="py-2.5 px-2 text-center text-slate-900 border-r border-slate-200">{li.quantity}</td>
+                            <td className="py-2.5 px-3 text-right text-slate-900 border-r border-slate-200">{formatIndianDecimal(li.unitPrice)}</td>
+                            <td className="py-2.5 px-3 text-right text-slate-900">{formatIndianDecimal(itemAmount)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-                  {/* Empty Spacer Rows for authentic tax invoice height */}
-                  <tr className="h-10">
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td></td>
-                  </tr>
+                {/* 4. Payment Method & Totals Section */}
+                <div className="flex justify-between items-start mt-6">
+                  {/* Left: Payment Method */}
+                  <div className="space-y-1">
+                    <span className="font-bold text-xs text-slate-900 block">Payment Method</span>
+                    <span className="text-xs text-slate-700 block">{sale.paymentMethod || 'Gpay'}</span>
+                  </div>
 
-                  {/* CGST Row */}
-                  <tr>
-                    <td className="border-r border-black"></td>
-                    <td className="py-1 px-2 border-r border-black text-right italic font-medium" colSpan={5}>
-                      Output @ CGST
-                    </td>
-                    <td className="py-1 px-2 text-right font-bold">{formatIndianDecimal(cgstAmount)}</td>
-                  </tr>
+                  {/* Right: Totals summary */}
+                  <div className="w-64 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-700">
+                      <span>Subtotal</span>
+                      <span className="font-normal text-slate-900">₹{formatIndianDecimal(taxableAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-700">
+                      <span>CGST (9%)</span>
+                      <span className="font-normal text-slate-900">₹{formatIndianDecimal(cgstAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-700">
+                      <span>SGST (9%)</span>
+                      <span className="font-normal text-slate-900">₹{formatIndianDecimal(sgstAmount)}</span>
+                    </div>
 
-                  {/* SGST Row */}
-                  <tr>
-                    <td className="border-r border-black"></td>
-                    <td className="py-1 px-2 border-r border-black text-right italic font-medium" colSpan={5}>
-                      Output @ SGST
-                    </td>
-                    <td className="py-1 px-2 text-right font-bold">{formatIndianDecimal(sgstAmount)}</td>
-                  </tr>
+                    {/* Highlighted TOTAL (INR) Bar with light blue background */}
+                    <div className="flex justify-between items-center bg-[#e1f0fa] px-3 py-2 rounded-none font-bold text-xs text-slate-950 mt-2">
+                      <span className="tracking-wide">TOTAL (INR)</span>
+                      <span className="text-sm font-extrabold">₹{formatIndianDecimal(sale.grandTotal)}</span>
+                    </div>
+                  </div>
+                </div>
 
-                  {/* Total Row */}
-                  <tr className="border-t-2 border-black font-black text-xs bg-slate-50">
-                    <td className="border-r border-black"></td>
-                    <td className="py-1.5 px-2 border-r border-black">Total</td>
-                    <td className="border-r border-black"></td>
-                    <td className="py-1.5 px-2 text-center border-r border-black">
-                      {sale.lineItems?.reduce((acc, i) => acc + (i.quantity || 0), 0)} Nos.
-                    </td>
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
-                    <td className="py-1.5 px-2 text-right text-xs">INR {formatIndianDecimal(sale.grandTotal)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                {/* Divider Line below Totals */}
+                <hr className="border-t border-slate-300 mt-8 mb-4" />
 
-            {/* 4. Amount Chargeable in Words & Signatory */}
-            <div className="grid grid-cols-2 p-2 border-b border-black text-[10px]">
-              <div className="space-y-1">
-                <span className="text-slate-600 block">Amount Chargeable (in words):</span>
-                <strong className="block text-[11px] font-bold uppercase leading-snug">
-                  {numberToIndianWords(sale.grandTotal)}
-                </strong>
-                <div className="text-[9px] text-slate-600 pt-1">
-                  Taxable Value: INR {formatIndianDecimal(taxableAmount)} | Central Tax: INR {formatIndianDecimal(cgstAmount)} | State Tax: INR {formatIndianDecimal(sgstAmount)}
+                {/* 5. Terms & Conditions Section */}
+                <div className="space-y-1.5 text-xs text-slate-700">
+                  <span className="font-bold text-slate-900 block">Terms &amp; Conditions</span>
+                  <div className="space-y-1 text-[11px] text-slate-700">
+                    <div>3. &nbsp; Goods remain property of the seller until full payment is received.</div>
+                    <div>4. &nbsp; Prices are inclusive of all applicable taxes.</div>
+                  </div>
                 </div>
               </div>
 
-              <div className="text-right flex flex-col justify-between items-end pl-4">
-                <div className="text-[10px]">
-                  for <strong>{supplierName}</strong>
-                </div>
-                <div className="pt-8 font-bold text-[10px] border-t border-black/40 px-3">
-                  Authorised Signatory
-                </div>
+              {/* 6. Footer Computer Generated Receipt Disclaimer */}
+              <div className="pt-10 pb-2">
+                <hr className="border-t border-slate-300 mb-2.5" />
+                <p className="text-center text-[10px] tracking-wider text-slate-500 uppercase font-medium">
+                  THIS IS A SYSTEM GENERATED RECEIPT. SIGNATURE IS NOT REQUIRED.
+                </p>
+                <hr className="border-t border-slate-300 mt-2.5" />
               </div>
-            </div>
-
-            {/* 5. Footer Computer Generated Declaration */}
-            <div className="pt-2 text-center text-[10px] italic text-slate-700">
-              This is a Computer Generated Invoice
             </div>
           </div>
         </div>
 
         {/* Modal Bottom Footer */}
-        <div className="flex items-center justify-between p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+        <div className="flex items-center justify-between p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 no-print">
           <div className="text-xs text-slate-500 dark:text-slate-400">
             Invoice #{sale.invoiceNumber} • Status: <strong className="text-emerald-500">{sale.paymentStatus}</strong>
           </div>
@@ -577,6 +431,36 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
           </Button>
         </div>
       </div>
+
+      {/* Global Print Media Query Styles */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-container,
+          #printable-tax-invoice,
+          #printable-tax-invoice * {
+            visibility: visible;
+          }
+          #printable-tax-invoice {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
