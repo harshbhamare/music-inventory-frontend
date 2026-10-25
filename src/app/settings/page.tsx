@@ -152,14 +152,19 @@ export default function SettingsPage() {
             <span>System Configuration & Store Management</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage your organization identity, retail store details, GST tax identification, and billing information.
+            {isSuperAdmin()
+              ? 'Manage your organization identity, retail store details, GST tax identification, and billing information.'
+              : 'Personalize your workspace display appearance and preferences.'}
           </p>
         </div>
       </div>
 
       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
         <span>
-          <strong>Operational Access:</strong> Superadmins and Managers can configure store details, tax identification (GSTIN), and billing preferences.
+          <strong>Operational Access:</strong>{' '}
+          {isSuperAdmin()
+            ? 'Superadmins can configure store details, tax identification (GSTIN), and billing preferences.'
+            : 'Personal workspace display theme.'}
         </span>
       </div>
 
@@ -231,9 +236,10 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Organization, Store & GST Details Form */}
-      <Card className="shadow-sm border-slate-200 dark:border-slate-800">
-        <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
+      {/* Organization, Store & GST Details Form (Super Admin Only) */}
+      {isSuperAdmin() && (
+        <Card className="shadow-sm border-slate-200 dark:border-slate-800">
+          <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-white">
               <Building2 className="h-4 w-4 text-amber-500" />
@@ -413,6 +419,7 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+      )}
 
       {/* System Database Overview (Read-Only metrics, No Wipe Button) */}
       {isSuperAdmin() && (
