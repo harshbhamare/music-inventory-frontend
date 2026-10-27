@@ -47,11 +47,6 @@ interface ReceiveItemLine {
   product: string;
   quantity: number;
   unitCost: number;
-  serializedUnits: Array<{
-    assetId: string;
-    manufacturerSerial: string;
-    condition: string;
-  }>;
 }
 
 export default function IntakePage() {
@@ -73,7 +68,7 @@ export default function IntakePage() {
   const [receiveInvoiceRef, setReceiveInvoiceRef] = useState('');
   const [receiveNotes, setReceiveNotes] = useState('');
   const [receiveLines, setReceiveLines] = useState<ReceiveItemLine[]>([
-    { product: '', quantity: 1, unitCost: 0, serializedUnits: [] },
+    { product: '', quantity: 1, unitCost: 0 },
   ]);
   const [receiveStockError, setReceiveStockError] = useState('');
   const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
@@ -86,7 +81,6 @@ export default function IntakePage() {
   const [newProdModel, setNewProdModel] = useState('');
   const [newProdColor, setNewProdColor] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
-  const [newProdTrackingMode, setNewProdTrackingMode] = useState<'QUANTITY' | 'SERIALIZED'>('SERIALIZED');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdHsn, setNewProdHsn] = useState('9202');
@@ -110,16 +104,9 @@ export default function IntakePage() {
       lineId?: string;
       product: string;
       productName: string;
-      trackingMode: string;
       remaining: number;
       quantityReceived: number;
       unitCost: number;
-      serializedUnits: Array<{
-        assetId: string;
-        manufacturerSerial: string;
-        condition: string;
-        warrantyExpiry: string;
-      }>;
     }>
   >([]);
   const [legacyReceiveError, setLegacyReceiveError] = useState('');
@@ -167,7 +154,7 @@ export default function IntakePage() {
     if (locations.length > 0 && !receiveLocation) {
       setReceiveLocation(locations[0]._id);
     }
-    setReceiveLines([{ product: '', quantity: 1, unitCost: 0, serializedUnits: [] }]);
+    setReceiveLines([{ product: '', quantity: 1, unitCost: 0 }]);
     setIsReceiveStockModalOpen(true);
   };
 
@@ -175,7 +162,7 @@ export default function IntakePage() {
   const handleAddReceiveLine = () => {
     setReceiveLines((prev) => [
       ...prev,
-      { product: '', quantity: 1, unitCost: 0, serializedUnits: [] },
+      { product: '', quantity: 1, unitCost: 0 },
     ]);
   };
 
@@ -198,18 +185,6 @@ export default function IntakePage() {
           const supId = typeof prod.supplier === 'string' ? prod.supplier : (prod.supplier as any)._id;
           if (supId) setReceiveSupplier(supId);
         }
-        // Sync serial slots if serialized
-        if (prod.trackingMode === 'SERIALIZED') {
-          const slots = [];
-          for (let i = 0; i < line.quantity; i++) {
-            slots.push({ assetId: '', manufacturerSerial: '', condition: 'NEW' });
-          }
-          line.serializedUnits = slots;
-        } else {
-          line.serializedUnits = [];
-        }
-      } else {
-        line.serializedUnits = [];
       }
       updated[index] = line;
       return updated;
@@ -220,17 +195,7 @@ export default function IntakePage() {
     const validQty = Math.max(1, qty);
     setReceiveLines((prev) => {
       const updated = [...prev];
-      const line = { ...updated[index] };
-      line.quantity = validQty;
-      const prod = products.find((p) => p._id === line.product);
-      if (prod && prod.trackingMode === 'SERIALIZED') {
-        const slots = [...line.serializedUnits];
-        while (slots.length < validQty) {
-          slots.push({ assetId: '', manufacturerSerial: '', condition: 'NEW' });
-        }
-        line.serializedUnits = slots.slice(0, validQty);
-      }
-      updated[index] = line;
+      updated[index] = { ...updated[index], quantity: validQty };
       return updated;
     });
   };
@@ -239,23 +204,6 @@ export default function IntakePage() {
     setReceiveLines((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], unitCost: Math.max(0, cost) };
-      return updated;
-    });
-  };
-
-  const handleSerialChange = (
-    lineIdx: number,
-    slotIdx: number,
-    field: 'assetId' | 'manufacturerSerial' | 'condition',
-    val: string
-  ) => {
-    setReceiveLines((prev) => {
-      const updated = [...prev];
-      const line = { ...updated[lineIdx] };
-      const slots = [...line.serializedUnits];
-      slots[slotIdx] = { ...slots[slotIdx], [field]: val };
-      line.serializedUnits = slots;
-      updated[lineIdx] = line;
       return updated;
     });
   };
@@ -270,48 +218,30 @@ export default function IntakePage() {
       if (!receiveSupplier) {
         throw new Error('Please select or add a supplier/vendor.');
       }
+      if (!receiveInvoiceRef.trim()) {
+        throw new Error('Please enter Challan No. / Invoice Reference.');
+      }
       const validLines = receiveLines.filter((l) => l.product && l.quantity > 0);
       if (validLines.length === 0) {
         throw new Error('Please select at least one valid product line.');
       }
 
-      // Check serialized items
-      for (const line of validLines) {
-        const prod = products.find((p) => p._id === line.product);
-        if (prod?.trackingMode === 'SERIALIZED') {
-          if (line.serializedUnits.length !== line.quantity) {
-            throw new Error(`Product ${prod.name} requires ${line.quantity} serial entries.`);
-          }
-        }
-      }
-
       await api.post('/intake/quick-receive', {
         supplier: receiveSupplier,
         destinationLocation: receiveLocation || locations[0]?._id,
-        invoiceReference: receiveInvoiceRef.trim() || undefined,
+        invoiceReference: receiveInvoiceRef.trim(),
         notes: receiveNotes.trim() || undefined,
-        items: validLines.map((l) => {
-          const prod = products.find((p) => p._id === l.product);
-          const isSerialized = prod?.trackingMode === 'SERIALIZED';
-          return {
-            product: l.product,
-            quantity: l.quantity,
-            unitCost: l.unitCost,
-            serializedUnits: isSerialized
-              ? l.serializedUnits.map((u) => ({
-                  assetId: u.assetId.trim() || undefined,
-                  manufacturerSerial: u.manufacturerSerial.trim() || undefined,
-                  condition: u.condition || 'NEW',
-                }))
-              : undefined,
-          };
-        }),
+        items: validLines.map((l) => ({
+          product: l.product,
+          quantity: l.quantity,
+          unitCost: l.unitCost,
+        })),
       });
 
       setIsReceiveStockModalOpen(false);
       setReceiveInvoiceRef('');
       setReceiveNotes('');
-      setReceiveLines([{ product: '', quantity: 1, unitCost: 0, serializedUnits: [] }]);
+      setReceiveLines([{ product: '', quantity: 1, unitCost: 0 }]);
       setActiveTab('receipts');
       fetchData();
     } catch (err: any) {
@@ -331,7 +261,6 @@ export default function IntakePage() {
     setNewProdCost('');
     setNewProdPrice('');
     setNewProdHsn('9202');
-    setNewProdTrackingMode('SERIALIZED');
     if (categories.length > 0 && !newProdCategory) {
       setNewProdCategory(categories[0]._id);
     }
@@ -353,12 +282,12 @@ export default function IntakePage() {
         modelName: newProdModel.trim() || undefined,
         color: newProdColor.trim() || undefined,
         category: newProdCategory || categories[0]?._id,
-        trackingMode: newProdTrackingMode,
+        trackingMode: 'QUANTITY',
         purchaseCost: parseFloat(newProdCost) || 0,
         defaultSellingPrice: parseFloat(newProdPrice) || 0,
         hsnCode: newProdHsn.trim() || '9202',
         supplier: receiveSupplier || undefined,
-        initialStock: 0, // Stock will be received via this intake!
+        initialStock: 0, // Stock will be credited via this intake Challan!
       });
 
       const created = res.product;
@@ -414,29 +343,15 @@ export default function IntakePage() {
         const prod = products.find((p) => p._id === prodId);
         const prodName =
           prod?.name || (typeof l.product === 'object' && (l.product as any)?.name) || 'Unknown Product';
-        const trackingMode = prod?.trackingMode || 'QUANTITY';
         const remaining = Math.max(1, l.quantityOrdered - l.quantityReceived);
-        const initialQty = remaining;
-
-        const serializedUnits =
-          trackingMode === 'SERIALIZED'
-            ? Array.from({ length: initialQty }, () => ({
-                assetId: '',
-                manufacturerSerial: '',
-                condition: 'NEW',
-                warrantyExpiry: '',
-              }))
-            : [];
 
         return {
           lineId: (l as any)._id,
           product: prodId,
           productName: prodName,
-          trackingMode,
           remaining,
-          quantityReceived: initialQty,
+          quantityReceived: remaining,
           unitCost: l.unitCost,
-          serializedUnits,
         };
       });
 
@@ -447,25 +362,7 @@ export default function IntakePage() {
 
   const handleLegacyReceiveQuantityChange = (index: number, qty: number) => {
     const updated = [...legacyReceiveLines];
-    const item = updated[index];
-    const validQty = Math.max(0, qty);
-    item.quantityReceived = validQty;
-
-    if (item.trackingMode === 'SERIALIZED') {
-      const currentCount = item.serializedUnits.length;
-      if (validQty > currentCount) {
-        for (let i = currentCount; i < validQty; i++) {
-          item.serializedUnits.push({
-            assetId: '',
-            manufacturerSerial: '',
-            condition: 'NEW',
-            warrantyExpiry: '',
-          });
-        }
-      } else {
-        item.serializedUnits = item.serializedUnits.slice(0, validQty);
-      }
-    }
+    updated[index].quantityReceived = Math.max(0, qty);
     setLegacyReceiveLines(updated);
   };
 
@@ -488,15 +385,6 @@ export default function IntakePage() {
           product: l.product,
           quantityReceived: l.quantityReceived,
           unitCost: l.unitCost,
-          serializedUnits:
-            l.trackingMode === 'SERIALIZED'
-              ? l.serializedUnits.map((u) => ({
-                  assetId: u.assetId.trim() || undefined,
-                  manufacturerSerial: u.manufacturerSerial.trim() || undefined,
-                  condition: u.condition,
-                  warrantyExpiry: u.warrantyExpiry || undefined,
-                }))
-              : undefined,
         })),
         idempotencyKey: `rcp-${Date.now()}`,
       });
@@ -767,8 +655,8 @@ export default function IntakePage() {
       <Modal
         isOpen={isReceiveStockModalOpen}
         onClose={() => setIsReceiveStockModalOpen(false)}
-        title="Receive Stock Intake"
-        description="Record vendor delivery directly into inventory. Credit physical units, serials, and valuation seamlessly."
+        title="Receive Stock (Delivery Challan / Invoice)"
+        description="Record vendor delivery directly into inventory. Credit bulk quantities and stock valuation seamlessly."
         maxWidth="4xl"
       >
         <form onSubmit={handleReceiveStockSubmit} className="space-y-5">
@@ -814,14 +702,15 @@ export default function IntakePage() {
 
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Invoice / Challan Ref #
+                Challan / Invoice No. *
               </label>
               <input
                 type="text"
-                placeholder="e.g. INV-2026-9021"
+                required
+                placeholder="e.g. CH-2026-0042 / INV-9021"
                 value={receiveInvoiceRef}
                 onChange={(e) => setReceiveInvoiceRef(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
               />
             </div>
 
@@ -849,7 +738,7 @@ export default function IntakePage() {
               <div className="flex items-center gap-2">
                 <Boxes className="h-4 w-4 text-amber-500" />
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Products Being Received ({receiveLines.length})
+                  Products Being Received on this Challan ({receiveLines.length})
                 </span>
               </div>
               <Button
@@ -860,14 +749,12 @@ export default function IntakePage() {
                 className="h-8 text-xs font-bold gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Add Another Product</span>
+                <span>Add Another Line</span>
               </Button>
             </div>
 
             <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
               {receiveLines.map((line, idx) => {
-                const prod = products.find((p) => p._id === line.product);
-                const isSerialized = prod?.trackingMode === 'SERIALIZED';
                 const lineTotal = (line.quantity || 0) * (line.unitCost || 0);
 
                 return (
@@ -888,7 +775,7 @@ export default function IntakePage() {
                             className="text-[11px] font-bold text-amber-500 hover:text-amber-600 flex items-center gap-1 cursor-pointer"
                           >
                             <Plus className="h-3 w-3" />
-                            <span>+ Create New Product</span>
+                            <span>+ Create New Product Details</span>
                           </button>
                         </div>
 
@@ -901,7 +788,7 @@ export default function IntakePage() {
                           <option value="">-- Choose Product from Catalogue --</option>
                           {products.map((p) => (
                             <option key={p._id} value={p._id}>
-                              {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.trackingMode}
+                              {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — Stock: {p.stockQuantity?.onHand ?? 0} {p.unitOfMeasure || 'pcs'}
                             </option>
                           ))}
                         </select>
@@ -958,46 +845,6 @@ export default function IntakePage() {
                         )}
                       </div>
                     </div>
-
-                    {/* Serialized Slots (if product is serialized) */}
-                    {isSerialized && line.quantity > 0 && (
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-amber-600 dark:text-amber-400">
-                            Physical Serialized Units ({line.quantity} units to register):
-                          </span>
-                          <span className="text-slate-400 text-[10px]">
-                            AST Asset IDs auto-generate if left blank
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
-                          {line.serializedUnits.map((u, uIdx) => (
-                            <div
-                              key={uIdx}
-                              className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs"
-                            >
-                              <input
-                                type="text"
-                                placeholder={`Unit #${uIdx + 1} AST ID (Auto)`}
-                                value={u.assetId}
-                                onChange={(e) => handleSerialChange(idx, uIdx, 'assetId', e.target.value)}
-                                className="h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 uppercase font-mono text-[10px]"
-                              />
-                              <input
-                                type="text"
-                                placeholder="Mfr Serial Number"
-                                value={u.manufacturerSerial}
-                                onChange={(e) =>
-                                  handleSerialChange(idx, uIdx, 'manufacturerSerial', e.target.value)
-                                }
-                                className="h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-[10px]"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -1040,13 +887,13 @@ export default function IntakePage() {
       </Modal>
 
       {/* ========================================================================= */}
-      {/* INLINE QUICK ADD PRODUCT MODAL (WITH HSN CODE!)                           */}
+      {/* INLINE QUICK ADD PRODUCT MODAL                                             */}
       {/* ========================================================================= */}
       <Modal
         isOpen={isQuickProductOpen}
         onClose={() => setIsQuickProductOpen(false)}
-        title="Add New Product to Catalogue"
-        description="Quickly define a new instrument or accessory that arrived from your supplier."
+        title="Add New Product Details"
+        description="Quickly define product specifications. Stock quantity will be credited from the Challan line item."
         maxWidth="lg"
         zIndex={70}
       >
@@ -1056,6 +903,10 @@ export default function IntakePage() {
               {quickProdError}
             </div>
           )}
+
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5 text-xs text-slate-600 dark:text-slate-400">
+            <strong className="text-amber-600 dark:text-amber-400">Single Intake Workflow:</strong> This product will be created in the catalogue with 0 initial units. The quantity being received on Challan {receiveInvoiceRef ? `"${receiveInvoiceRef}"` : ''} will be credited directly upon confirmation.
+          </div>
 
           <Input
             label="Product Title / Name *"
@@ -1140,39 +991,6 @@ export default function IntakePage() {
             </div>
           </div>
 
-          {/* Tracking Mode Card Switch */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Inventory Tracking Mode
-            </label>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setNewProdTrackingMode('SERIALIZED')}
-                className={cn(
-                  'p-2 rounded-lg border text-left cursor-pointer transition-all',
-                  newProdTrackingMode === 'SERIALIZED'
-                    ? 'border-amber-500 bg-amber-500/10 font-bold text-amber-600 dark:text-amber-400'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300'
-                )}
-              >
-                🎸 Serialized Unit (AST Tags)
-              </button>
-              <button
-                type="button"
-                onClick={() => setNewProdTrackingMode('QUANTITY')}
-                className={cn(
-                  'p-2 rounded-lg border text-left cursor-pointer transition-all',
-                  newProdTrackingMode === 'QUANTITY'
-                    ? 'border-amber-500 bg-amber-500/10 font-bold text-amber-600 dark:text-amber-400'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300'
-                )}
-              >
-                📦 Bulk Quantity (Packs/Pieces)
-              </button>
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Purchase Cost (₹) *"
@@ -1199,7 +1017,7 @@ export default function IntakePage() {
               Cancel
             </Button>
             <Button type="submit" variant="default" isLoading={isSavingQuickProd} className="font-bold">
-              Save & Select in Intake
+              Save Details & Select on Challan
             </Button>
           </div>
         </form>
@@ -1282,20 +1100,19 @@ export default function IntakePage() {
             </div>
           )}
 
-          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
             {legacyReceiveLines.map((line, idx) => (
               <div
                 key={line.lineId || `${line.product}-${idx}`}
                 className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-4"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <span className="font-bold text-sm text-slate-900 dark:text-white">
                       {line.productName}
                     </span>
                     <div className="text-xs text-slate-500">
-                      Remaining Expected: <strong>{line.remaining}</strong> units | Mode:{' '}
-                      <span className="font-semibold text-amber-500">{line.trackingMode}</span>
+                      Remaining Expected: <strong>{line.remaining}</strong> units
                     </div>
                   </div>
 
@@ -1314,54 +1131,6 @@ export default function IntakePage() {
                     />
                   </div>
                 </div>
-
-                {/* If Serialized, render per-unit fields */}
-                {line.trackingMode === 'SERIALIZED' && line.quantityReceived > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Serialized Instrument Units ({line.quantityReceived})
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {line.serializedUnits.map((unit, uIdx) => (
-                        <div
-                          key={uIdx}
-                          className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2 text-xs"
-                        >
-                          <div className="flex justify-between items-center text-slate-500 font-semibold">
-                            <span>Unit #{uIdx + 1}</span>
-                            <span className="text-[10px]">Leave Asset ID empty for auto-generation</span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="text"
-                              placeholder="Asset ID (Auto if blank)"
-                              value={unit.assetId}
-                              onChange={(e) => {
-                                const updated = [...legacyReceiveLines];
-                                updated[idx].serializedUnits[uIdx].assetId = e.target.value;
-                                setLegacyReceiveLines(updated);
-                              }}
-                              className="h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent uppercase font-mono text-[11px]"
-                            />
-
-                            <input
-                              type="text"
-                              placeholder="Mfr Serial No."
-                              value={unit.manufacturerSerial}
-                              onChange={(e) => {
-                                const updated = [...legacyReceiveLines];
-                                updated[idx].serializedUnits[uIdx].manufacturerSerial = e.target.value;
-                                setLegacyReceiveLines(updated);
-                              }}
-                              className="h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent font-mono text-[11px]"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>

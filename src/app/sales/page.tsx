@@ -33,7 +33,6 @@ export default function SalesPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
-  const [availableSerials, setAvailableSerials] = useState<Record<string, SerializedItem[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   // New Sale POS state
@@ -58,7 +57,6 @@ export default function SalesPage() {
       unitPrice: number;
       discount: number;
       hsnCode: string;
-      selectedSerialIds: string[];
     }>
   >([]);
 
@@ -100,10 +98,9 @@ export default function SalesPage() {
 
   const fetchInventoryForSale = async () => {
     try {
-      const [prodRes, locRes, serialsRes] = await Promise.all([
-        api.get<{ items: Product[] }>('/products?limit=100'),
+      const [prodRes, locRes] = await Promise.all([
+        api.get<{ items: Product[] }>('/products?limit=250'),
         api.get<{ locations: StockLocation[] }>('/meta/locations'),
-        api.get<{ items: SerializedItem[] }>('/products/serialized-items?status=AVAILABLE&limit=200'),
       ]);
 
       setProducts(prodRes.items || []);
@@ -111,15 +108,6 @@ export default function SalesPage() {
       if (locRes.locations && locRes.locations.length > 0) {
         setSelectedLocation(locRes.locations[0]._id);
       }
-
-      // Group available serials by product ID
-      const grouped: Record<string, SerializedItem[]> = {};
-      (serialsRes.items || []).forEach((item) => {
-        const pId = item.product?._id || (item.product as any);
-        if (!grouped[pId]) grouped[pId] = [];
-        grouped[pId].push(item);
-      });
-      setAvailableSerials(grouped);
     } catch (err) {
       console.error('Failed to load inventory for sales:', err);
     }
@@ -150,7 +138,6 @@ export default function SalesPage() {
           unitPrice: product.defaultSellingPrice,
           discount: 0,
           hsnCode: (product as any).hsnCode || '9202',
-          selectedSerialIds: [],
         },
       ]);
     }
@@ -163,21 +150,6 @@ export default function SalesPage() {
   const handleCartItemChange = (index: number, field: string, value: any) => {
     const updated = [...cartItems];
     (updated[index] as any)[field] = value;
-    setCartItems(updated);
-  };
-
-  const handleSerialToggle = (cartIndex: number, serialId: string) => {
-    const updated = [...cartItems];
-    const item = updated[cartIndex];
-    if (item.selectedSerialIds.includes(serialId)) {
-      item.selectedSerialIds = item.selectedSerialIds.filter((id) => id !== serialId);
-    } else {
-      if (item.selectedSerialIds.length >= item.quantity) {
-        alert(`You have already selected ${item.quantity} serial units for this line.`);
-        return;
-      }
-      item.selectedSerialIds.push(serialId);
-    }
     setCartItems(updated);
   };
 
@@ -196,18 +168,6 @@ export default function SalesPage() {
     if (cartItems.length === 0) {
       setSaleError('Cart is empty. Please add at least one product.');
       return;
-    }
-
-    // Verify serialized selections
-    for (const item of cartItems) {
-      if (item.product.trackingMode === 'SERIALIZED') {
-        if (item.selectedSerialIds.length !== item.quantity) {
-          setSaleError(
-            `Please select exactly ${item.quantity} serialized instrument unit(s) for ${item.product.name}.`
-          );
-          return;
-        }
-      }
     }
 
     setIsSubmittingSale(true);
@@ -233,8 +193,6 @@ export default function SalesPage() {
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           discount: i.discount || 0,
-          serializedItemIds:
-            i.product.trackingMode === 'SERIALIZED' ? i.selectedSerialIds : undefined,
         })),
       };
 
@@ -548,9 +506,6 @@ export default function SalesPage() {
               ) : (
                 <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
                   {cartItems.map((item, idx) => {
-                    const isSerialized = item.product.trackingMode === 'SERIALIZED';
-                    const serialsList = availableSerials[item.product._id] || [];
-
                     return (
                       <div
                         key={item.product._id}
@@ -633,42 +588,6 @@ export default function SalesPage() {
                             />
                           </div>
                         </div>
-
-                        {/* Serialized Item Selector if serialized product */}
-                        {isSerialized && (
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-                            <div className="flex justify-between items-center text-[11px]">
-                              <span className="font-semibold text-amber-500">
-                                Select Physical Serialized Units ({item.selectedSerialIds.length} / {item.quantity}):
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {serialsList.length === 0 ? (
-                                <span className="text-red-400 text-[11px]">
-                                  No available serialized units found in stock.
-                                </span>
-                              ) : (
-                                serialsList.map((su) => {
-                                  const isSelected = item.selectedSerialIds.includes(su._id);
-                                  return (
-                                    <button
-                                      type="button"
-                                      key={su._id}
-                                      onClick={() => handleSerialToggle(idx, su._id)}
-                                      className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border transition-colors ${
-                                        isSelected
-                                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
-                                          : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-amber-400'
-                                      }`}
-                                    >
-                                      {su.assetId} ({su.condition})
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     );
                   })}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api, getApiUrl } from '@/lib/api';
-import { Product, SerializedItem, Category, Supplier, StockLocation } from '@/lib/types';
+import { Product, Category, Supplier, StockLocation } from '@/lib/types';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -15,25 +15,14 @@ import {
   Search,
   Plus,
   FileSpreadsheet,
-  Tag,
-  SlidersHorizontal,
   Edit2,
   Trash2,
-  History,
   CheckCircle2,
   AlertCircle,
   PackagePlus,
   RefreshCw,
-  Sparkles,
   Palette,
-  Package,
-  Layers,
-  MapPin,
   Calculator,
-  ShieldCheck,
-  Check,
-  TrendingUp,
-  HelpCircle,
   Info,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -108,7 +97,6 @@ function renderColorBadge(color?: string) {
 
 export default function InventoryPage() {
   const { canManageCatalogue } = useAuth();
-  const [activeTab, setActiveTab] = useState<'products' | 'serialized'>('products');
 
   // Product states
   const [products, setProducts] = useState<Product[]>([]);
@@ -117,29 +105,18 @@ export default function InventoryPage() {
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedTrackingMode, setSelectedTrackingMode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-
-  // Serialized items states
-  const [serializedItems, setSerializedItems] = useState<SerializedItem[]>([]);
-  const [serialSearch, setSerialSearch] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
 
   // Modals & Details
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [historyItem, setHistoryItem] = useState<{ item: SerializedItem; movements: any[] } | null>(null);
 
-  // New product form
+  // New product form (Pure catalogue specifications - stock is credited via Receive Stock)
   const [newProdName, setNewProdName] = useState('');
   const [newProdBrand, setNewProdBrand] = useState('Stereobliss');
   const [newProdModel, setNewProdModel] = useState('');
   const [newProdColor, setNewProdColor] = useState('');
   const [newProdSku, setNewProdSku] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
-  const [newProdTrackingMode, setNewProdTrackingMode] = useState<'QUANTITY' | 'SERIALIZED'>('SERIALIZED');
-  const [newProdInitialStock, setNewProdInitialStock] = useState('1');
-  const [newProdLocation, setNewProdLocation] = useState('');
-  const [newProdSerials, setNewProdSerials] = useState('');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdSupplier, setNewProdSupplier] = useState('');
@@ -150,7 +127,7 @@ export default function InventoryPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSku, setIsFetchingSku] = useState(false);
 
-  // Quick Stock Adjustment Modal State
+  // Quick Stock Adjustment Modal State (for audit recount corrections)
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
   const [adjustQuantity, setAdjustQuantity] = useState(0);
   const [adjustReason, setAdjustReason] = useState('Stock count verification / recount');
@@ -181,13 +158,7 @@ export default function InventoryPage() {
   useEffect(() => {
     fetchMetadata();
     fetchProducts();
-  }, [search, selectedCategory, selectedTrackingMode]);
-
-  useEffect(() => {
-    if (activeTab === 'serialized') {
-      fetchSerializedItems();
-    }
-  }, [activeTab, serialSearch, selectedStatus]);
+  }, [search, selectedCategory]);
 
   const fetchMetadata = async () => {
     try {
@@ -198,14 +169,9 @@ export default function InventoryPage() {
       ]);
       setCategories(catsRes.categories || []);
       setSuppliers(supsRes.suppliers || []);
-      const locList = locsRes.locations || [];
-      setLocations(locList);
+      setLocations(locsRes.locations || []);
       if (catsRes.categories && catsRes.categories.length > 0 && !newProdCategory) {
         setNewProdCategory(catsRes.categories[0]._id);
-      }
-      if (locList.length > 0 && !newProdLocation) {
-        const defaultLoc = locList.find((l) => l.isDefault) || locList[0];
-        setNewProdLocation(defaultLoc._id);
       }
     } catch (err) {
       console.error('Failed to load categories/suppliers/locations:', err);
@@ -218,7 +184,6 @@ export default function InventoryPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (selectedCategory) params.set('category', selectedCategory);
-      if (selectedTrackingMode) params.set('trackingMode', selectedTrackingMode);
 
       const res = await api.get<{ items: Product[] }>(`/products?${params.toString()}`);
       setProducts(res.items || []);
@@ -226,35 +191,6 @@ export default function InventoryPage() {
       console.error('Failed to load products:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchSerializedItems = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (serialSearch) params.set('search', serialSearch);
-      if (selectedStatus) params.set('status', selectedStatus);
-
-      const res = await api.get<{ items: SerializedItem[] }>(
-        `/products/serialized-items?${params.toString()}`
-      );
-      setSerializedItems(res.items || []);
-    } catch (err) {
-      console.error('Failed to load serialized assets:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleOpenHistory = async (assetId: string) => {
-    try {
-      const res = await api.get<{ item: SerializedItem; movements: any[] }>(
-        `/products/serialized-items/${assetId}/history`
-      );
-      setHistoryItem(res);
-    } catch (err) {
-      console.error('Failed to load history:', err);
     }
   };
 
@@ -336,25 +272,26 @@ export default function InventoryPage() {
 
   // Delete Product
   const handleDeleteProduct = async (p: Product) => {
-    if (!window.confirm(`Are you sure you want to remove "${p.name}" (${p.sku}) from catalogue?`)) {
+    if (!confirm(`Are you sure you want to deactivate and remove "${p.name}"?`)) {
       return;
     }
     try {
       await api.delete(`/products/${p._id}`);
       fetchProducts();
     } catch (err: any) {
-      alert(`Error deleting product: ${err.message}`);
+      alert(`Failed to delete product: ${err.message}`);
     }
   };
 
-  // Fetch Next Auto-Incremented SKU
+  // Sequential SKU Generation
   const fetchNextSku = async () => {
     setIsFetchingSku(true);
     try {
       const res = await api.get<{ nextSku: string }>('/products/next-sku');
-      if (res.nextSku) setNewProdSku(res.nextSku);
-    } catch {
-      // fallback
+      setNewProdSku(res.nextSku);
+    } catch (err) {
+      const fallbackSku = `SB-${Date.now().toString().slice(-4)}`;
+      setNewProdSku(fallbackSku);
     } finally {
       setIsFetchingSku(false);
     }
@@ -370,38 +307,23 @@ export default function InventoryPage() {
     setNewProdCost('');
     setNewProdPrice('');
     setNewProdThreshold('5');
-    setNewProdTrackingMode('SERIALIZED');
-    setNewProdInitialStock('1');
-    setNewProdSerials('');
     setNewProdUnit('pcs');
     setNewProdHsn('9202');
+    setNewProdSupplier('');
     if (categories.length > 0 && !newProdCategory) {
       setNewProdCategory(categories[0]._id);
-    }
-    if (locations.length > 0) {
-      const defaultLoc = locations.find((l) => l.isDefault) || locations[0];
-      setNewProdLocation(defaultLoc._id);
     }
     await fetchNextSku();
     setIsAddModalOpen(true);
   };
 
-  // Create Product
+  // Create Product (Pure Catalogue Item - Stock is credited through Receive Stock with Challan)
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setIsSaving(true);
 
     try {
-      const initStockNum = Math.max(0, parseInt(newProdInitialStock, 10) || 0);
-      let serialsArr: string[] | undefined = undefined;
-      if (newProdTrackingMode === 'SERIALIZED' && newProdSerials.trim()) {
-        serialsArr = newProdSerials
-          .split(/[\n,]+/)
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-
       await api.post('/products', {
         name: newProdName.trim(),
         brand: newProdBrand.trim() || 'Stereobliss',
@@ -409,16 +331,14 @@ export default function InventoryPage() {
         color: newProdColor.trim() || undefined,
         sku: newProdSku.trim().toUpperCase() || undefined,
         category: newProdCategory || categories[0]?._id,
-        trackingMode: newProdTrackingMode,
+        trackingMode: 'QUANTITY',
         purchaseCost: parseFloat(newProdCost) || 0,
         defaultSellingPrice: parseFloat(newProdPrice) || 0,
         supplier: newProdSupplier || undefined,
         minStockThreshold: parseInt(newProdThreshold, 10) || 5,
         unitOfMeasure: newProdUnit.trim() || 'pcs',
         hsnCode: newProdHsn.trim() || '9202',
-        initialStock: initStockNum,
-        destinationLocation: newProdLocation || undefined,
-        initialSerialNumbers: serialsArr,
+        initialStock: 0,
       });
 
       setIsAddModalOpen(false);
@@ -427,11 +347,7 @@ export default function InventoryPage() {
       setNewProdSku('');
       setNewProdCost('');
       setNewProdPrice('');
-      setNewProdSerials('');
       fetchProducts();
-      if (activeTab === 'serialized' || newProdTrackingMode === 'SERIALIZED') {
-        fetchSerializedItems();
-      }
     } catch (err: any) {
       setFormError(err.message || 'Failed to create product.');
     } finally {
@@ -477,7 +393,7 @@ export default function InventoryPage() {
               Catalogue & Inventory
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Manage musical instruments, bulk accessories, stock counts, and serial numbers.
+              Stereobliss Retail — Manage product specifications, bulk inventory counts, and retail pricing.
             </p>
           </div>
         </div>
@@ -493,7 +409,7 @@ export default function InventoryPage() {
               size="sm"
               variant="default"
               onClick={handleOpenAddProduct}
-              className="gap-1.5 text-xs font-bold"
+              className="gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add Product</span>
@@ -502,423 +418,227 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* Primary Tab Selector */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
-            activeTab === 'products'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Boxes className="h-4 w-4" />
-          <span>Product Catalogue & Counts</span>
-          <span className="ml-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-bold text-slate-600 dark:text-slate-400">
-            {products.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('serialized')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
-            activeTab === 'serialized'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Tag className="h-4 w-4" />
-          <span>Serialized Instruments</span>
-          <span className="ml-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-bold text-slate-600 dark:text-slate-400">
-            {serializedItems.length}
-          </span>
-        </button>
-      </div>
-
-      {/* Tab 1: Product Catalogue & Quantities */}
-      {activeTab === 'products' && (
-        <Card>
-          <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800/80">
-            <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name, SKU, brand..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-slate-800 dark:text-slate-200"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={selectedTrackingMode}
-                  onChange={(e) => setSelectedTrackingMode(e.target.value)}
-                  className="text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-slate-800 dark:text-slate-200"
-                >
-                  <option value="">All Tracking Modes</option>
-                  <option value="QUANTITY">Quantity-Based</option>
-                  <option value="SERIALIZED">Serialized Assets</option>
-                </select>
-              </div>
+      {/* Product Catalogue & Quantities Card */}
+      <Card>
+        <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, SKU, brand..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
             </div>
-          </CardHeader>
 
-          <CardContent className="p-0">
-            <div className="responsive-table-wrapper">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Item & SKU</th>
-                    <th className="py-3 px-4">Colour</th>
-                    <th className="py-3 px-4">Brand / Category</th>
-                    <th className="py-3 px-4">Mode</th>
-                    <th className="py-3 px-4 text-center">Available Stock</th>
-                    <th className="py-3 px-4 text-center">On Hand (Click to Edit)</th>
-                    <th className="py-3 px-4 text-right">Cost (₹)</th>
-                    <th className="py-3 px-4 text-right">Price (₹)</th>
-                    <th className="py-3 px-4 text-center">Actions</th>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-slate-800 dark:text-slate-200"
+              >
+                <option value="">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <div className="responsive-table-wrapper">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-4">Item & SKU</th>
+                  <th className="py-3 px-4">Colour</th>
+                  <th className="py-3 px-4">Brand / Category</th>
+                  <th className="py-3 px-4 text-center">Available Stock</th>
+                  <th className="py-3 px-4 text-center">On Hand (Click to Edit)</th>
+                  <th className="py-3 px-4 text-right">Cost (₹)</th>
+                  <th className="py-3 px-4 text-right">Price (₹)</th>
+                  <th className="py-3 px-4 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                      Loading product catalogue...
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
-                        Loading product catalogue...
-                      </td>
-                    </tr>
-                  ) : products.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
-                        <Boxes className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                        <p className="text-sm font-medium">No products in catalogue yet.</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Click <strong>&quot;Add Product&quot;</strong> above to create your first instrument or accessory item.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    products.map((p) => {
-                      const sq = p.stockQuantity || {
-                        onHand: 0,
-                        reserved: 0,
-                        issuedInternal: 0,
-                        quarantined: 0,
-                      };
-                      return (
-                        <tr key={p._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <span>{p.name}</span>
-                              {p.color && (
-                                <span className="sm:hidden">
-                                  {renderColorBadge(p.color)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="font-mono text-[11px] text-amber-500 font-bold">{p.sku}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
-                                HSN: {p.hsnCode || '9202'}
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-500">
+                      <Boxes className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                      <p className="text-sm font-medium">No products in catalogue yet.</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Click <strong>&quot;Add Product&quot;</strong> above to create your first instrument or accessory item.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  products.map((p) => {
+                    const sq = p.stockQuantity || {
+                      onHand: 0,
+                      reserved: 0,
+                      issuedInternal: 0,
+                      quarantined: 0,
+                    };
+                    return (
+                      <tr key={p._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>{p.name}</span>
+                            {p.color && (
+                              <span className="sm:hidden">
+                                {renderColorBadge(p.color)}
                               </span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            {p.color ? (
-                              renderColorBadge(p.color)
-                            ) : (
-                              <span className="text-slate-400 text-xs italic">Default</span>
                             )}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
-                            <div className="font-semibold">{p.brand}</div>
-                            <div className="text-[11px] text-slate-400">
-                              {(p.category as any)?.name || 'General'}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge
-                              variant={p.trackingMode === 'SERIALIZED' ? 'default' : 'secondary'}
-                              className="text-[10px]"
-                            >
-                              {p.trackingMode}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`text-sm font-extrabold px-2 py-0.5 rounded ${
-                                p.isLowStock
-                                  ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
-                                  : 'text-emerald-500 font-bold'
-                              }`}
-                            >
-                              {p.availableForSale} {p.unitOfMeasure}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="font-mono text-[11px] text-amber-500 font-bold">{p.sku}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
+                              HSN: {p.hsnCode || '9202'}
                             </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {/* Editable Count Button */}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {p.color ? (
+                            renderColorBadge(p.color)
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Default</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                          <div className="font-semibold">{p.brand}</div>
+                          <div className="text-[11px] text-slate-400">
+                            {(p.category as any)?.name || 'General'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={`text-sm font-extrabold px-2 py-0.5 rounded ${
+                              p.isLowStock
+                                ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
+                                : 'text-emerald-500 font-bold'
+                            }`}
+                          >
+                            {p.availableForSale ?? 0} {p.unitOfMeasure || 'pcs'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {canManageCatalogue() ? (
                             <button
                               type="button"
                               onClick={() => handleOpenAdjust(p)}
-                              title="Click to edit stock count directly"
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-slate-900 dark:text-amber-400 font-extrabold text-xs transition-all cursor-pointer"
+                              title="Click to directly adjust counted on-hand stock"
+                              className="font-mono font-bold text-xs px-2.5 py-1 rounded-md border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 hover:border-amber-500 hover:text-amber-500 transition-colors"
                             >
-                              <span>{sq.onHand}</span>
-                              <Edit2 className="h-3 w-3 text-amber-500" />
+                              {sq.onHand} {p.unitOfMeasure || 'pcs'}
                             </button>
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium text-slate-600 dark:text-slate-400">
-                            {formatCurrency(p.purchaseCost)}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
-                            {formatCurrency(p.defaultSellingPrice)}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenAdjust(p)}
-                                title="Adjust Stock Count"
-                                className="h-7 px-2 text-xs font-semibold gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                              >
-                                <SlidersHorizontal className="h-3 w-3" />
-                                <span>Adjust</span>
-                              </Button>
-                              {canManageCatalogue() && (
-                                <>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleOpenEditProduct(p)}
-                                    title="Edit Product Details"
-                                    className="h-7 px-2 text-xs"
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDeleteProduct(p)}
-                                    title="Remove Product"
-                                    className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                          ) : (
+                            <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                              {sq.onHand} {p.unitOfMeasure || 'pcs'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                          {formatCurrency(p.purchaseCost || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                          {formatCurrency(p.defaultSellingPrice || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {canManageCatalogue() && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenEditProduct(p)}
+                                  className="h-7 w-7 p-0 text-slate-500 hover:text-amber-500"
+                                  title="Edit Product Details"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteProduct(p)}
+                                  className="h-7 w-7 p-0 text-slate-500 hover:text-red-500"
+                                  title="Deactivate / Delete"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Tab 2: Serialized Instruments */}
-      {activeTab === 'serialized' && (
-        <Card>
-          <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800/80">
-            <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search Asset ID, Serial No, Assigned Person..."
-                  value={serialSearch}
-                  onChange={(e) => setSerialSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-slate-800 dark:text-slate-200"
-              >
-                <option value="">All Lifecycle Statuses</option>
-                <option value="AVAILABLE">Available</option>
-                <option value="ISSUED_INTERNAL">Issued (Rentals)</option>
-                <option value="MAINTENANCE">Maintenance</option>
-                <option value="QUARANTINED">Quarantined</option>
-                <option value="SOLD">Sold</option>
-                <option value="RETIRED">Retired</option>
-              </select>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            <div className="responsive-table-wrapper">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Asset ID</th>
-                    <th className="py-3 px-4">Instrument / Product</th>
-                    <th className="py-3 px-4">Manufacturer Serial</th>
-                    <th className="py-3 px-4">Lifecycle Status</th>
-                    <th className="py-3 px-4">Condition</th>
-                    <th className="py-3 px-4">Assigned To</th>
-                    <th className="py-3 px-4">Location</th>
-                    <th className="py-3 px-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
-                        Loading serialized assets...
-                      </td>
-                    </tr>
-                  ) : serializedItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-500">
-                        No serialized instruments found.
-                      </td>
-                    </tr>
-                  ) : (
-                    serializedItems.map((item) => {
-                      const statusVariant =
-                        item.status === 'AVAILABLE'
-                          ? 'success'
-                          : item.status === 'ISSUED_INTERNAL'
-                          ? 'info'
-                          : item.status === 'MAINTENANCE'
-                          ? 'warning'
-                          : item.status === 'SOLD'
-                          ? 'secondary'
-                          : 'danger';
-
-                      return (
-                        <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-4 font-mono font-bold text-amber-500">{item.assetId}</td>
-                          <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                            {(item.product as any)?.name || 'Instrument'}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-slate-500">
-                            {item.manufacturerSerial || '—'}
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge variant={statusVariant as any}>{item.status}</Badge>
-                          </td>
-                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">
-                            {item.condition}
-                          </td>
-                          <td className="py-3 px-4 text-slate-500">
-                            {item.assignedTo || 'Unassigned / In Storage'}
-                          </td>
-                          <td className="py-3 px-4 text-slate-500">
-                            {(item.location as any)?.name || 'Central Store'}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenHistory(item.assetId)}
-                              className="h-7 text-xs gap-1"
-                            >
-                              <History className="h-3 w-3" />
-                              <span>Ledger</span>
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* QUICK STOCK ADJUST MODAL (DIRECT COUNT EDIT) */}
+      {/* QUICK STOCK ADJUST MODAL */}
       <Modal
         isOpen={!!adjustProduct}
         onClose={() => setAdjustProduct(null)}
-        title={`Adjust Stock Count — ${adjustProduct?.name}`}
-        description={`Update physical on-hand quantity for SKU: ${adjustProduct?.sku}. Changes are audited.`}
+        title={`Adjust Stock — ${adjustProduct?.name || ''}`}
+        description="Audit count verification. Updating here directly adjusts the available on-hand balance."
         maxWidth="md"
       >
         <form onSubmit={handleSaveAdjust} className="space-y-4">
           {adjustError && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
               {adjustError}
             </div>
           )}
 
-          <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 flex justify-between items-center text-xs">
-            <span className="text-slate-500">Current On Hand Count:</span>
-            <span className="font-extrabold text-base text-slate-900 dark:text-white">
-              {adjustProduct?.stockQuantity?.onHand ?? 0} {adjustProduct?.unitOfMeasure}
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              New Verified Stock Count *
-            </label>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setAdjustQuantity(Math.max(0, adjustQuantity - 1))}
-                className="w-10 h-10 rounded border border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300"
-              >
-                -
-              </button>
-              <input
-                type="number"
-                min="0"
-                required
-                value={adjustQuantity}
-                onChange={(e) => setAdjustQuantity(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                className="flex-1 h-10 px-3 text-center text-lg font-extrabold rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-500"
-              />
-              <button
-                type="button"
-                onClick={() => setAdjustQuantity(adjustQuantity + 1)}
-                className="w-10 h-10 rounded border border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300"
-              >
-                +
-              </button>
+          <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs space-y-1">
+            <div className="text-slate-500">
+              SKU: <span className="font-mono font-bold text-amber-500">{adjustProduct?.sku}</span>
+            </div>
+            <div className="text-slate-500">
+              Current Registered On-Hand:{' '}
+              <span className="font-bold text-slate-900 dark:text-white">
+                {adjustProduct?.stockQuantity?.onHand ?? 0} {adjustProduct?.unitOfMeasure || 'pcs'}
+              </span>
             </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Adjustment Reason
+              Correct Counted Stock On Hand *
             </label>
             <input
-              type="text"
+              type="number"
+              min="0"
               required
-              value={adjustReason}
-              onChange={(e) => setAdjustReason(e.target.value)}
-              className="w-full h-10 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+              value={adjustQuantity}
+              onChange={(e) => setAdjustQuantity(parseInt(e.target.value, 10) || 0)}
+              className="w-full h-11 px-3 text-lg font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-center"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <Input
+            label="Adjustment Reason / Note"
+            placeholder="e.g. Physical inventory audit, count discrepancy correction"
+            value={adjustReason}
+            onChange={(e) => setAdjustReason(e.target.value)}
+          />
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Button type="button" variant="outline" onClick={() => setAdjustProduct(null)}>
               Cancel
             </Button>
@@ -934,67 +654,49 @@ export default function InventoryPage() {
         </form>
       </Modal>
 
-      {/* EDIT PRODUCT DETAILS MODAL */}
+      {/* EDIT PRODUCT MODAL */}
       <Modal
         isOpen={!!editingProduct}
         onClose={() => setEditingProduct(null)}
-        title={`Edit Product — ${editingProduct?.name}`}
-        description="Update pricing, supplier, brand, or product catalogue specifications."
+        title={`Edit Product — ${editingProduct?.name || ''}`}
+        description="Update specifications, cost, selling price, and HSN code."
         maxWidth="2xl"
       >
         <form onSubmit={handleSaveEditProduct} className="space-y-5">
           {editError && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
               {editError}
             </div>
           )}
 
-          {/* Section 1: Identification */}
+          {/* Section 1: Identity */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              <Tag className="h-4 w-4 text-amber-500" />
-              <span>Product Identity</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Product Name *"
+                required
+                value={editProdName}
+                onChange={(e) => setEditProdName(e.target.value)}
+              />
+              <Input
+                label="Brand *"
+                required
+                value={editProdBrand}
+                onChange={(e) => setEditProdBrand(e.target.value)}
+              />
             </div>
 
-            <Input
-              label="Product Name *"
-              required
-              value={editProdName}
-              onChange={(e) => setEditProdName(e.target.value)}
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input
+                label="Model / Series"
+                placeholder="e.g. F310, CT-X700"
+                value={editProdModel}
+                onChange={(e) => setEditProdModel(e.target.value)}
+              />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Brand / Manufacturer
-                </label>
-                <input
-                  type="text"
-                  value={editProdBrand}
-                  onChange={(e) => setEditProdBrand(e.target.value)}
-                  placeholder="e.g. Stereobliss, Yamaha, Fender"
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Model / Series Name
-                </label>
-                <input
-                  type="text"
-                  value={editProdModel}
-                  onChange={(e) => setEditProdModel(e.target.value)}
-                  placeholder="e.g. F310, CT-X700, EXL110"
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Category
+                  Category *
                 </label>
                 <select
                   value={editProdCategory}
@@ -1069,33 +771,6 @@ export default function InventoryPage() {
                 onChange={(e) => setEditProdThreshold(e.target.value)}
               />
             </div>
-
-            {/* Edit Margin Widget */}
-            {(() => {
-              const c = parseFloat(editProdCost) || 0;
-              const p = parseFloat(editProdPrice) || 0;
-              const profit = p - c;
-              const margin = p > 0 ? ((profit / p) * 100).toFixed(1) : '0.0';
-              const markup = c > 0 ? ((profit / c) * 100).toFixed(1) : '0.0';
-              return (
-                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs">
-                  <div>
-                    <span className="text-slate-500 block text-[11px]">Unit Gross Profit</span>
-                    <span className={cn('font-bold text-sm', profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
-                      {profit >= 0 ? `+${formatCurrency(profit)}` : `-${formatCurrency(Math.abs(profit))}`}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block text-[11px]">Profit Margin</span>
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">{margin}%</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block text-[11px]">Cost Markup</span>
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">{markup}%</span>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
           {/* Section 3: Attributes & Supplier */}
@@ -1133,24 +808,6 @@ export default function InventoryPage() {
                   style={getColorStyle(editProdColor)}
                 />
               </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {COLOR_PRESETS.map((cp) => (
-                  <button
-                    key={cp.name}
-                    type="button"
-                    onClick={() => setEditProdColor(cp.name)}
-                    className={cn(
-                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer',
-                      editProdColor.toLowerCase() === cp.name.toLowerCase()
-                        ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ring-1 ring-amber-500'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:border-slate-400'
-                    )}
-                  >
-                    <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/15 shrink-0" style={{ background: cp.hex }} />
-                    <span>{cp.name}</span>
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -1176,46 +833,41 @@ export default function InventoryPage() {
             <Button type="button" variant="outline" onClick={() => setEditingProduct(null)}>
               Cancel
             </Button>
-            <Button type="submit" variant="default" isLoading={isEditingSaving} className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950">
-              Save Changes
+            <Button
+              type="submit"
+              variant="default"
+              isLoading={isEditingSaving}
+              className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950"
+            >
+              Update Product Details
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* ADD NEW PRODUCT MODAL — PROFESSIONAL MULTI-SECTION REDESIGN */}
+      {/* ADD NEW PRODUCT MODAL */}
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Register Product & Opening Inventory"
-        description="Add a new musical instrument or retail accessory with live profit margins and initial stock balance."
+        title="Add New Product to Catalogue"
+        description="Register a musical instrument, accessory, or consumable into your master catalogue."
         maxWidth="2xl"
       >
-        <form onSubmit={handleCreateProduct} className="space-y-5">
+        <form onSubmit={handleCreateProduct} className="space-y-6">
           {formError && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3.5 text-xs font-semibold text-red-500 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{formError}</span>
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
+              {formError}
             </div>
           )}
 
-          {/* SECTION 1: Product Identification */}
+          {/* SECTION 1: Core Product Identity */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              <Tag className="h-4 w-4 text-amber-500" />
-              <span>1. Product Identity & Classification</span>
+              <Boxes className="h-4 w-4 text-amber-500" />
+              <span>1. Core Product Specifications</span>
             </div>
 
-            <Input
-              label="Product Name *"
-              required
-              placeholder="e.g. Yamaha F310 Acoustic Guitar, Natural Finish"
-              value={newProdName}
-              onChange={(e) => setNewProdName(e.target.value)}
-            />
-
-            {/* Brand with Quick Selection Chips */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Brand / Manufacturer *
@@ -1248,6 +900,14 @@ export default function InventoryPage() {
                 ))}
               </div>
             </div>
+
+            <Input
+              label="Product Title / Name *"
+              required
+              placeholder="e.g. Stereobliss Acoustic Dreadnought Guitar"
+              value={newProdName}
+              onChange={(e) => setNewProdName(e.target.value)}
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -1313,155 +973,11 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* SECTION 2: Inventory Policy & Opening Stock */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                <Boxes className="h-4 w-4 text-amber-500" />
-                <span>2. Inventory Policy & Opening Stock</span>
-              </div>
-              <span className="text-[11px] font-semibold text-slate-500">
-                Controls physical asset serialization
-              </span>
-            </div>
-
-            {/* Tracking Mode Radio Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setNewProdTrackingMode('SERIALIZED')}
-                className={cn(
-                  'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                  newProdTrackingMode === 'SERIALIZED'
-                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 ring-2 ring-amber-500/40 shadow-sm'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700'
-                )}
-              >
-                <div className={cn(
-                  'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold',
-                  newProdTrackingMode === 'SERIALIZED' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                )}>
-                  🎸
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">
-                      Serialized Instrument / Asset
-                    </span>
-                    {newProdTrackingMode === 'SERIALIZED' && (
-                      <Check className="h-4 w-4 text-amber-500" />
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Track individual instruments with unique serial numbers, AST asset tags, warranty, and condition. Ideal for Guitars, Keyboards, Drums, Amps, Microphones.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setNewProdTrackingMode('QUANTITY')}
-                className={cn(
-                  'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                  newProdTrackingMode === 'QUANTITY'
-                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 ring-2 ring-amber-500/40 shadow-sm'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700'
-                )}
-              >
-                <div className={cn(
-                  'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold',
-                  newProdTrackingMode === 'QUANTITY' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                )}>
-                  📦
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">
-                      Bulk Quantity (Packs/Pieces)
-                    </span>
-                    {newProdTrackingMode === 'QUANTITY' && (
-                      <Check className="h-4 w-4 text-amber-500" />
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Track aggregate stock counts on hand. Ideal for consumables and accessories: Strings, Picks, Cables, Straps, Adaptors, Drumsticks.
-                  </p>
-                </div>
-              </button>
-            </div>
-
-            {/* Opening Stock Intake Sub-panel */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Initial Opening Stock (Units)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newProdInitialStock}
-                    onChange={(e) => setNewProdInitialStock(e.target.value)}
-                    placeholder="0"
-                    className="w-full h-10 px-3 text-sm font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Directly credits your store inventory and updates dashboard valuation.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Storage Outlet / Location
-                  </label>
-                  <select
-                    value={newProdLocation}
-                    onChange={(e) => setNewProdLocation(e.target.value)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc._id} value={loc._id}>
-                        {loc.name} ({loc.code})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Default destination branch for initial inventory intake.
-                  </p>
-                </div>
-              </div>
-
-              {/* Serial Numbers Input for Serialized Items */}
-              {newProdTrackingMode === 'SERIALIZED' && (
-                <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Manufacturer Serial Numbers (Optional)
-                    </label>
-                    <span className="text-[11px] text-amber-500 font-medium">
-                      AST Asset IDs auto-generated
-                    </span>
-                  </div>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. SN-YAM-2026-001, SN-YAM-2026-002 (separate with commas or newlines)"
-                    value={newProdSerials}
-                    onChange={(e) => setNewProdSerials(e.target.value)}
-                    className="w-full p-2.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100"
-                  />
-                  <p className="text-[11px] text-slate-400">
-                    Leave blank or partially filled to let the system generate sequential tags (e.g. AST-0001, AST-0002).
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* SECTION 3: Pricing & Live Profitability Intelligence */}
+          {/* SECTION 2: Pricing, Margins & GST Compliance */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
               <Calculator className="h-4 w-4 text-emerald-500" />
-              <span>3. Pricing & Profitability Calculator</span>
+              <span>2. Pricing & GST Compliance</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1498,7 +1014,7 @@ export default function InventoryPage() {
                   className="w-full h-10 px-3 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-600 dark:text-amber-400"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  GST HSN Code (Default: 9202)
+                  GST Code for invoices (Default: 9202)
                 </p>
               </div>
             </div>
@@ -1507,12 +1023,9 @@ export default function InventoryPage() {
             {(() => {
               const cost = parseFloat(newProdCost) || 0;
               const price = parseFloat(newProdPrice) || 0;
-              const initUnits = Math.max(0, parseInt(newProdInitialStock, 10) || 0);
               const profit = price - cost;
               const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : '0.0';
               const markup = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0.0';
-              const totalCostVal = initUnits * cost;
-              const totalRetailVal = initUnits * price;
               const isProfitable = profit > 0;
               const isNegative = price > 0 && cost > 0 && profit < 0;
 
@@ -1520,7 +1033,7 @@ export default function InventoryPage() {
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Live Profitability Analysis
+                      Live Profitability Preview
                     </span>
                     <span
                       className={cn(
@@ -1536,7 +1049,7 @@ export default function InventoryPage() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="grid grid-cols-3 gap-3 text-xs">
                     <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
                       <span className="text-slate-500 block text-[11px]">Unit Gross Profit</span>
                       <span className={cn('text-base font-extrabold', profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
@@ -1552,16 +1065,9 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
-                      <span className="text-slate-500 block text-[11px]">Opening Valuation (Cost)</span>
+                      <span className="text-slate-500 block text-[11px]">Cost Markup</span>
                       <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
-                        {formatCurrency(totalCostVal)}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
-                      <span className="text-slate-500 block text-[11px]">Potential Retail Value</span>
-                      <span className="text-base font-extrabold text-slate-900 dark:text-white">
-                        {formatCurrency(totalRetailVal)}
+                        {markup}%
                       </span>
                     </div>
                   </div>
@@ -1570,11 +1076,11 @@ export default function InventoryPage() {
             })()}
           </div>
 
-          {/* SECTION 4: Attributes & Supplier */}
+          {/* SECTION 3: Attributes & Supplier */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
               <Palette className="h-4 w-4 text-amber-500" />
-              <span>4. Product Attributes & Supplier</span>
+              <span>3. Product Attributes & Supplier</span>
             </div>
 
             {/* Product Colour / Finish */}
@@ -1686,27 +1192,31 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Sticky Modal Action Footer */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <div className="text-xs text-slate-500 font-medium">
-              Mode: <strong className="text-amber-500">{newProdTrackingMode}</strong> • Opening Stock:{' '}
-              <strong className="text-slate-900 dark:text-white">{newProdInitialStock || 0} units</strong>
+          {/* Streamlined Inventory Explanation Notice */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 text-xs text-slate-600 dark:text-slate-400">
+            <Info className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                Single Unified Stock Workflow:
+              </span>{' '}
+              Products are registered into the master catalogue with 0 initial units. Physical stock is credited directly by recording incoming shipments with Challan / Bill No. under <strong>Receive Stock</strong>.
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="default"
-                isLoading={isSaving}
-                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md gap-1.5"
-              >
-                <PackagePlus className="h-4 w-4" />
-                <span>Save & Register Product</span>
-              </Button>
-            </div>
+          {/* Sticky Modal Action Footer */}
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="default"
+              isLoading={isSaving}
+              className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md gap-1.5"
+            >
+              <PackagePlus className="h-4 w-4" />
+              <span>Save & Register Product</span>
+            </Button>
           </div>
         </form>
       </Modal>
@@ -1743,70 +1253,6 @@ export default function InventoryPage() {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      {/* Serialized Item Transaction History Modal */}
-      <Modal
-        isOpen={!!historyItem}
-        onClose={() => setHistoryItem(null)}
-        title={`Audit History — Asset ${historyItem?.item?.assetId}`}
-        description={`${historyItem?.item?.product?.name || ''} (Serial: ${historyItem?.item?.manufacturerSerial || 'N/A'})`}
-        maxWidth="2xl"
-      >
-        {historyItem && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs">
-              <div>
-                <span className="text-slate-500">Current Status:</span>{' '}
-                <span className="font-bold text-amber-500">{historyItem.item.status}</span>
-              </div>
-              <div>
-                <span className="text-slate-500">Condition:</span>{' '}
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {historyItem.item.condition}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500">Cost:</span>{' '}
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {formatCurrency(historyItem.item.unitCost)}
-                </span>
-              </div>
-            </div>
-
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Movement History Ledger ({historyItem.movements?.length || 0})
-            </h4>
-
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {historyItem.movements && historyItem.movements.length > 0 ? (
-                historyItem.movements.map((m: any) => (
-                  <div
-                    key={m._id}
-                    className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-xs space-y-1 bg-white dark:bg-slate-950"
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-amber-500">{m.transactionRef}</span>
-                      <span className="text-slate-400">{formatDate(m.createdAt)}</span>
-                    </div>
-                    <div className="text-slate-700 dark:text-slate-300 font-medium">{m.reason}</div>
-                    <div className="flex gap-4 text-[11px] text-slate-500">
-                      <span>Type: {m.movementType}</span>
-                      {m.sourceStatus && m.destinationStatus && (
-                        <span>
-                          Status: {m.sourceStatus} → {m.destinationStatus}
-                        </span>
-                      )}
-                      <span>By: {m.performedBy?.name || 'System'}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500">No historical movements on record.</p>
-              )}
-            </div>
-          </div>
-        )}
       </Modal>
     </div>
   );

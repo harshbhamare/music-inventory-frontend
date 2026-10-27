@@ -546,33 +546,11 @@ export default function ReturnsMaintenancePage() {
                   <option value="">Select a product...</option>
                   {products.map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name} ({p.sku}) — On Hand: {p.stockQuantity?.onHand} ({p.trackingMode})
+                      {p.name} ({p.sku}) — On Hand: {p.stockQuantity?.onHand}
                     </option>
                   ))}
                 </select>
               </div>
-
-              {selectedProduct?.trackingMode === 'SERIALIZED' && (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-amber-500">
-                    Select Specific Serialized Instrument *
-                  </label>
-                  <select
-                    value={adjSerialId}
-                    onChange={(e) => setAdjSerialId(e.target.value)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-amber-500 font-bold"
-                  >
-                    <option value="">Select Serialized Asset...</option>
-                    {serializedItems
-                      .filter((su) => (su.product?._id || su.product) === adjProductId)
-                      .map((su) => (
-                        <option key={su._id} value={su._id}>
-                          {su.assetId} — Status: {su.status} (Serial: {su.manufacturerSerial || 'N/A'})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              )}
 
               <Input
                 label="Quantity Delta (e.g. -1 for loss, +2 for found stock) *"

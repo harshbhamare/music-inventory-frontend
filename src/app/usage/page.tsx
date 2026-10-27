@@ -220,11 +220,6 @@ export default function UsagePage() {
     try {
       if (!selectedProduct) throw new Error('Please select an instrument or product.');
 
-      const isSerialized = selectedProduct.trackingMode === 'SERIALIZED';
-      if (isSerialized && !selectedSerialId) {
-        throw new Error('Please select an available serialized instrument unit.');
-      }
-
       await api.post('/usage', {
         purpose,
         assignedPerson: assignedPerson.trim(),
@@ -241,8 +236,7 @@ export default function UsagePage() {
         items: [
           {
             product: selectedProduct._id,
-            quantityIssued: isSerialized ? 1 : issueQuantity,
-            serializedItemId: isSerialized ? selectedSerialId : undefined,
+            quantityIssued: issueQuantity,
             issueCondition,
           },
         ],
@@ -1020,34 +1014,11 @@ export default function UsagePage() {
                   .filter((p) => p.availableForSale > 0)
                   .map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — Available: {p.availableForSale} units ({p.trackingMode})
+                      {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — Available: {p.availableForSale} units
                     </option>
                   ))}
               </select>
             </div>
-
-            {selectedProduct && selectedProduct.trackingMode === 'SERIALIZED' && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-amber-500">
-                  Select Specific Serialized Instrument *
-                </label>
-                <select
-                  required
-                  value={selectedSerialId}
-                  onChange={(e) => setSelectedSerialId(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-amber-500"
-                >
-                  <option value="">Choose Asset ID...</option>
-                  {availableSerials
-                    .filter((su) => (su.product?._id || su.product) === selectedProduct._id)
-                    .map((su) => (
-                      <option key={su._id} value={su._id}>
-                        {su.assetId} — Condition: {su.condition} (Serial: {su.manufacturerSerial || 'N/A'})
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
           </div>
 
           {/* Included Accessories & Detailing Checklist */}
