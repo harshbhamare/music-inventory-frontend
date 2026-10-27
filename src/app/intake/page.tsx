@@ -47,6 +47,7 @@ interface ReceiveItemLine {
   product: string;
   quantity: number;
   unitCost: number;
+  sellingPrice: number;
 }
 
 export default function IntakePage() {
@@ -68,7 +69,7 @@ export default function IntakePage() {
   const [receiveInvoiceRef, setReceiveInvoiceRef] = useState('');
   const [receiveNotes, setReceiveNotes] = useState('');
   const [receiveLines, setReceiveLines] = useState<ReceiveItemLine[]>([
-    { product: '', quantity: 1, unitCost: 0 },
+    { product: '', quantity: 1, unitCost: 0, sellingPrice: 0 },
   ]);
   const [receiveStockError, setReceiveStockError] = useState('');
   const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
@@ -81,8 +82,6 @@ export default function IntakePage() {
   const [newProdModel, setNewProdModel] = useState('');
   const [newProdColor, setNewProdColor] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
-  const [newProdCost, setNewProdCost] = useState('');
-  const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdHsn, setNewProdHsn] = useState('9202');
   const [quickProdError, setQuickProdError] = useState('');
   const [isSavingQuickProd, setIsSavingQuickProd] = useState(false);
@@ -154,7 +153,7 @@ export default function IntakePage() {
     if (locations.length > 0 && !receiveLocation) {
       setReceiveLocation(locations[0]._id);
     }
-    setReceiveLines([{ product: '', quantity: 1, unitCost: 0 }]);
+    setReceiveLines([{ product: '', quantity: 1, unitCost: 0, sellingPrice: 0 }]);
     setIsReceiveStockModalOpen(true);
   };
 
@@ -162,7 +161,7 @@ export default function IntakePage() {
   const handleAddReceiveLine = () => {
     setReceiveLines((prev) => [
       ...prev,
-      { product: '', quantity: 1, unitCost: 0 },
+      { product: '', quantity: 1, unitCost: 0, sellingPrice: 0 },
     ]);
   };
 
@@ -180,6 +179,7 @@ export default function IntakePage() {
       line.product = productId;
       if (prod) {
         line.unitCost = prod.purchaseCost || 0;
+        line.sellingPrice = prod.defaultSellingPrice || 0;
         // Auto-select supplier if not selected yet and product has a preferred supplier
         if (prod.supplier && !receiveSupplier) {
           const supId = typeof prod.supplier === 'string' ? prod.supplier : (prod.supplier as any)._id;
@@ -204,6 +204,14 @@ export default function IntakePage() {
     setReceiveLines((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], unitCost: Math.max(0, cost) };
+      return updated;
+    });
+  };
+
+  const handleSellingPriceChange = (index: number, price: number) => {
+    setReceiveLines((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], sellingPrice: Math.max(0, price) };
       return updated;
     });
   };
@@ -235,13 +243,14 @@ export default function IntakePage() {
           product: l.product,
           quantity: l.quantity,
           unitCost: l.unitCost,
+          sellingPrice: l.sellingPrice,
         })),
       });
 
       setIsReceiveStockModalOpen(false);
       setReceiveInvoiceRef('');
       setReceiveNotes('');
-      setReceiveLines([{ product: '', quantity: 1, unitCost: 0 }]);
+      setReceiveLines([{ product: '', quantity: 1, unitCost: 0, sellingPrice: 0 }]);
       setActiveTab('receipts');
       fetchData();
     } catch (err: any) {
@@ -258,8 +267,6 @@ export default function IntakePage() {
     setNewProdBrand('Stereobliss');
     setNewProdModel('');
     setNewProdColor('');
-    setNewProdCost('');
-    setNewProdPrice('');
     setNewProdHsn('9202');
     if (categories.length > 0 && !newProdCategory) {
       setNewProdCategory(categories[0]._id);
@@ -268,7 +275,7 @@ export default function IntakePage() {
     setIsQuickProductOpen(true);
   };
 
-  // Save Quick Add Product
+  // Save Quick Add Product (Pure specs, pricing will be entered on the Challan line item)
   const handleSaveQuickProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProdName.trim()) return;
@@ -283,11 +290,11 @@ export default function IntakePage() {
         color: newProdColor.trim() || undefined,
         category: newProdCategory || categories[0]?._id,
         trackingMode: 'QUANTITY',
-        purchaseCost: parseFloat(newProdCost) || 0,
-        defaultSellingPrice: parseFloat(newProdPrice) || 0,
+        purchaseCost: 0,
+        defaultSellingPrice: 0,
         hsnCode: newProdHsn.trim() || '9202',
         supplier: receiveSupplier || undefined,
-        initialStock: 0, // Stock will be credited via this intake Challan!
+        initialStock: 0,
       });
 
       const created = res.product;
@@ -764,7 +771,7 @@ export default function IntakePage() {
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                       {/* Product Selector with inline "+ New Product" button */}
-                      <div className="sm:col-span-6 space-y-1">
+                      <div className="sm:col-span-4 space-y-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
                             Product #{idx + 1} *
@@ -775,7 +782,7 @@ export default function IntakePage() {
                             className="text-[11px] font-bold text-amber-500 hover:text-amber-600 flex items-center gap-1 cursor-pointer"
                           >
                             <Plus className="h-3 w-3" />
-                            <span>+ Create New Product Details</span>
+                            <span>+ New Product Specs</span>
                           </button>
                         </div>
 
@@ -809,10 +816,10 @@ export default function IntakePage() {
                         />
                       </div>
 
-                      {/* Unit Cost */}
+                      {/* Unit Purchase Cost */}
                       <div className="sm:col-span-2 space-y-1">
                         <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                          Unit Cost (₹) *
+                          Purchase Cost (₹) *
                         </label>
                         <input
                           type="number"
@@ -825,10 +832,27 @@ export default function IntakePage() {
                         />
                       </div>
 
+                      {/* Selling Price (Retail MRP) */}
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          Selling Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          placeholder="Retail MRP"
+                          value={line.sellingPrice}
+                          onChange={(e) => handleSellingPriceChange(idx, parseFloat(e.target.value) || 0)}
+                          className="w-full h-9 px-2 text-xs font-bold text-right rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-emerald-600 dark:text-emerald-400"
+                        />
+                      </div>
+
                       {/* Line Total & Remove */}
                       <div className="sm:col-span-2 flex items-center justify-between gap-2">
                         <div className="text-right flex-1">
-                          <span className="text-[10px] text-slate-400 block">Total</span>
+                          <span className="text-[10px] text-slate-400 block">Line Total</span>
                           <span className="text-xs font-extrabold text-slate-900 dark:text-white">
                             {formatCurrency(lineTotal)}
                           </span>
@@ -845,6 +869,54 @@ export default function IntakePage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Live Pricing & Profit Margin Preview Pill */}
+                    {(() => {
+                      const cost = line.unitCost || 0;
+                      const price = line.sellingPrice || 0;
+                      const profit = price - cost;
+                      const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : '0.0';
+                      const markup = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0.0';
+                      const isProfitable = profit > 0;
+                      const isNegative = price > 0 && cost > 0 && profit < 0;
+
+                      return (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                          <div className="flex items-center gap-3">
+                            <span className="text-slate-500">
+                              Unit Profit:{' '}
+                              <strong className={profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                                {profit >= 0 ? `+${formatCurrency(profit)}` : `-${formatCurrency(Math.abs(profit))}`}
+                              </strong>
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-500">
+                              Margin: <strong className="text-slate-800 dark:text-slate-200">{margin}%</strong>
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-500">
+                              Markup: <strong className="text-amber-500">{markup}%</strong>
+                            </span>
+                          </div>
+                          <div>
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider',
+                                isNegative
+                                  ? 'bg-red-500/10 text-red-500'
+                                  : isProfitable
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : price === 0
+                                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                              )}
+                            >
+                              {isNegative ? 'Loss Alert' : isProfitable ? `${margin}% Margin` : price === 0 ? 'Set Selling Price' : 'Break-Even'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -905,7 +977,7 @@ export default function IntakePage() {
           )}
 
           <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5 text-xs text-slate-600 dark:text-slate-400">
-            <strong className="text-amber-600 dark:text-amber-400">Single Intake Workflow:</strong> This product will be created in the catalogue with 0 initial units. The quantity being received on Challan {receiveInvoiceRef ? `"${receiveInvoiceRef}"` : ''} will be credited directly upon confirmation.
+            <strong className="text-amber-600 dark:text-amber-400">Specifications-Only Definition:</strong> Define product details and HSN tax code here. Purchase cost, retail selling price, and received quantity are entered directly on the Challan line item.
           </div>
 
           <Input
@@ -989,27 +1061,6 @@ export default function IntakePage() {
                 className="w-full h-10 px-3 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-500"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Purchase Cost (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 8500"
-              value={newProdCost}
-              onChange={(e) => setNewProdCost(e.target.value)}
-            />
-            <Input
-              label="Selling Price (₹) *"
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 11000"
-              value={newProdPrice}
-              onChange={(e) => setNewProdPrice(e.target.value)}
-            />
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">

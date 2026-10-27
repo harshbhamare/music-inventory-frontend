@@ -332,8 +332,8 @@ export default function InventoryPage() {
         sku: newProdSku.trim().toUpperCase() || undefined,
         category: newProdCategory || categories[0]?._id,
         trackingMode: 'QUANTITY',
-        purchaseCost: parseFloat(newProdCost) || 0,
-        defaultSellingPrice: parseFloat(newProdPrice) || 0,
+        purchaseCost: 0,
+        defaultSellingPrice: 0,
         supplier: newProdSupplier || undefined,
         minStockThreshold: parseInt(newProdThreshold, 10) || 5,
         unitOfMeasure: newProdUnit.trim() || 'pcs',
@@ -345,8 +345,7 @@ export default function InventoryPage() {
       setNewProdName('');
       setNewProdColor('');
       setNewProdSku('');
-      setNewProdCost('');
-      setNewProdPrice('');
+      setNewProdModel('');
       fetchProducts();
     } catch (err: any) {
       setFormError(err.message || 'Failed to create product.');
@@ -909,14 +908,14 @@ export default function InventoryPage() {
               onChange={(e) => setNewProdName(e.target.value)}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
                   Model / Series Name
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. F310, CT-X700, EXL110"
+                  placeholder="e.g. F310, CT-X700"
                   value={newProdModel}
                   onChange={(e) => setNewProdModel(e.target.value)}
                   className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
@@ -970,37 +969,8 @@ export default function InventoryPage() {
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* SECTION 2: Pricing, Margins & GST Compliance */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              <Calculator className="h-4 w-4 text-emerald-500" />
-              <span>2. Pricing & GST Compliance</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Purchase Cost per Unit (₹) *"
-                type="number"
-                min="0"
-                required
-                placeholder="e.g. 9200"
-                value={newProdCost}
-                onChange={(e) => setNewProdCost(e.target.value)}
-              />
-
-              <Input
-                label="Default Selling Price (₹) *"
-                type="number"
-                min="0"
-                required
-                placeholder="e.g. 11500"
-                value={newProdPrice}
-                onChange={(e) => setNewProdPrice(e.target.value)}
-              />
-
+              {/* HSN / SAC Tax Code placed in Specs */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
                   HSN / SAC Code *
@@ -1013,74 +983,15 @@ export default function InventoryPage() {
                   onChange={(e) => setNewProdHsn(e.target.value)}
                   className="w-full h-10 px-3 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-600 dark:text-amber-400"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  GST Code for invoices (Default: 9202)
-                </p>
               </div>
             </div>
-
-            {/* Live Profit Margin Intelligence Card */}
-            {(() => {
-              const cost = parseFloat(newProdCost) || 0;
-              const price = parseFloat(newProdPrice) || 0;
-              const profit = price - cost;
-              const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : '0.0';
-              const markup = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0.0';
-              const isProfitable = profit > 0;
-              const isNegative = price > 0 && cost > 0 && profit < 0;
-
-              return (
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Live Profitability Preview
-                    </span>
-                    <span
-                      className={cn(
-                        'px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wider',
-                        isNegative
-                          ? 'bg-red-500/10 text-red-500'
-                          : isProfitable
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                      )}
-                    >
-                      {isNegative ? 'Loss Alert' : isProfitable ? `${margin}% Margin` : 'Break-Even'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3 text-xs">
-                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
-                      <span className="text-slate-500 block text-[11px]">Unit Gross Profit</span>
-                      <span className={cn('text-base font-extrabold', profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
-                        {profit >= 0 ? `+${formatCurrency(profit)}` : `-${formatCurrency(Math.abs(profit))}`}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
-                      <span className="text-slate-500 block text-[11px]">Profit Margin</span>
-                      <span className="text-base font-extrabold text-slate-900 dark:text-white">
-                        {margin}%
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80">
-                      <span className="text-slate-500 block text-[11px]">Cost Markup</span>
-                      <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
-                        {markup}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
-          {/* SECTION 3: Attributes & Supplier */}
+          {/* SECTION 2: Attributes & Supplier */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
               <Palette className="h-4 w-4 text-amber-500" />
-              <span>3. Product Attributes & Supplier</span>
+              <span>2. Product Attributes & Supplier</span>
             </div>
 
             {/* Product Colour / Finish */}
@@ -1192,14 +1103,14 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Streamlined Inventory Explanation Notice */}
+          {/* Specifications-Only Inventory Explanation Notice */}
           <div className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 text-xs text-slate-600 dark:text-slate-400">
             <Info className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold text-slate-800 dark:text-slate-200">
-                Single Unified Stock Workflow:
+                Specifications-Only Catalogue:
               </span>{' '}
-              Products are registered into the master catalogue with 0 initial units. Physical stock is credited directly by recording incoming shipments with Challan / Bill No. under <strong>Receive Stock</strong>.
+              Register product specifications and HSN code here. Purchase costs, selling prices, and stock balances are managed dynamically on incoming vendor deliveries under <strong>Receive Stock</strong>.
             </div>
           </div>
 
