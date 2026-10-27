@@ -579,8 +579,8 @@ export default function SalesPage() {
                           </button>
                         </div>
 
-                        {/* Pricing, Quantity & HSN controls */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {/* Pricing & Quantity controls */}
+                        <div className="grid grid-cols-3 gap-2">
                           <div>
                             <label className="text-[10px] text-slate-500">Quantity</label>
                             <input
@@ -630,19 +630,6 @@ export default function SalesPage() {
                                 )
                               }
                               className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] text-slate-500">HSN Code</label>
-                            <input
-                              type="text"
-                              value={item.hsnCode}
-                              onChange={(e) =>
-                                handleCartItemChange(idx, 'hsnCode', e.target.value)
-                              }
-                              placeholder="9202"
-                              className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-mono font-bold text-amber-500 text-xs"
                             />
                           </div>
                         </div>

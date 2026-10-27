@@ -168,6 +168,7 @@ export default function InventoryPage() {
   const [editProdCost, setEditProdCost] = useState('');
   const [editProdPrice, setEditProdPrice] = useState('');
   const [editProdThreshold, setEditProdThreshold] = useState('5');
+  const [editProdHsn, setEditProdHsn] = useState('9202');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -301,6 +302,7 @@ export default function InventoryPage() {
     setEditProdCost(String(p.purchaseCost || ''));
     setEditProdPrice(String(p.defaultSellingPrice || ''));
     setEditProdThreshold(String(p.minStockThreshold || 5));
+    setEditProdHsn(p.hsnCode || '9202');
     setEditError('');
   };
 
@@ -321,6 +323,7 @@ export default function InventoryPage() {
         purchaseCost: parseFloat(editProdCost) || 0,
         defaultSellingPrice: parseFloat(editProdPrice) || 0,
         minStockThreshold: parseInt(editProdThreshold, 10) || 5,
+        hsnCode: editProdHsn.trim() || '9202',
       });
       setEditingProduct(null);
       fetchProducts();
@@ -627,7 +630,12 @@ export default function InventoryPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="font-mono text-[11px] text-amber-500">{p.sku}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="font-mono text-[11px] text-amber-500 font-bold">{p.sku}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
+                                HSN: {p.hsnCode || '9202'}
+                              </span>
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {p.color ? (
@@ -1023,7 +1031,7 @@ export default function InventoryPage() {
               <span>Pricing & Profit Margins</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <Input
                 label="Purchase Cost (₹) *"
                 type="number"
@@ -1040,6 +1048,19 @@ export default function InventoryPage() {
                 value={editProdPrice}
                 onChange={(e) => setEditProdPrice(e.target.value)}
               />
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  HSN / SAC Code *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 9202"
+                  value={editProdHsn}
+                  onChange={(e) => setEditProdHsn(e.target.value)}
+                  className="w-full h-10 px-3 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-600 dark:text-amber-400"
+                />
+              </div>
               <Input
                 label="Low Stock Threshold"
                 type="number"
@@ -1443,7 +1464,7 @@ export default function InventoryPage() {
               <span>3. Pricing & Profitability Calculator</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 label="Purchase Cost per Unit (₹) *"
                 type="number"
@@ -1463,6 +1484,23 @@ export default function InventoryPage() {
                 value={newProdPrice}
                 onChange={(e) => setNewProdPrice(e.target.value)}
               />
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                  HSN / SAC Code *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 9202"
+                  value={newProdHsn}
+                  onChange={(e) => setNewProdHsn(e.target.value)}
+                  className="w-full h-10 px-3 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-600 dark:text-amber-400"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  GST HSN Code (Default: 9202)
+                </p>
+              </div>
             </div>
 
             {/* Live Profit Margin Intelligence Card */}
