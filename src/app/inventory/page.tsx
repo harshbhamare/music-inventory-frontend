@@ -119,7 +119,6 @@ export default function InventoryPage() {
   const [newProdCategory, setNewProdCategory] = useState('');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
-  const [newProdSupplier, setNewProdSupplier] = useState('');
   const [newProdThreshold, setNewProdThreshold] = useState('5');
   const [newProdUnit, setNewProdUnit] = useState('pcs');
   const [newProdHsn, setNewProdHsn] = useState('9202');
@@ -141,19 +140,12 @@ export default function InventoryPage() {
   const [editProdBrand, setEditProdBrand] = useState('');
   const [editProdModel, setEditProdModel] = useState('');
   const [editProdCategory, setEditProdCategory] = useState('');
-  const [editProdSupplier, setEditProdSupplier] = useState('');
   const [editProdCost, setEditProdCost] = useState('');
   const [editProdPrice, setEditProdPrice] = useState('');
   const [editProdThreshold, setEditProdThreshold] = useState('5');
   const [editProdHsn, setEditProdHsn] = useState('9202');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
   const [editError, setEditError] = useState('');
-
-  // Inline Quick Add Supplier
-  const [isQuickSupplierOpen, setIsQuickSupplierOpen] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [newSupplierPhone, setNewSupplierPhone] = useState('');
-  const [isSavingQuickSupplier, setIsSavingQuickSupplier] = useState(false);
 
   useEffect(() => {
     fetchMetadata();
@@ -232,9 +224,6 @@ export default function InventoryPage() {
     setEditProdCategory(
       typeof p.category === 'object' && p.category ? (p.category as any)._id : p.category || ''
     );
-    setEditProdSupplier(
-      p.supplier ? (typeof p.supplier === 'object' ? (p.supplier as any)._id : p.supplier) : ''
-    );
     setEditProdCost(String(p.purchaseCost || ''));
     setEditProdPrice(String(p.defaultSellingPrice || ''));
     setEditProdThreshold(String(p.minStockThreshold || 5));
@@ -255,7 +244,6 @@ export default function InventoryPage() {
         brand: editProdBrand.trim(),
         modelName: editProdModel.trim() || undefined,
         category: editProdCategory || undefined,
-        supplier: editProdSupplier || undefined,
         purchaseCost: parseFloat(editProdCost) || 0,
         defaultSellingPrice: parseFloat(editProdPrice) || 0,
         minStockThreshold: parseInt(editProdThreshold, 10) || 5,
@@ -309,7 +297,6 @@ export default function InventoryPage() {
     setNewProdThreshold('5');
     setNewProdUnit('pcs');
     setNewProdHsn('9202');
-    setNewProdSupplier('');
     if (categories.length > 0 && !newProdCategory) {
       setNewProdCategory(categories[0]._id);
     }
@@ -334,7 +321,6 @@ export default function InventoryPage() {
         trackingMode: 'QUANTITY',
         purchaseCost: 0,
         defaultSellingPrice: 0,
-        supplier: newProdSupplier || undefined,
         minStockThreshold: parseInt(newProdThreshold, 10) || 5,
         unitOfMeasure: newProdUnit.trim() || 'pcs',
         hsnCode: newProdHsn.trim() || '9202',
@@ -351,29 +337,6 @@ export default function InventoryPage() {
       setFormError(err.message || 'Failed to create product.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  // Save Quick Supplier from inside Product Modal
-  const handleSaveQuickSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSupplierName.trim()) return;
-    setIsSavingQuickSupplier(true);
-    try {
-      const res = await api.post<{ supplier: Supplier }>('/meta/suppliers', {
-        name: newSupplierName.trim(),
-        phone: newSupplierPhone.trim() || undefined,
-      });
-      setSuppliers((prev) => [...prev, res.supplier]);
-      setNewProdSupplier(res.supplier._id);
-      setEditProdSupplier(res.supplier._id);
-      setIsQuickSupplierOpen(false);
-      setNewSupplierName('');
-      setNewSupplierPhone('');
-    } catch (err: any) {
-      alert(`Failed to add supplier: ${err.message}`);
-    } finally {
-      setIsSavingQuickSupplier(false);
     }
   };
 
@@ -772,11 +735,11 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Section 3: Attributes & Supplier */}
+          {/* Section 3: Attributes */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
               <Palette className="h-4 w-4 text-amber-500" />
-              <span>Attributes & Supplier</span>
+              <span>Product Attributes</span>
             </div>
 
             <div className="space-y-1.5">
@@ -807,24 +770,6 @@ export default function InventoryPage() {
                   style={getColorStyle(editProdColor)}
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Preferred Supplier
-              </label>
-              <select
-                value={editProdSupplier}
-                onChange={(e) => setEditProdSupplier(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-              >
-                <option value="">No Supplier Assigned</option>
-                {suppliers.map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -991,7 +936,7 @@ export default function InventoryPage() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
               <Palette className="h-4 w-4 text-amber-500" />
-              <span>2. Product Attributes & Supplier</span>
+              <span>2. Product Attributes & Configuration</span>
             </div>
 
             {/* Product Colour / Finish */}
@@ -1043,34 +988,7 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5 sm:col-span-1">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Preferred Supplier
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickSupplierOpen(true)}
-                    className="text-xs font-bold text-amber-500 hover:text-amber-600"
-                  >
-                    + Add New
-                  </button>
-                </div>
-                <select
-                  value={newProdSupplier}
-                  onChange={(e) => setNewProdSupplier(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"
-                >
-                  <option value="">Select Supplier (Optional)</option>
-                  {suppliers.map((s) => (
-                    <option key={s._id} value={s._id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Low Stock Threshold
@@ -1127,40 +1045,6 @@ export default function InventoryPage() {
             >
               <PackagePlus className="h-4 w-4" />
               <span>Save & Register Product</span>
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* INLINE QUICK ADD SUPPLIER */}
-      <Modal
-        isOpen={isQuickSupplierOpen}
-        onClose={() => setIsQuickSupplierOpen(false)}
-        title="Add New Supplier"
-        description="Register a new vendor/supplier to assign to this product."
-        maxWidth="md"
-        zIndex={60}
-      >
-        <form onSubmit={handleSaveQuickSupplier} className="space-y-4">
-          <Input
-            label="Supplier Company Name *"
-            required
-            placeholder="e.g. Furtados Music, Bajaao"
-            value={newSupplierName}
-            onChange={(e) => setNewSupplierName(e.target.value)}
-          />
-          <Input
-            label="Phone Number"
-            placeholder="+91 98200 12345"
-            value={newSupplierPhone}
-            onChange={(e) => setNewSupplierPhone(e.target.value)}
-          />
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="outline" onClick={() => setIsQuickSupplierOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="default" isLoading={isSavingQuickSupplier} className="font-bold">
-              Save Supplier
             </Button>
           </div>
         </form>
