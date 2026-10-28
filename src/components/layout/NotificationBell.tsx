@@ -251,10 +251,10 @@ export function NotificationBell() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Rental Dues &amp; Reminders
+                    Rental &amp; EMI Dues Hub
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Manager &amp; Super Admin Notification Hub
+                    Active Rentals &amp; EMI Installment Notifications
                   </p>
                 </div>
               </div>
@@ -417,6 +417,15 @@ export function NotificationBell() {
                             {item.assignedPerson}
                           </span>
                           <span
+                            className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase ${
+                              item.loanType === 'EMI'
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
+                            }`}
+                          >
+                            {item.loanType === 'EMI' ? 'EMI Sale' : 'Rental'}
+                          </span>
+                          <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
                               isOverdue
                                 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
@@ -514,15 +523,23 @@ export function NotificationBell() {
             )}
           </div>
 
-          {/* Footer with link to full rentals management */}
-          <div className="border-t border-slate-100 bg-slate-50/60 p-2.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
+          {/* Footer with link to full rentals & sales management */}
+          <div className="border-t border-slate-100 bg-slate-50/60 p-2.5 flex items-center justify-between dark:border-slate-800 dark:bg-slate-800/40">
             <Link
               href="/usage"
               onClick={() => setIsOpen(false)}
-              className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
             >
-              <span>View Full Rental Register &amp; Payment Ledger</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <span>Rental Register</span>
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+            <Link
+              href="/sales"
+              onClick={() => setIsOpen(false)}
+              className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400"
+            >
+              <span>Sales &amp; EMI Ledger</span>
+              <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
         </div>

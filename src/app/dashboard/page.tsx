@@ -27,6 +27,7 @@ import {
   Mail,
   SendHorizontal,
   Send,
+  CreditCard,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import {
@@ -217,7 +218,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Rental Dues Notification & Reminder Center */}
+      {/* Rental & EMI Dues Notification & Reminder Center */}
       {duesSummary && duesSummary.summary.totalRentalsWithDues > 0 && (
         <div className="rounded-2xl border border-amber-200/80 bg-linear-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 backdrop-blur-xs dark:border-amber-900/50 dark:from-amber-950/30 dark:via-slate-900/40">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -228,10 +229,10 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Rental Dues &amp; Payment Reminders
+                    Rental &amp; EMI Dues Notification Center
                   </h3>
                   <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-extrabold text-amber-700 dark:text-amber-300">
-                    {duesSummary.summary.totalRentalsWithDues} Pending
+                    {duesSummary.summary.totalRentalsWithDues} Active Accounts Due
                   </span>
                   {duesSummary.summary.overdueCount > 0 && (
                     <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold text-white animate-pulse">
@@ -240,7 +241,7 @@ export default function DashboardPage() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  Total outstanding rent:{' '}
+                  Total outstanding receivables:{' '}
                   <strong className="text-slate-900 dark:text-slate-200 font-bold">
                     {formatCurrency(duesSummary.summary.totalPendingAmount)}
                   </strong>
@@ -254,7 +255,7 @@ export default function DashboardPage() {
                       )
                     </span>
                   )}
-                  . Send direct payment reminder emails to renters with 1-click.
+                  . Send direct payment reminder emails to customers with 1-click.
                 </p>
               </div>
             </div>
@@ -263,7 +264,13 @@ export default function DashboardPage() {
               <a href="/usage?status=OVERDUE">
                 <Button size="sm" variant="outline" className="text-xs font-semibold gap-1.5">
                   <Eye className="h-3.5 w-3.5" />
-                  <span>Rental Register</span>
+                  <span>Rentals</span>
+                </Button>
+              </a>
+              <a href="/sales">
+                <Button size="sm" variant="default" className="text-xs font-semibold gap-1.5 shadow-xs">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  <span>Sales &amp; EMI Ledger</span>
                 </Button>
               </a>
             </div>
@@ -282,6 +289,7 @@ export default function DashboardPage() {
             {duesSummary.items.slice(0, 3).map((item) => {
               const isOverdue = item.status === 'OVERDUE';
               const isSending = sendingReminderId === item.id;
+              const isEmi = item.loanType === 'EMI';
 
               return (
                 <div
@@ -289,9 +297,18 @@ export default function DashboardPage() {
                   className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900/80"
                 >
                   <div className="min-w-0 flex-1 pr-2">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
                         {item.assignedPerson}
+                      </span>
+                      <span
+                        className={`rounded-sm px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
+                          isEmi
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                            : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
+                        }`}
+                      >
+                        {isEmi ? 'EMI Sale' : 'Rental'}
                       </span>
                       <span
                         className={`rounded-sm px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
@@ -304,7 +321,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className="truncate text-[11px] text-slate-500 mt-0.5">
-                      {item.productName} ({item.issueReference})
+                      {item.productName} ({isEmi ? (item.invoiceNumber || item.issueReference) : item.issueReference})
                     </div>
                     <div className="mt-1 font-extrabold text-xs text-amber-600 dark:text-amber-400">
                       {formatCurrency(item.totalRentDue)}
@@ -404,8 +421,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Secondary Metrics: Sales Revenue, Valuation, Maintenance */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Secondary Metrics: Sales Revenue, EMI Receivables, Valuation, Maintenance */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* Sales Revenue */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -420,6 +437,24 @@ export default function DashboardPage() {
             </div>
             <p className="text-xs text-slate-500 mt-1">
               {kpis?.periodSalesCount ?? 0} confirmed customer sale(s)
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* EMI Receivables */}
+        <Card className="border-l-4 border-l-amber-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              EMI Receivables
+            </span>
+            <CreditCard className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">
+              {formatCurrency(kpis?.totalEmiReceivables ?? 0)}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {kpis?.activeEmiSalesCount ?? 0} active installment plan(s)
             </p>
           </CardContent>
         </Card>

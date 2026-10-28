@@ -159,6 +159,28 @@ export interface SaleLineItem {
   serializedItemIds?: SerializedItem[];
 }
 
+export interface EmiMonthlyPayment {
+  _id?: string;
+  monthIndex: number;
+  billingMonth: string;
+  dueDate: string;
+  amountDue: number;
+  amountPaid: number;
+  paidAt?: string;
+  paymentMethod?: string;
+  transactionRef?: string;
+  status: 'PAID' | 'DUE' | 'OVERDUE';
+  notes?: string;
+}
+
+export interface EmiReminder {
+  _id?: string;
+  sentAt: string;
+  sentTo: string;
+  channel: string;
+  message: string;
+}
+
 export interface Sale {
   _id: string;
   invoiceNumber: string;
@@ -187,6 +209,15 @@ export interface Sale {
   paymentStatus: 'PENDING' | 'PAID' | 'PARTIAL' | 'REFUNDED';
   paymentMethod: 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
   saleStatus: 'DRAFT' | 'CONFIRMED' | 'CANCELLED' | 'RETURNED' | 'PARTIALLY_RETURNED';
+  saleType?: 'DIRECT' | 'EMI';
+  isEmi?: boolean;
+  downPayment?: number;
+  emiTenureMonths?: number;
+  monthlyEmiAmount?: number;
+  totalEmiPaid?: number;
+  totalEmiDue?: number;
+  emiPayments?: EmiMonthlyPayment[];
+  remindersSent?: EmiReminder[];
   notes?: string;
   remarks?: string;
   soldBy: User;
@@ -332,6 +363,8 @@ export interface DashboardMetrics {
     pendingApprovalsCount: number;
     totalInventoryValuationAtCost: number;
     totalPotentialRetailValuation: number;
+    activeEmiSalesCount?: number;
+    totalEmiReceivables?: number;
   };
   recentMovements: StockMovement[];
   salesTrend: Array<{ _id: string; revenue: number; count: number }>;
@@ -339,6 +372,9 @@ export interface DashboardMetrics {
 
 export interface RentalDueItem {
   id: string;
+  loanType?: 'RENTAL' | 'EMI';
+  saleId?: string;
+  invoiceNumber?: string;
   issueReference: string;
   assignedPerson: string;
   customerEmail?: string;
@@ -347,6 +383,7 @@ export interface RentalDueItem {
   assetId?: string;
   totalRentDue: number;
   monthlyRent: number;
+  tenureMonths?: number;
   nextDueDate?: string;
   daysOverdue: number;
   status: 'OVERDUE' | 'DUE' | 'UPCOMING';
