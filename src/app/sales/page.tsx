@@ -32,12 +32,17 @@ import {
   Sparkles,
   Info,
   CalendarCheck,
+  Edit,
+  Save,
+  Send,
+  FileEdit,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
 
 export default function SalesPage() {
-  const { canMakeSales } = useAuth();
+  const { canMakeSales, isSuperAdmin, isManager } = useAuth();
+  const canEditBills = isSuperAdmin() || isManager();
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -92,6 +97,36 @@ export default function SalesPage() {
   const [emiLedgerError, setEmiLedgerError] = useState('');
   const [isSendingEmiReminder, setIsSendingEmiReminder] = useState(false);
   const [emiReminderFeedback, setEmiReminderFeedback] = useState('');
+
+  // Edit Sale / Bill Modal State (Manager & Super Admin)
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [isUpdatingSale, setIsUpdatingSale] = useState(false);
+  const [isSavingAndSendingEmail, setIsSavingAndSendingEmail] = useState(false);
+  const [updateSaleError, setUpdateSaleError] = useState('');
+  const [editSaleFeedback, setEditSaleFeedback] = useState('');
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerEmail, setEditCustomerEmail] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerAddress, setEditCustomerAddress] = useState('');
+  const [editCustomerGstin, setEditCustomerGstin] = useState('');
+  const [editDispatchThrough, setEditDispatchThrough] = useState('');
+  const [editDestination, setEditDestination] = useState('');
+  const [editEWayBillNo, setEditEWayBillNo] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER' | 'OTHER'>('UPI');
+  const [editNotes, setEditNotes] = useState('');
+  const [editRemarks, setEditRemarks] = useState('');
+  const [editDownPayment, setEditDownPayment] = useState<number>(0);
+  const [editEmiTenureMonths, setEditEmiTenureMonths] = useState<number>(6);
+  const [editLineItems, setEditLineItems] = useState<
+    Array<{
+      product: string;
+      productName: string;
+      unitPrice: number;
+      discount: number;
+      quantity: number;
+      hsnCode: string;
+    }>
+  >([]);
 
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
@@ -186,10 +221,10 @@ export default function SalesPage() {
   const cgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
   const sgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
   const totalGst = Math.round((cgstAmount + sgstAmount) * 100) / 100;
-  const grandTotal = Math.round((taxableAmount + totalGst) * 100) / 100;
+  const grandTotal = Math.round(taxableAmount + totalGst);
 
   // EMI computations
-  const effectiveDownPayment = Math.min(grandTotal, Math.max(0, downPayment));
+  const effectiveDownPayment = Math.round(Math.min(grandTotal, Math.max(0, downPayment)));
   const financedPrincipal = Math.max(0, grandTotal - effectiveDownPayment);
   const monthlyEmi = emiTenureMonths > 0 ? Math.round(financedPrincipal / emiTenureMonths) : 0;
 
@@ -198,19 +233,23 @@ export default function SalesPage() {
     if (saleType !== 'EMI' || emiTenureMonths <= 0 || financedPrincipal <= 0) return [];
     const schedule = [];
     const baseDate = new Date();
-    let remaining = financedPrincipal;
+    let runningAllocated = 0;
 
     for (let i = 1; i <= emiTenureMonths; i++) {
       const d = new Date(baseDate);
       d.setMonth(d.getMonth() + i);
-      const amount = i === emiTenureMonths ? remaining : monthlyEmi;
-      remaining -= amount;
+      let amount = monthlyEmi;
+      if (i === emiTenureMonths) {
+        amount = Math.max(0, financedPrincipal - runningAllocated);
+      } else {
+        runningAllocated += amount;
+      }
       const monthName = d.toLocaleString('default', { month: 'short', year: 'numeric' });
       schedule.push({
         monthIndex: i,
-        billingMonth: monthName,
+        billingMonth: `Month ${i} (${monthName})`,
         dueDate: d.toISOString().slice(0, 10),
-        amountDue: Math.max(0, amount),
+        amountDue: amount,
       });
     }
     return schedule;
@@ -325,13 +364,15 @@ export default function SalesPage() {
     setSelectedSaleForLedger(sale);
     setEmiLedgerError('');
     setEmiReminderFeedback('');
-    // Auto populate next due EMI
+    setEmiTransactionRef('');
+    setEmiPaymentNotes('');
+    // Auto populate next due EMI rounded to whole rupee
     const nextDue = (sale.emiPayments || []).find((p) => p.status !== 'PAID');
     if (nextDue) {
-      setEmiPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+      setEmiPaymentAmount(Math.round(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0))));
       setSelectedEmiBillingMonth(nextDue.billingMonth);
     } else {
-      setEmiPaymentAmount(sale.monthlyEmiAmount || 0);
+      setEmiPaymentAmount(Math.round(sale.monthlyEmiAmount || 0));
       setSelectedEmiBillingMonth('');
     }
   };
@@ -347,29 +388,35 @@ export default function SalesPage() {
       return;
     }
 
+    if (!emiTransactionRef.trim()) {
+      setEmiLedgerError('Transaction No. / UPI Reference is compulsory.');
+      return;
+    }
+
     setIsRecordingEmiPayment(true);
 
     try {
-      const res = await api.post<{ success: boolean; sale: Sale }>(
+      const res = await api.post<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
         `/sales/${selectedSaleForLedger._id}/emi-payments`,
         {
-          amount: emiPaymentAmount,
+          amount: Math.round(emiPaymentAmount),
           billingMonth: selectedEmiBillingMonth || undefined,
           paymentMethod: emiPaymentMethod,
-          transactionRef: emiTransactionRef.trim() || undefined,
+          transactionRef: emiTransactionRef.trim(),
           notes: emiPaymentNotes.trim() || undefined,
         }
       );
 
-      setSelectedSaleForLedger(res.sale);
+      const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      setSelectedSaleForLedger(updated);
       setEmiTransactionRef('');
       setEmiPaymentNotes('');
       fetchSales();
 
       // Recalculate next due installment
-      const nextDue = (res.sale.emiPayments || []).find((p) => p.status !== 'PAID');
+      const nextDue = (updated.emiPayments || []).find((p) => p.status !== 'PAID');
       if (nextDue) {
-        setEmiPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+        setEmiPaymentAmount(Math.round(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0))));
         setSelectedEmiBillingMonth(nextDue.billingMonth);
       } else {
         setEmiPaymentAmount(0);
@@ -379,6 +426,117 @@ export default function SalesPage() {
       setEmiLedgerError(err.message || 'Failed to record EMI payment.');
     } finally {
       setIsRecordingEmiPayment(false);
+    }
+  };
+
+  // Open Edit Sale / Bill Modal
+  const openEditSaleModal = (sale: Sale) => {
+    setEditingSale(sale);
+    setUpdateSaleError('');
+    setEditSaleFeedback('');
+    setEditCustomerName(sale.customerName || '');
+    setEditCustomerEmail(sale.customerEmail || '');
+    setEditCustomerPhone(sale.customerPhone || '');
+    setEditCustomerAddress(sale.customerAddress || '');
+    setEditCustomerGstin(sale.customerGstin || '');
+    setEditDispatchThrough(sale.dispatchThrough || '');
+    setEditDestination(sale.destination || '');
+    setEditEWayBillNo(sale.eWayBillNo || '');
+    setEditPaymentMethod((sale.paymentMethod as any) || 'UPI');
+    setEditNotes(sale.notes || '');
+    setEditRemarks(sale.remarks || '');
+    setEditDownPayment(Math.round(sale.downPayment || 0));
+    setEditEmiTenureMonths(sale.emiTenureMonths || 6);
+
+    const items = (sale.lineItems || []).map((li: any) => ({
+      product: (li.product as any)?._id || li.product,
+      productName: (li.product as any)?.name || 'Product',
+      unitPrice: li.unitPrice || 0,
+      discount: li.discount || 0,
+      quantity: li.quantity || 1,
+      hsnCode: li.hsnCode || '9202',
+    }));
+    setEditLineItems(items);
+  };
+
+  // Submit Edit Sale / Bill
+  const handleUpdateSale = async (andSendEmail: boolean = false) => {
+    if (!editingSale) return;
+    setUpdateSaleError('');
+    setEditSaleFeedback('');
+
+    if (!editCustomerName.trim()) {
+      setUpdateSaleError('Customer Name is required.');
+      return;
+    }
+    if (editCustomerPhone.trim().length < 10) {
+      setUpdateSaleError('Please enter a valid 10-digit customer phone number.');
+      return;
+    }
+    if (!editCustomerEmail.trim() || !editCustomerEmail.includes('@')) {
+      setUpdateSaleError('A valid customer email address is mandatory for invoice dispatch.');
+      return;
+    }
+
+    if (andSendEmail) {
+      setIsSavingAndSendingEmail(true);
+    } else {
+      setIsUpdatingSale(true);
+    }
+
+    try {
+      const payload: any = {
+        customerName: editCustomerName.trim(),
+        customerEmail: editCustomerEmail.trim().toLowerCase(),
+        customerPhone: editCustomerPhone.trim(),
+        customerAddress: editCustomerAddress.trim() || undefined,
+        customerGstin: editCustomerGstin.trim().toUpperCase() || undefined,
+        dispatchThrough: editDispatchThrough.trim() || undefined,
+        destination: editDestination.trim() || undefined,
+        eWayBillNo: editEWayBillNo.trim() || undefined,
+        paymentMethod: editPaymentMethod,
+        notes: editNotes.trim() || undefined,
+        remarks: editRemarks.trim() || undefined,
+        lineItems: editLineItems.map((li) => ({
+          product: li.product,
+          unitPrice: Math.max(0, li.unitPrice),
+          discount: Math.max(0, li.discount),
+          quantity: li.quantity,
+          hsnCode: li.hsnCode,
+        })),
+        reason: 'Manager/SuperAdmin updated sale bill details',
+      };
+
+      if (editingSale.isEmi) {
+        payload.downPayment = Math.round(editDownPayment);
+        payload.emiTenureMonths = editEmiTenureMonths;
+      }
+
+      const res = await api.put<{ success: boolean; data: { sale: Sale } }>(
+        `/sales/${editingSale._id}`,
+        payload
+      );
+
+      if (andSendEmail) {
+        await api.post(`/sales/${editingSale._id}/send-email`, {
+          recipientEmail: editCustomerEmail.trim(),
+          customNotes: 'Updated tax invoice bill reflecting corrected details.',
+        });
+        setEditSaleFeedback(`Bill updated & corrected Tax Invoice sent to ${editCustomerEmail.trim()}!`);
+      } else {
+        setEditSaleFeedback('Sale bill successfully updated!');
+      }
+
+      fetchSales();
+      setTimeout(() => {
+        setEditingSale(null);
+        setEditSaleFeedback('');
+      }, 1600);
+    } catch (err: any) {
+      setUpdateSaleError(err.message || 'Failed to update sale bill.');
+    } finally {
+      setIsUpdatingSale(false);
+      setIsSavingAndSendingEmail(false);
     }
   };
 
@@ -551,6 +709,19 @@ export default function SalesPage() {
                         <td className="py-3 px-4 text-slate-500">{formatDate(sale.createdAt)}</td>
                         <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            {canEditBills && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditSaleModal(sale)}
+                                className="h-7 text-[11px] gap-1 font-bold text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-950/30 shadow-xs"
+                                title="Edit bill / fix mistakes"
+                              >
+                                <Edit className="h-3 w-3" />
+                                <span>Edit</span>
+                              </Button>
+                            )}
+
                             {isEmi && (
                               <Button
                                 size="sm"
@@ -1238,9 +1409,10 @@ export default function SalesPage() {
                     <input
                       type="number"
                       min="1"
+                      step="any"
                       required
                       value={emiPaymentAmount}
-                      onChange={(e) => setEmiPaymentAmount(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setEmiPaymentAmount(Math.round(parseFloat(e.target.value) || 0))}
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
                     />
                   </div>
@@ -1281,11 +1453,12 @@ export default function SalesPage() {
 
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      UPI / Txn Reference
+                      UPI / Txn Reference * <span className="text-rose-500 font-bold">(Compulsory)</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. UPI-998822"
+                      required
+                      placeholder="e.g. UPI-998822 or Trx-12345"
                       value={emiTransactionRef}
                       onChange={(e) => setEmiTransactionRef(e.target.value)}
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
@@ -1320,6 +1493,59 @@ export default function SalesPage() {
                 </div>
               </form>
             )}
+
+            {/* Payment Logs History */}
+            {(() => {
+              const logs =
+                selectedSaleForLedger.paymentLogs && selectedSaleForLedger.paymentLogs.length > 0
+                  ? selectedSaleForLedger.paymentLogs
+                  : (selectedSaleForLedger.emiPayments || [])
+                      .filter((p) => (p.amountPaid || 0) > 0)
+                      .map((p) => ({
+                        paymentType: 'EMI_INSTALLMENT' as const,
+                        amount: p.amountPaid,
+                        paymentMethod: p.paymentMethod || 'UPI',
+                        transactionRef: p.transactionRef || 'Counter',
+                        billingMonth: p.billingMonth,
+                        notes: p.notes,
+                        paidAt: p.paidAt || selectedSaleForLedger.createdAt,
+                      }));
+
+              return logs.length > 0 ? (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
+                    Payment Transaction Logs ({logs.length})
+                  </span>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {logs.map((p: any, i: number) => (
+                      <div
+                        key={i}
+                        className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs flex justify-between items-center"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
+                              ₹{Math.round(p.amount).toLocaleString('en-IN')}
+                            </span>
+                            <span>&bull;</span>
+                            <span>{p.paymentMethod}</span>
+                            <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 font-bold ml-1">
+                              (Ref: {p.transactionRef})
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {p.billingMonth || p.paymentType} {p.notes ? `• ${p.notes}` : ''}
+                          </div>
+                        </div>
+                        <span className="text-slate-400 text-[10px] font-medium whitespace-nowrap">
+                          {formatDateTime(p.paidAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
 
             {/* Reminder History Log */}
             {selectedSaleForLedger.remindersSent && selectedSaleForLedger.remindersSent.length > 0 && (
@@ -1361,6 +1587,389 @@ export default function SalesPage() {
               </Button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Edit Sale / Bill Modal (Manager & Super Admin) */}
+      <Modal
+        isOpen={!!editingSale}
+        onClose={() => setEditingSale(null)}
+        title={`Edit Sale Bill #${editingSale?.invoiceNumber || ''}`}
+        maxWidth="xl"
+      >
+        {editingSale && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleUpdateSale(false);
+            }}
+            className="space-y-4"
+          >
+            {updateSaleError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{updateSaleError}</span>
+              </div>
+            )}
+
+            {editSaleFeedback && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{editSaleFeedback}</span>
+              </div>
+            )}
+
+            {/* Customer Details Section */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                1. Customer &amp; Billing Information
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCustomerName}
+                    onChange={(e) => setEditCustomerName(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCustomerPhone}
+                    onChange={(e) => setEditCustomerPhone(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editCustomerEmail}
+                    onChange={(e) => setEditCustomerEmail(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Customer GSTIN
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 27AAAAA0000A1Z5"
+                    value={editCustomerGstin}
+                    onChange={(e) => setEditCustomerGstin(e.target.value.toUpperCase())}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono uppercase"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Billing Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Full street address, City, Pincode"
+                    value={editCustomerAddress}
+                    onChange={(e) => setEditCustomerAddress(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dispatch & Payment Meta */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                2. Dispatch &amp; Payment Details
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Payment Method
+                  </label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                  >
+                    <option value="UPI">UPI (GPay / PhonePe)</option>
+                    <option value="CARD">Debit / Credit Card</option>
+                    <option value="CASH">Cash</option>
+                    <option value="BANK_TRANSFER">Bank Transfer / IMPS</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Dispatch Through
+                  </label>
+                  <input
+                    type="text"
+                    value={editDispatchThrough}
+                    onChange={(e) => setEditDispatchThrough(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    Destination
+                  </label>
+                  <input
+                    type="text"
+                    value={editDestination}
+                    onChange={(e) => setEditDestination(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                    e-Way Bill No.
+                  </label>
+                  <input
+                    type="text"
+                    value={editEWayBillNo}
+                    onChange={(e) => setEditEWayBillNo(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Line Items Pricing & Correction */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                3. Products, Unit Pricing &amp; Discounts
+              </span>
+              <div className="space-y-2">
+                {editLineItems.map((li, idx) => {
+                  const lineTotal = Math.max(0, (li.unitPrice - li.discount) * li.quantity);
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 sm:grid-cols-6 gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 items-center text-xs"
+                    >
+                      <div className="sm:col-span-2">
+                        <span className="font-bold text-slate-900 dark:text-white block truncate">
+                          {li.productName}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={li.unitPrice}
+                          onChange={(e) => {
+                            const updated = [...editLineItems];
+                            updated[idx].unitPrice = parseFloat(e.target.value) || 0;
+                            setEditLineItems(updated);
+                          }}
+                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={li.discount}
+                          onChange={(e) => {
+                            const updated = [...editLineItems];
+                            updated[idx].discount = parseFloat(e.target.value) || 0;
+                            setEditLineItems(updated);
+                          }}
+                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">HSN/SAC</label>
+                        <input
+                          type="text"
+                          value={li.hsnCode}
+                          onChange={(e) => {
+                            const updated = [...editLineItems];
+                            updated[idx].hsnCode = e.target.value;
+                            setEditLineItems(updated);
+                          }}
+                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-center"
+                        />
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[9px] uppercase font-bold text-slate-400">Net Total</span>
+                        <span className="font-bold text-slate-900 dark:text-white font-mono">
+                          ₹{Math.round(lineTotal).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Recalculated Summary */}
+              {(() => {
+                const sub = editLineItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+                const disc = editLineItems.reduce((acc, i) => acc + i.discount * i.quantity, 0);
+                const taxBase = Math.max(0, sub - disc);
+                const cgst = Math.round(taxBase * 0.09 * 100) / 100;
+                const sgst = Math.round(taxBase * 0.09 * 100) / 100;
+                const grand = Math.round(taxBase + cgst + sgst);
+                return (
+                  <div className="flex justify-end gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <div>
+                      <span className="text-slate-500">Taxable: </span>
+                      <strong className="font-mono">₹{taxBase.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">GST (18%): </span>
+                      <strong className="font-mono">₹{(cgst + sgst).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Recalculated Grand Total: </span>
+                      <strong className="text-amber-500 text-sm font-extrabold font-mono">
+                        ₹{grand.toLocaleString('en-IN')}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* If EMI Sale: Edit Down payment & tenure */}
+            {editingSale.isEmi && (
+              <div className="rounded-xl border border-amber-500/20 p-3.5 bg-amber-50/30 dark:bg-amber-950/20 space-y-3">
+                <span className="font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+                  4. EMI Financing Parameters
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                      Initial Deposit / Down Payment (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={editDownPayment}
+                      onChange={(e) => setEditDownPayment(Math.round(parseFloat(e.target.value) || 0))}
+                      className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-right font-mono text-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                      EMI Tenure (Months)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="36"
+                      value={editEmiTenureMonths}
+                      onChange={(e) => setEditEmiTenureMonths(parseInt(e.target.value) || 6)}
+                      className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-center font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                      Monthly Installment Preview
+                    </label>
+                    {(() => {
+                      const sub = editLineItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+                      const disc = editLineItems.reduce((acc, i) => acc + i.discount * i.quantity, 0);
+                      const taxBase = Math.max(0, sub - disc);
+                      const grand = Math.round(taxBase + Math.round(taxBase * 0.18 * 100) / 100);
+                      const financed = Math.max(0, grand - editDownPayment);
+                      const monthly = editEmiTenureMonths > 0 ? Math.round(financed / editEmiTenureMonths) : 0;
+                      return (
+                        <div className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex items-center justify-end font-bold text-amber-600 dark:text-amber-400 font-mono text-xs">
+                          ₹{monthly.toLocaleString('en-IN')} / mo
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Notes / Remarks */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Bill Notes
+                </label>
+                <input
+                  type="text"
+                  placeholder="Notes printed on invoice"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                  Internal Remarks
+                </label>
+                <input
+                  type="text"
+                  placeholder="Internal audit notes"
+                  value={editRemarks}
+                  onChange={(e) => setEditRemarks(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingSale(null)}
+              >
+                Cancel
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  isLoading={isUpdatingSale}
+                  disabled={isUpdatingSale || isSavingAndSendingEmail}
+                  className="gap-1.5 font-bold"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  <span>Save Changes</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  isLoading={isSavingAndSendingEmail}
+                  disabled={isUpdatingSale || isSavingAndSendingEmail}
+                  onClick={() => handleUpdateSale(true)}
+                  className="gap-1.5 font-bold shadow-xs bg-amber-500 text-slate-950 hover:bg-amber-400"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>Save &amp; Email to Customer</span>
+                </Button>
+              </div>
+            </div>
+          </form>
         )}
       </Modal>
 

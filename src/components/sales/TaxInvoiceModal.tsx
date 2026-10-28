@@ -366,15 +366,64 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                 </div>
 
                 {/* 4. Payment Method & Totals Section */}
-                <div className="flex justify-between items-start mt-6">
-                  {/* Left: Payment Method */}
-                  <div className="space-y-1">
-                    <span className="font-bold text-xs text-slate-900 block">Payment Method</span>
-                    <span className="text-xs text-slate-700 block">{sale.paymentMethod || 'Gpay'}</span>
-                  </div>
+                <div className="flex justify-between items-start mt-6 gap-6">
+                  {/* Left: Payment Method or EMI Financing Facility */}
+                  {sale.isEmi ? (
+                    <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50/70 p-3 space-y-2 text-xs">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                        <span className="font-extrabold text-[11px] text-[#0284c7] uppercase tracking-wider">
+                          Customer EMI Financing &amp; Deposit
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                          {sale.emiTenureMonths || 6} Months Plan
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
+                        <span className="text-slate-600 font-medium">Initial Deposit / Down Payment:</span>
+                        <span className="font-bold text-emerald-700 text-right">
+                          ₹{formatIndianDecimal(sale.downPayment || 0)}
+                        </span>
+
+                        <span className="text-slate-600 font-medium">Financed Principal:</span>
+                        <span className="font-bold text-slate-900 text-right">
+                          ₹{formatIndianDecimal(Math.max(0, sale.grandTotal - (sale.downPayment || 0)))}
+                        </span>
+
+                        <span className="text-slate-600 font-medium">Monthly Installment:</span>
+                        <span className="font-bold text-amber-700 text-right">
+                          ₹{formatIndianDecimal(sale.monthlyEmiAmount || 0)} / mo
+                        </span>
+
+                        <span className="text-slate-600 font-medium">Total Collected to Date:</span>
+                        <span className="font-bold text-emerald-700 text-right">
+                          ₹{formatIndianDecimal(sale.totalEmiPaid ?? (sale.downPayment || 0))}
+                        </span>
+
+                        <span className="text-slate-600 font-medium">Remaining EMI Balance:</span>
+                        <span
+                          className={`font-bold text-right ${
+                            (sale.totalEmiDue || 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
+                          }`}
+                        >
+                          ₹{formatIndianDecimal(sale.totalEmiDue ?? Math.max(0, sale.grandTotal - (sale.downPayment || 0)))}
+                        </span>
+
+                        <span className="text-slate-600 font-medium">Financing Status:</span>
+                        <span className="font-bold text-slate-900 text-right">
+                          {(sale.totalEmiDue || 0) <= 0 ? 'COMPLETED / FULLY PAID' : 'ACTIVE EMI PLAN'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <span className="font-bold text-xs text-slate-900 block">Payment Method</span>
+                      <span className="text-xs text-slate-700 block">{sale.paymentMethod || 'Gpay'}</span>
+                    </div>
+                  )}
 
                   {/* Right: Totals summary */}
-                  <div className="w-64 space-y-1.5 text-xs">
+                  <div className="w-72 space-y-1.5 text-xs shrink-0">
                     <div className="flex justify-between text-slate-700">
                       <span>Subtotal</span>
                       <span className="font-normal text-slate-900">₹{formatIndianDecimal(taxableAmount)}</span>
@@ -390,11 +439,79 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
 
                     {/* Highlighted TOTAL (INR) Bar with light blue background */}
                     <div className="flex justify-between items-center bg-[#e1f0fa] px-3 py-2 rounded-none font-bold text-xs text-slate-950 mt-2">
-                      <span className="tracking-wide">TOTAL (INR)</span>
+                      <span className="tracking-wide">TOTAL INVOICE (INR)</span>
                       <span className="text-sm font-extrabold">₹{formatIndianDecimal(sale.grandTotal)}</span>
                     </div>
+
+                    {sale.isEmi && (
+                      <>
+                        <div className="flex justify-between items-center text-xs text-emerald-700 font-bold pt-1">
+                          <span>Less: Initial Deposit Paid</span>
+                          <span>(-) ₹{formatIndianDecimal(sale.downPayment || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-[#fef3c7] px-3 py-1.5 rounded-none font-bold text-xs text-[#92400e] mt-1">
+                          <span className="tracking-wide">NET EMI BALANCE DUE</span>
+                          <span className="text-sm font-extrabold">
+                            ₹{formatIndianDecimal(sale.totalEmiDue ?? Math.max(0, sale.grandTotal - (sale.downPayment || 0)))}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
+
+                {/* 5. Month-by-Month Installment Repayment Schedule */}
+                {sale.isEmi && sale.emiPayments && sale.emiPayments.length > 0 && (
+                  <div className="mt-5 border border-slate-200 rounded-none overflow-hidden bg-white">
+                    <div className="bg-slate-800 text-white font-bold text-[10px] uppercase px-3 py-1.5 tracking-wider">
+                      Month-by-Month EMI Installment Schedule &amp; Ledger
+                    </div>
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                          <th className="py-1.5 px-3">Installment</th>
+                          <th className="py-1.5 px-3">Due Date</th>
+                          <th className="py-1.5 px-3 text-right">Amount Due</th>
+                          <th className="py-1.5 px-3 text-right">Amount Paid</th>
+                          <th className="py-1.5 px-3 text-center">Status</th>
+                          <th className="py-1.5 px-3 text-center">Txn Ref</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sale.emiPayments.map((p, idx) => (
+                          <tr key={idx} className={p.status === 'PAID' ? 'bg-emerald-50/40' : ''}>
+                            <td className="py-1.5 px-3 font-semibold text-slate-900">
+                              {p.billingMonth || `Month ${p.monthIndex}`}
+                            </td>
+                            <td className="py-1.5 px-3 text-slate-600">
+                              {p.dueDate ? new Date(p.dueDate).toLocaleDateString('en-IN') : '—'}
+                            </td>
+                            <td className="py-1.5 px-3 text-right text-slate-800 font-mono">
+                              ₹{formatIndianDecimal(p.amountDue)}
+                            </td>
+                            <td className="py-1.5 px-3 text-right font-bold text-emerald-700 font-mono">
+                              ₹{formatIndianDecimal(p.amountPaid || 0)}
+                            </td>
+                            <td className="py-1.5 px-3 text-center">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  p.status === 'PAID'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-3 text-center font-mono text-[10px] text-slate-600">
+                              {p.transactionRef || (p.status === 'PAID' ? 'Counter' : '—')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Divider Line below Totals */}
                 <hr className="border-t border-slate-300 mt-8 mb-4" />

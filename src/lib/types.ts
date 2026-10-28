@@ -181,6 +181,18 @@ export interface EmiReminder {
   message: string;
 }
 
+export interface SalePaymentLog {
+  _id?: string;
+  paymentType: 'DOWN_PAYMENT' | 'EMI_INSTALLMENT' | 'FULL_PAYMENT';
+  amount: number;
+  paymentMethod: string;
+  transactionRef: string;
+  billingMonth?: string;
+  notes?: string;
+  recordedBy?: User | string;
+  paidAt: string;
+}
+
 export interface Sale {
   _id: string;
   invoiceNumber: string;
@@ -218,6 +230,7 @@ export interface Sale {
   totalEmiDue?: number;
   emiPayments?: EmiMonthlyPayment[];
   remindersSent?: EmiReminder[];
+  paymentLogs?: SalePaymentLog[];
   notes?: string;
   remarks?: string;
   soldBy: User;
@@ -255,6 +268,18 @@ export interface RentalReminder {
   message: string;
 }
 
+export interface RentalPaymentLog {
+  _id?: string;
+  paymentType: 'SECURITY_DEPOSIT' | 'RENTAL_PAYMENT';
+  amount: number;
+  paymentMethod: string;
+  transactionRef: string;
+  billingMonth?: string;
+  notes?: string;
+  recordedBy?: User | string;
+  paidAt: string;
+}
+
 export interface InternalUsage {
   _id: string;
   issueReference: string;
@@ -281,6 +306,7 @@ export interface InternalUsage {
   totalRentPaid?: number;
   totalRentDue?: number;
   remindersSent?: RentalReminder[];
+  paymentLogs?: RentalPaymentLog[];
   extensions: Array<{
     extendedDate: string;
     reason: string;
