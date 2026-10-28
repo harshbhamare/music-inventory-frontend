@@ -128,6 +128,46 @@ export default function SalesPage() {
     }>
   >([]);
 
+  // Filter state for the sales list
+  type SaleFilterType = 'ALL' | 'EMI_DUE' | 'EMI_PAID' | 'DIRECT';
+  const [saleFilter, setSaleFilter] = useState<SaleFilterType>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSales = useMemo(() => {
+    let result = sales;
+
+    // Apply tab filter
+    if (saleFilter === 'EMI_DUE') {
+      result = result.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) > 0);
+    } else if (saleFilter === 'EMI_PAID') {
+      result = result.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) <= 0);
+    } else if (saleFilter === 'DIRECT') {
+      result = result.filter((s) => !s.isEmi && s.saleType !== 'EMI');
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.invoiceNumber?.toLowerCase().includes(q) ||
+          s.customerName?.toLowerCase().includes(q) ||
+          s.customerPhone?.includes(q) ||
+          s.customerEmail?.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [sales, saleFilter, searchQuery]);
+
+  // Counts for filter tab badges
+  const filterCounts = useMemo(() => ({
+    ALL: sales.length,
+    EMI_DUE: sales.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) > 0).length,
+    EMI_PAID: sales.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) <= 0).length,
+    DIRECT: sales.filter((s) => !s.isEmi && s.saleType !== 'EMI').length,
+  }), [sales]);
+
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
     try {
@@ -600,6 +640,95 @@ export default function SalesPage() {
 
       {/* Sales Transactions List */}
       <Card>
+        {/* Filter Tab Bar + Search */}
+        <div className="flex flex-col gap-3 px-4 pt-4 pb-3 border-b border-slate-200 dark:border-slate-800">
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 flex-wrap">
+            {(
+              [
+                {
+                  key: 'ALL',
+                  label: 'All Sales',
+                  icon: <ShoppingCart className="h-3.5 w-3.5" />,
+                  activeClass: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm',
+                  inactiveClass: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white',
+                },
+                {
+                  key: 'EMI_DUE',
+                  label: 'EMI Due',
+                  icon: <Clock className="h-3.5 w-3.5" />,
+                  activeClass: 'bg-rose-600 text-white border-transparent shadow-sm',
+                  inactiveClass: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:text-rose-600',
+                  badgeClass: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400',
+                  activeBadgeClass: 'bg-white/20 text-white',
+                },
+                {
+                  key: 'EMI_PAID',
+                  label: 'EMI Paid',
+                  icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+                  activeClass: 'bg-emerald-600 text-white border-transparent shadow-sm',
+                  inactiveClass: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-300 hover:text-emerald-600',
+                  badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400',
+                  activeBadgeClass: 'bg-white/20 text-white',
+                },
+                {
+                  key: 'DIRECT',
+                  label: 'Direct Sales',
+                  icon: <Tag className="h-3.5 w-3.5" />,
+                  activeClass: 'bg-blue-600 text-white border-transparent shadow-sm',
+                  inactiveClass: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-blue-300 hover:text-blue-600',
+                  badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+                  activeBadgeClass: 'bg-white/20 text-white',
+                },
+              ] as const
+            ).map((tab) => {
+              const isActive = saleFilter === tab.key;
+              const count = filterCounts[tab.key];
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setSaleFilter(tab.key)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${isActive ? tab.activeClass : tab.inactiveClass}`}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  <span
+                    className={`min-w-[18px] text-center px-1 py-0 rounded-full text-[10px] font-bold ${
+                      isActive
+                        ? (tab as any).activeBadgeClass ?? 'bg-white/20 text-white'
+                        : (tab as any).badgeClass ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search invoice, customer, phone…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         <CardContent className="p-0">
           <div className="responsive-table-wrapper">
             <table className="w-full text-left text-xs border-collapse">
@@ -623,14 +752,14 @@ export default function SalesPage() {
                       Loading sales transactions...
                     </td>
                   </tr>
-                ) : sales.length === 0 ? (
+                ) : filteredSales.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-500">
-                      No sales recorded yet.
+                      {sales.length === 0 ? 'No sales recorded yet.' : 'No sales match the current filter.'}
                     </td>
                   </tr>
                 ) : (
-                  sales.map((sale) => {
+                  filteredSales.map((sale) => {
                     const isEmi = sale.isEmi || sale.saleType === 'EMI';
                     const emiDue = sale.totalEmiDue ?? 0;
                     const isEmiFullySettled = isEmi && emiDue <= 0;
@@ -707,58 +836,74 @@ export default function SalesPage() {
                         </td>
                         <td className="py-3 px-4 text-slate-500">{sale.soldBy?.name || 'Staff'}</td>
                         <td className="py-3 px-4 text-slate-500">{formatDate(sale.createdAt)}</td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            {canEditBills && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openEditSaleModal(sale)}
-                                className="h-7 text-[11px] gap-1 font-bold text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-950/30 shadow-xs"
-                                title="Edit bill / fix mistakes"
-                              >
-                                <Edit className="h-3 w-3" />
-                                <span>Edit</span>
-                              </Button>
-                            )}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center justify-center gap-2">
 
+                            {/* ── Primary actions: Invoice + PDF ── */}
+                            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs divide-x divide-slate-200 dark:divide-slate-700">
+                              {/* Tax Invoice */}
+                              <button
+                                type="button"
+                                onClick={() => setActiveInvoice(sale)}
+                                title="View Tax Invoice"
+                                className="group relative flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a6eb7] hover:bg-[#155a96] text-white text-[11px] font-bold transition-colors"
+                              >
+                                <Receipt className="h-3.5 w-3.5 shrink-0" />
+                                <span>Invoice</span>
+                              </button>
+
+                              {/* Save PDF */}
+                              <button
+                                type="button"
+                                disabled={downloadingId === sale._id}
+                                onClick={() => handleQuickDownloadPdf(sale)}
+                                title="Download PDF"
+                                className="flex items-center justify-center w-8 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors disabled:opacity-40"
+                              >
+                                {downloadingId === sale._id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* ── EMI Ledger (only for EMI sales) ── */}
                             {isEmi && (
-                              <Button
-                                size="sm"
-                                variant="outline"
+                              <button
+                                type="button"
                                 onClick={() => openEmiLedger(sale)}
-                                className="h-7 text-[11px] gap-1 font-bold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-50 dark:hover:bg-amber-950/30 shadow-xs"
-                                title="Open Month-by-Month EMI Ledger & Reminders"
+                                title="EMI Ledger — month-by-month installment tracker"
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors shadow-xs ${
+                                  isEmiFullySettled
+                                    ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
+                                    : 'border-amber-400/50 dark:border-amber-600/40 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40'
+                                }`}
                               >
-                                <CalendarCheck className="h-3 w-3" />
-                                <span>EMI Ledger</span>
-                              </Button>
+                                <CalendarCheck className="h-3.5 w-3.5 shrink-0" />
+                                <span>EMI</span>
+                                {isEmiFullySettled ? (
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                ) : (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-extrabold min-w-[14px] h-[14px] px-1 leading-none">
+                                    !
+                                  </span>
+                                )}
+                              </button>
                             )}
 
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => setActiveInvoice(sale)}
-                              className="h-7 text-[11px] gap-1 font-bold shadow-xs"
-                            >
-                              <Receipt className="h-3 w-3" />
-                              <span>Tax Invoice</span>
-                            </Button>
+                            {/* ── Edit (manager/admin only) ── */}
+                            {canEditBills && (
+                              <button
+                                type="button"
+                                onClick={() => openEditSaleModal(sale)}
+                                title="Edit bill details"
+                                className="flex items-center justify-center w-7 h-7 rounded-lg border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors shadow-xs"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                            )}
 
-                            <button
-                              type="button"
-                              disabled={downloadingId === sale._id}
-                              onClick={() => handleQuickDownloadPdf(sale)}
-                              title="Download / Save PDF directly"
-                              className="inline-flex items-center justify-center h-7 px-2 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-amber-600 transition-colors disabled:opacity-50"
-                            >
-                              {downloadingId === sale._id ? (
-                                <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
-                              ) : (
-                                <Download className="h-3 w-3" />
-                              )}
-                              <span className="ml-1">Save PDF</span>
-                            </button>
                           </div>
                         </td>
                       </tr>
