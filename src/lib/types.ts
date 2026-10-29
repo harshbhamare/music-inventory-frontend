@@ -270,7 +270,7 @@ export interface RentalReminder {
 
 export interface RentalPaymentLog {
   _id?: string;
-  paymentType: 'SECURITY_DEPOSIT' | 'RENTAL_PAYMENT';
+  paymentType: 'SECURITY_DEPOSIT' | 'RENTAL_PAYMENT' | 'DEPOSIT_DEDUCTION';
   amount: number;
   paymentMethod: string;
   transactionRef: string;
@@ -278,6 +278,21 @@ export interface RentalPaymentLog {
   notes?: string;
   recordedBy?: User | string;
   paidAt: string;
+}
+
+export interface DepositDeduction {
+  _id: string;
+  monthIndex: number;
+  billingMonth: string;
+  deductedAmount: number;
+  depositBalanceBefore: number;
+  depositBalanceAfter: number;
+  deductedAt: string;
+  deductedBy: User | string;
+  noticeSent: boolean;
+  noticeSentAt?: string;
+  noticeSentBy?: User | string;
+  notes?: string;
 }
 
 export interface InternalUsage {
@@ -300,6 +315,12 @@ export interface InternalUsage {
   isRental?: boolean;
   lockInPeriodMonths?: number;
   securityDeposit?: number;
+  depositTransactionRef?: string;
+  depositMode?: boolean;
+  depositBalance?: number;
+  depositExhausted?: boolean;
+  depositDeductions?: DepositDeduction[];
+  continuationStartedAt?: string;
   monthlyRent?: number;
   includedAccessories?: string[];
   monthlyPayments?: RentalMonthlyPayment[];
@@ -398,7 +419,7 @@ export interface DashboardMetrics {
 
 export interface RentalDueItem {
   id: string;
-  loanType?: 'RENTAL' | 'EMI';
+  loanType?: 'RENTAL' | 'EMI' | 'RENTAL_DEPOSIT';
   saleId?: string;
   invoiceNumber?: string;
   issueReference: string;
@@ -412,10 +433,14 @@ export interface RentalDueItem {
   tenureMonths?: number;
   nextDueDate?: string;
   daysOverdue: number;
-  status: 'OVERDUE' | 'DUE' | 'UPCOMING';
+  status: 'OVERDUE' | 'DUE' | 'UPCOMING' | 'DEPOSIT_NOTICE_PENDING';
   billingMonth?: string;
   remindersSentCount: number;
   lastReminderSentAt?: string;
+  // deposit-mode extras
+  depositBalance?: number;
+  depositExhausted?: boolean;
+  pendingNoticeDeductions?: DepositDeduction[];
 }
 
 export interface RentalDuesSummary {

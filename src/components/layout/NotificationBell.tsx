@@ -18,6 +18,7 @@ import {
   ChevronRight,
   SendHorizontal,
   Sparkles,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
@@ -25,11 +26,15 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [duesData, setDuesData] = useState<RentalDuesSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'OVERDUE' | 'UPCOMING'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'OVERDUE' | 'UPCOMING' | 'DEPOSIT'>('ALL');
   const [sendingIds, setSendingIds] = useState<Record<string, boolean>>({});
   const [sentFeedback, setSentFeedback] = useState<Record<string, string>>({});
   const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState('');
+
+  // Per-deduction notice send state (deposit-mode items)
+  const [sendingNoticeIds, setSendingNoticeIds] = useState<Record<string, boolean>>({});
+  const [noticeFeedback, setNoticeFeedback] = useState<Record<string, string>>({});
 
   // Custom email modal state
   const [promptEmailModal, setPromptEmailModal] = useState<{
@@ -202,14 +207,74 @@ export function NotificationBell() {
     }
   };
 
+  // Send deposit deduction notice email for a specific deduction entry
+  const handleSendDepositNotice = async (
+    item: RentalDueItem,
+    deductionId: string,
+    billingMonth: string
+  ) => {
+    const key = `${item.id}-${deductionId}`;
+    setSendingNoticeIds((prev) => ({ ...prev, [key]: true }));
+    setNoticeFeedback((prev) => ({ ...prev, [key]: '' }));
+    try {
+      await api.post(
+        `/usage/${item.id}/deposit-deductions/${deductionId}/send-notice`,
+        { recipientEmail: item.customerEmail || undefined }
+      );
+      setNoticeFeedback((prev) => ({
+        ...prev,
+        [key]: `Notice emailed to ${item.customerEmail || item.assignedPerson} for ${billingMonth}!`,
+      }));
+      // Mark the deduction as notice-sent locally so the badge updates instantly
+      setDuesData((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          items: prev.items.map((i) => {
+            if (i.id !== item.id) return i;
+            return {
+              ...i,
+              pendingNoticeDeductions: (i.pendingNoticeDeductions || []).filter(
+                (d) => d._id !== deductionId
+              ),
+            };
+          }).filter((i) => {
+            // Remove item from list if it has no more pending notices
+            if (i.loanType !== 'RENTAL_DEPOSIT') return true;
+            return (i.pendingNoticeDeductions || []).length > 0;
+          }),
+        };
+      });
+      setTimeout(() => {
+        setSendingNoticeIds((prev) => ({ ...prev, [key]: false }));
+        setNoticeFeedback((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }, 4000);
+    } catch (err: any) {
+      setNoticeFeedback((prev) => ({
+        ...prev,
+        [key]: `Failed: ${err.message || 'Could not send notice email.'}`,
+      }));
+      setSendingNoticeIds((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
   const summary = duesData?.summary;
   const allItems = duesData?.items || [];
   const totalCount = summary?.totalRentalsWithDues || 0;
   const overdueCount = summary?.overdueCount || 0;
 
+  const depositNoticePendingCount = allItems.filter(
+    (i) => i.loanType === 'RENTAL_DEPOSIT' && i.status === 'DEPOSIT_NOTICE_PENDING'
+  ).length;
+
   const filteredItems = allItems.filter((i) => {
     if (activeFilter === 'OVERDUE') return i.status === 'OVERDUE';
-    if (activeFilter === 'UPCOMING') return i.status !== 'OVERDUE';
+    if (activeFilter === 'UPCOMING') return i.status !== 'OVERDUE' && i.loanType !== 'RENTAL_DEPOSIT';
+    if (activeFilter === 'DEPOSIT') return i.loanType === 'RENTAL_DEPOSIT';
     return true;
   });
 
@@ -226,15 +291,17 @@ export function NotificationBell() {
         <Bell className="h-4 w-4" />
 
         {/* Badge Indicator */}
-        {totalCount > 0 && (
+        {(totalCount > 0 || depositNoticePendingCount > 0) && (
           <span
             className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-extrabold text-white shadow-xs ${
               overdueCount > 0
                 ? 'bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse'
+                : depositNoticePendingCount > 0
+                ? 'bg-indigo-500 ring-2 ring-white dark:ring-slate-900 animate-pulse'
                 : 'bg-amber-500 ring-2 ring-white dark:ring-slate-900'
             }`}
           >
-            {totalCount > 99 ? '99+' : totalCount}
+            {(totalCount + depositNoticePendingCount) > 99 ? '99+' : totalCount + depositNoticePendingCount}
           </span>
         )}
       </button>
@@ -359,6 +426,20 @@ export function NotificationBell() {
                 >
                   Due Soon ({summary?.dueSoonCount || 0})
                 </button>
+                {depositNoticePendingCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter('DEPOSIT')}
+                    className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 ${
+                      activeFilter === 'DEPOSIT'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400'
+                    }`}
+                  >
+                    <Shield className="h-2.5 w-2.5" />
+                    Deposit ({depositNoticePendingCount})
+                  </button>
+                )}
               </div>
 
               {overdueCount > 0 && (
@@ -400,6 +481,127 @@ export function NotificationBell() {
               </div>
             ) : (
               filteredItems.map((item) => {
+                // ── Deposit-mode rental: show per-deduction "Send Notice Email" buttons ──
+                if (item.loanType === 'RENTAL_DEPOSIT') {
+                  const pending = item.pendingNoticeDeductions || [];
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3.5 border-l-2 border-indigo-400 dark:border-indigo-600 transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20"
+                    >
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-2 mb-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
+                              {item.assignedPerson}
+                            </span>
+                            <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-400/30 flex items-center gap-1">
+                              <Shield className="h-2.5 w-2.5" />
+                              Deposit Rental
+                            </span>
+                            {item.depositExhausted && (
+                              <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                                Deposit Exhausted
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                            <span className="truncate font-medium">{item.productName}</span>
+                            <span className="text-slate-400">&bull;</span>
+                            <span className="font-mono text-[11px] text-slate-500">{item.issueReference}</span>
+                          </div>
+
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                            {item.customerEmail ? (
+                              <span className="flex items-center gap-1 text-indigo-700 dark:text-indigo-400 font-medium truncate">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{item.customerEmail}</span>
+                              </span>
+                            ) : (
+                              <span className="text-rose-500 font-semibold text-[10px]">No email — add email to send notices</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Deposit balance chip */}
+                        <div className="shrink-0 text-right">
+                          <div className={`text-sm font-black ${(item.depositBalance || 0) <= 0 ? 'text-rose-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                            {formatCurrency(item.depositBalance || 0)}
+                          </div>
+                          <div className="text-[10px] text-slate-400">deposit left</div>
+                        </div>
+                      </div>
+
+                      {/* Per-deduction rows with Send Notice button */}
+                      {pending.length === 0 ? (
+                        <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle2 className="h-3 w-3 shrink-0" />
+                          All deposit deduction notices sent for this rental.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                            {pending.length} notice{pending.length > 1 ? 's' : ''} pending — click to email customer
+                          </p>
+                          {pending.map((d) => {
+                            const key = `${item.id}-${d._id}`;
+                            const isSendingNotice = !!sendingNoticeIds[key];
+                            const nFeedback = noticeFeedback[key];
+                            return (
+                              <div key={d._id} className="rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-white dark:bg-slate-900 p-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-[11px] text-slate-900 dark:text-white">
+                                      {d.billingMonth}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
+                                      <span>Deducted: <strong className="text-indigo-500">₹{d.deductedAmount.toLocaleString()}</strong></span>
+                                      <span className="text-slate-300 dark:text-slate-700">|</span>
+                                      <span>Bal after: <strong className={d.depositBalanceAfter <= 0 ? 'text-rose-500' : 'text-emerald-600'}>{formatCurrency(d.depositBalanceAfter)}</strong></span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-0.5">{formatDate(d.deductedAt)}</div>
+                                  </div>
+
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => handleSendDepositNotice(item, d._id, d.billingMonth)}
+                                    disabled={isSendingNotice || !item.customerEmail}
+                                    title={!item.customerEmail ? 'No customer email on file' : `Send deposit deduction notice for ${d.billingMonth}`}
+                                    className="shrink-0 h-7 text-[10px] font-bold gap-1 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                                  >
+                                    {isSendingNotice ? (
+                                      <RefreshCw className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Send className="h-3 w-3" />
+                                    )}
+                                    <span>Send Email</span>
+                                  </Button>
+                                </div>
+
+                                {/* Per-deduction feedback */}
+                                {nFeedback && (
+                                  <div className={`mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-semibold ${nFeedback.startsWith('Failed') ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>
+                                    {nFeedback.startsWith('Failed') ? (
+                                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                                    ) : (
+                                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                    )}
+                                    {nFeedback}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ── Standard rental / EMI dues card ──
                 const isOverdue = item.status === 'OVERDUE';
                 const isSending = !!sendingIds[item.id];
                 const feedback = sentFeedback[item.id];
