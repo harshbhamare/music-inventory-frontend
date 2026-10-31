@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -557,7 +557,7 @@ export function NotificationBell() {
                                       {d.billingMonth}
                                     </div>
                                     <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
-                                      <span>Deducted: <strong className="text-indigo-500">₹{d.deductedAmount.toLocaleString()}</strong></span>
+                                      <span>Deducted: <strong className="text-indigo-500">{formatCurrency(d.deductedAmount)}</strong></span>
                                       <span className="text-slate-300 dark:text-slate-700">|</span>
                                       <span>Bal after: <strong className={d.depositBalanceAfter <= 0 ? 'text-rose-500' : 'text-emerald-600'}>{formatCurrency(d.depositBalanceAfter)}</strong></span>
                                     </div>

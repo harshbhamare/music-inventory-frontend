@@ -390,7 +390,7 @@ export default function UsagePage() {
         setDeductionBillingMonth('');
       }
       setDeductionFeedback(
-        `â‚¹${selectedRentalForLedger.monthlyRent?.toLocaleString()} deducted from deposit for ${deductionBillingMonth}. Remaining balance: â‚¹${updated.depositBalance?.toLocaleString() ?? 0}. Manager will receive a bell notification to send the customer notice email.`
+        `${formatCurrency(selectedRentalForLedger.monthlyRent ?? 0)} deducted from deposit for ${deductionBillingMonth}. Remaining balance: ${formatCurrency(updated.depositBalance ?? 0)}. Manager will receive a bell notification to send the customer notice email.`
       );
       fetchUsages();
     } catch (err: any) {
@@ -623,7 +623,7 @@ export default function UsagePage() {
               <span>Rent Instrument & Instrument Loans</span>
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail â€” Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
+              Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
             </p>
           </div>
         </div>
@@ -714,7 +714,7 @@ export default function UsagePage() {
                 : s === 'ACTIVE'
                 ? 'Active Rentals'
                 : s === 'OVERDUE'
-                ? 'âš ï¸ Due / Overdue'
+                ? '⚠ Due / Overdue'
                 : 'Returned / Closed'}
             </button>
           ))}
@@ -868,7 +868,7 @@ export default function UsagePage() {
                             </div>
                             {due > 0 ? (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                â‚¹{due.toLocaleString()} Due
+                                {formatCurrency(due)} Due
                               </span>
                             ) : (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
@@ -977,7 +977,7 @@ export default function UsagePage() {
               {issueTab !== 'customer' && (
                 <button type="button" onClick={() => setIssueTab(issueTab === 'instrument' ? 'terms' : 'customer')}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                  â† Back
+                  ← Back
                 </button>
               )}
               <div className="flex items-center gap-1 ml-1">
@@ -991,7 +991,7 @@ export default function UsagePage() {
               {issueTab !== 'instrument' ? (
                 <Button type="button" size="sm" variant="default" className="font-bold gap-1.5"
                   onClick={() => setIssueTab(issueTab === 'customer' ? 'terms' : 'instrument')}>
-                  Next â†’
+                  Next →
                 </Button>
               ) : (
                 <Button type="submit" form="issue-rental-form" size="sm" variant="default" isLoading={isIssuing} className="font-bold">
@@ -1009,7 +1009,7 @@ export default function UsagePage() {
             </div>
           )}
 
-          {/* â”€â”€ Tab Bar â”€â”€ */}
+          {/* ── Tab Bar ── */}
           <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
             {([
               { key: 'customer',   label: 'Customer',            icon: <User className="h-3.5 w-3.5" /> },
@@ -1025,7 +1025,7 @@ export default function UsagePage() {
             ))}
           </div>
 
-          {/* â•â• TAB 1 â€” Customer â•â• */}
+          {/* •• TAB 1 — Customer •• */}
           <div className={issueTab === 'customer' ? 'space-y-4' : 'hidden'}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input label="Renter / Customer Name *" required placeholder="e.g. Rohan Deshmukh"
@@ -1040,7 +1040,7 @@ export default function UsagePage() {
               value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
 
-          {/* â•â• TAB 2 â€” Rental Terms & Deposit â•â• */}
+          {/* •• TAB 2 — Rental Terms & Deposit •• */}
           <div className={issueTab === 'terms' ? 'space-y-4' : 'hidden'}>
             {/* Lock-in + rent + deposit */}
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
@@ -1061,13 +1061,13 @@ export default function UsagePage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Monthly Rent (â‚¹) *</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Monthly Rent (₹) *</label>
                   <input type="number" min="0" required value={monthlyRent}
                     onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
                     className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Security Deposit (â‚¹)</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Security Deposit (₹)</label>
                   <input type="number" min="0" value={securityDeposit}
                     onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
                     className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right" />
@@ -1121,8 +1121,8 @@ export default function UsagePage() {
                     </div>
                     {depositMode && monthlyRent > 0 && (
                       <div className="mt-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                        â‚¹{securityDeposit.toLocaleString()} Ã· â‚¹{monthlyRent.toLocaleString()}/mo = {Math.floor(securityDeposit / monthlyRent)} months covered
-                        {securityDeposit % monthlyRent > 0 && ` (â‚¹${(securityDeposit % monthlyRent).toLocaleString()} remaining)`}
+                        {formatCurrency(securityDeposit)} &divide; {formatCurrency(monthlyRent)}/mo = {Math.floor(securityDeposit / monthlyRent)} months covered
+                        {securityDeposit % monthlyRent > 0 && ` (${formatCurrency(securityDeposit % monthlyRent)} remaining)`}
                       </div>
                     )}
                   </div>
@@ -1131,7 +1131,7 @@ export default function UsagePage() {
             )}
           </div>
 
-          {/* â•â• TAB 3 â€” Instrument & Accessories â•â• */}
+          {/* •• TAB 3 — Instrument & Accessories •• */}
           <div className={issueTab === 'instrument' ? 'space-y-4' : 'hidden'}>
             {/* Instrument select */}
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2">
@@ -1139,10 +1139,10 @@ export default function UsagePage() {
               <select required value={selectedProductId}
                 onChange={(e) => { setSelectedProductId(e.target.value); setSelectedSerialId(''); }}
                 className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium">
-                <option value="">Choose an instrumentâ€¦</option>
+                <option value="">Choose an instrument…</option>
                 {products.filter((p) => p.availableForSale > 0).map((p) => (
                   <option key={p._id} value={p._id}>
-                    {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) â€” {p.availableForSale} available
+                    {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.availableForSale} available
                   </option>
                 ))}
               </select>
@@ -1168,7 +1168,7 @@ export default function UsagePage() {
               </div>
               {/* Custom item add */}
               <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
-                <input type="text" placeholder="Add custom item (e.g. Sheet Music Stand)â€¦"
+                <input type="text" placeholder="Add custom item (e.g. Sheet Music Stand)…"
                   value={customAccessoryInput} onChange={(e) => setCustomAccessoryInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addCustomAccessory(); } }}
                   className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
@@ -1180,7 +1180,7 @@ export default function UsagePage() {
                   {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).map((acc, i) => (
                     <span key={i} onClick={() => toggleAccessory(acc)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors" title="Click to remove">
-                      {acc} Ã—
+                      {acc} −
                     </span>
                   ))}
                 </div>
@@ -1194,7 +1194,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!selectedRentalForLedger}
         onClose={() => setSelectedRentalForLedger(null)}
-        title={`Monthly Rental Ledger â€” ${selectedRentalForLedger?.issueReference}`}
+        title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
         description="Track month-by-month rent payments, pending balances, bundled accessories, and send email reminders."
         maxWidth="2xl"
       >
@@ -1231,7 +1231,7 @@ export default function UsagePage() {
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      Txn: {selectedRentalForLedger.depositTransactionRef || 'â€”'}
+                      Txn: {selectedRentalForLedger.depositTransactionRef || '—'}
                     </span>
                   </div>
                   <div>
@@ -1240,7 +1240,7 @@ export default function UsagePage() {
                       {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      {selectedRentalForLedger.depositExhausted ? 'âš  Exhausted â€” continuation mode' : 'Remaining'}
+                      {selectedRentalForLedger.depositExhausted ? '⚠️ Exhausted — continuation mode' : 'Remaining'}
                     </span>
                   </div>
                   <div>
@@ -1248,11 +1248,11 @@ export default function UsagePage() {
                     <span className="font-bold text-amber-500 text-sm">
                       {(selectedRentalForLedger.depositDeductions || []).length}
                       {' / '}
-                      {selectedRentalForLedger.lockInPeriodMonths || 'â€”'}
+                      {selectedRentalForLedger.lockInPeriodMonths || '—'}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
                       {(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length > 0
-                        ? `âš¡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
+                        ? `⚡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
                         : 'All notices sent'}
                     </span>
                   </div>
@@ -1462,12 +1462,12 @@ export default function UsagePage() {
                       }}
                       className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
                     >
-                      <option value="">Select monthâ€¦</option>
+                      <option value="">Select month…</option>
                       {(selectedRentalForLedger.monthlyPayments || [])
                         .filter((p) => p.status !== 'PAID')
                         .map((p) => (
                           <option key={p.monthIndex} value={p.billingMonth}>
-                            {p.billingMonth} â€” â‚¹{p.amountDue.toLocaleString()}
+                            {p.billingMonth} — {formatCurrency(p.amountDue)}
                           </option>
                         ))}
                     </select>
@@ -1484,7 +1484,7 @@ export default function UsagePage() {
                               (p) => p.monthIndex === deductionMonthIndex
                             )?.amountDue || 0
                           )
-                        : 'â€”'}
+                        : '—'}
                     </div>
                   </div>
 
@@ -1521,12 +1521,12 @@ export default function UsagePage() {
               </form>
             )}
 
-            {/* Deposit exhausted â€” continuation mode notice */}
+            {/* Deposit exhausted — continuation mode notice */}
             {selectedRentalForLedger.depositMode && selectedRentalForLedger.depositExhausted && (
               <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50/60 dark:bg-rose-950/20 space-y-2">
                 <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>Deposit Fully Utilised â€” Continuation Rent Mode Active</span>
+                  <span>Deposit Fully Utilised — Continuation Rent Mode Active</span>
                 </div>
                 <p className="text-[11px] text-rose-600 dark:text-rose-400/80">
                   The security deposit has been fully exhausted. The customer must now pay monthly rent directly.
@@ -1562,7 +1562,7 @@ export default function UsagePage() {
                         <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${!d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
                           <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">{d.billingMonth}</td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
-                            âˆ’ {formatCurrency(d.deductedAmount)}
+                            − {formatCurrency(d.deductedAmount)}
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(d.depositBalanceAfter)}
@@ -1589,7 +1589,7 @@ export default function UsagePage() {
               </div>
             )}
 
-            {/* Record Monthly Payment Form â€” shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
+            {/* Record Monthly Payment Form — shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
             {(!selectedRentalForLedger.depositMode || selectedRentalForLedger.depositExhausted) && (
             <form
               onSubmit={handleRecordPayment}
@@ -1605,7 +1605,7 @@ export default function UsagePage() {
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Amount to Pay (â‚¹) *
+                    Amount to Pay (₹) *
                   </label>
                   <input
                     type="number"
@@ -1729,7 +1729,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!editingPayment}
         onClose={() => setEditingPayment(null)}
-        title={`Edit Payment & Rent â€” ${editingPayment?.billingMonth}`}
+        title={`Edit Payment & Rent — ${editingPayment?.billingMonth}`}
         description="Update paid amount, transaction reference (trn no.), payment method, and adjust next month's rent."
         maxWidth="md"
       >
@@ -1744,7 +1744,7 @@ export default function UsagePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                  Monthly Rent Due (â‚¹) *
+                  Monthly Rent Due (₹) *
                 </label>
                 <input
                   type="number"
@@ -1758,7 +1758,7 @@ export default function UsagePage() {
 
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                  Price / Paid Amount (â‚¹) *
+                  Price / Paid Amount (₹) *
                 </label>
                 <input
                   type="number"
@@ -1825,11 +1825,11 @@ export default function UsagePage() {
                   <span className="font-mono font-bold text-xs">
                     {editAmountPaid < editAmountDue ? (
                       <span className="text-rose-400">
-                        Shortfall: -â‚¹{editAmountDue - editAmountPaid}
+                        Shortfall: -₹{editAmountDue - editAmountPaid}
                       </span>
                     ) : (
                       <span className="text-emerald-400">
-                        Surplus: +â‚¹{editAmountPaid - editAmountDue}
+                        Surplus: +₹{editAmountPaid - editAmountDue}
                       </span>
                     )}
                   </span>
@@ -1837,8 +1837,8 @@ export default function UsagePage() {
 
                 <p className="text-[11px] text-slate-400">
                   {editAmountPaid < editAmountDue
-                    ? `Customer underpaid by â‚¹${editAmountDue - editAmountPaid}. You can automatically carry over and add this balance to next month's rent.`
-                    : `Customer overpaid by â‚¹${editAmountPaid - editAmountDue}. You can credit and deduct this amount from next month's rent.`}
+                    ? `Customer underpaid by ₹${editAmountDue - editAmountPaid}. You can automatically carry over and add this balance to next month's rent.`
+                    : `Customer overpaid by ₹${editAmountPaid - editAmountDue}. You can credit and deduct this amount from next month's rent.`}
                 </p>
 
                 <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-200">
@@ -1850,8 +1850,8 @@ export default function UsagePage() {
                   />
                   <span className="font-semibold text-xs">
                     {editAmountPaid < editAmountDue
-                      ? `Adjust Next Month: Add â‚¹${editAmountDue - editAmountPaid} to next month's rent`
-                      : `Adjust Next Month: Deduct â‚¹${editAmountPaid - editAmountDue} from next month's rent`}
+                      ? `Adjust Next Month: Add ₹${editAmountDue - editAmountPaid} to next month's rent`
+                      : `Adjust Next Month: Deduct ₹${editAmountPaid - editAmountDue} from next month's rent`}
                   </span>
                 </label>
               </div>
@@ -1879,7 +1879,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!adjustingMonth}
         onClose={() => setAdjustingMonth(null)}
-        title={`Adjust Rent Due â€” ${adjustingMonth?.billingMonth}`}
+        title={`Adjust Rent Due — ${adjustingMonth?.billingMonth}`}
         description="Modify the agreed monthly rent due for this billing cycle."
         maxWidth="sm"
       >
@@ -1893,7 +1893,7 @@ export default function UsagePage() {
 
             <div>
               <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                New Rent Due Amount (â‚¹) *
+                New Rent Due Amount (₹) *
               </label>
               <input
                 type="number"
@@ -1911,7 +1911,7 @@ export default function UsagePage() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. â‚¹500 discount given or carryover adjustment"
+                placeholder="e.g. ₹500 discount given or carryover adjustment"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
                 className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
@@ -1940,7 +1940,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!returnModalUsage}
         onClose={() => setReturnModalUsage(null)}
-        title={`Return Inspection â€” ${returnModalUsage?.issueReference}`}
+        title={`Return Inspection — ${returnModalUsage?.issueReference}`}
         description="Inspect physical condition of returned equipment, bundled accessories, and process deposit release."
         maxWidth="2xl"
       >
@@ -2021,13 +2021,13 @@ export default function UsagePage() {
                           className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-transparent font-bold text-amber-500"
                         >
                           <option value="OK_TO_STOCK">
-                            âœ… OK to Stock (Return to Available Pool)
+                            ✅ OK to Stock (Return to Available Pool)
                           </option>
                           <option value="NEEDS_MAINTENANCE">
-                            ðŸ”§ Needs Maintenance (Send for Repair)
+                            🔧 Needs Maintenance (Send for Repair)
                           </option>
                           <option value="QUARANTINE_DAMAGED">
-                            ðŸš« Quarantine / Damaged (Block from Sale)
+                            🚫 Quarantine / Damaged (Block from Sale)
                           </option>
                         </select>
                       </div>

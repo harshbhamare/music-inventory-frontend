@@ -622,7 +622,7 @@ export default function SalesPage() {
               Sales &amp; Point of Sale (POS)
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail â€” Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
+              Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
             </p>
           </div>
         </div>
@@ -718,7 +718,7 @@ export default function SalesPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search invoice, customer, phoneâ€¦"
+              placeholder="Search invoice, customer, phone…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-colors"
@@ -845,7 +845,7 @@ export default function SalesPage() {
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-2">
 
-                            {/* â”€â”€ Primary actions: Invoice + PDF â”€â”€ */}
+                            {/* ── Primary actions: Invoice + PDF ── */}
                             <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs divide-x divide-slate-200 dark:divide-slate-700">
                               {/* Tax Invoice */}
                               <button
@@ -874,12 +874,12 @@ export default function SalesPage() {
                               </button>
                             </div>
 
-                            {/* â”€â”€ EMI Ledger (only for EMI sales) â”€â”€ */}
+                            {/* ── EMI Ledger (only for EMI sales) ── */}
                             {isEmi && (
                               <button
                                 type="button"
                                 onClick={() => openEmiLedger(sale)}
-                                title="EMI Ledger â€” month-by-month installment tracker"
+                                title="EMI Ledger — month-by-month installment tracker"
                                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors shadow-xs ${
                                   isEmiFullySettled
                                     ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
@@ -898,7 +898,7 @@ export default function SalesPage() {
                               </button>
                             )}
 
-                            {/* â”€â”€ Edit (manager/admin only) â”€â”€ */}
+                            {/* ── Edit (manager/admin only) ── */}
                             {canEditBills && (
                               <button
                                 type="button"
@@ -926,7 +926,7 @@ export default function SalesPage() {
       <Modal
         isOpen={isNewSaleOpen}
         onClose={() => setIsNewSaleOpen(false)}
-        title="New Customer Sale â€” POS"
+        title="New Customer Sale — POS"
         description="Add items to cart, set customer details, choose payment plan, and confirm."
         maxWidth="5xl"
         footer={
@@ -939,7 +939,7 @@ export default function SalesPage() {
                   onClick={() => setPosTab(posTab === 'dispatch' ? 'payment' : 'items')}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
-                  â† Back
+                  ← Back
                 </button>
               )}
               <div className="flex items-center gap-1 ml-2">
@@ -960,7 +960,7 @@ export default function SalesPage() {
                   className="font-bold gap-1.5"
                   onClick={() => setPosTab(posTab === 'items' ? 'payment' : 'dispatch')}
                 >
-                  Next â†’
+                  Next →
                 </Button>
               ) : (
                 <Button
@@ -986,7 +986,7 @@ export default function SalesPage() {
             </div>
           )}
 
-          {/* â”€â”€ Tab Bar â”€â”€ */}
+          {/* ── Tab Bar ── */}
           <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
             {([
               { key: 'items',    label: 'Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
@@ -1009,9 +1009,9 @@ export default function SalesPage() {
             ))}
           </div>
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              TAB 1 â€” Items & Customer
-          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ••••••••••••••••••••••••••••••••••••••••••
+              TAB 1 — Items & Customer
+          •••••••••••••••••••••••••••••••••••••••••• */}
           <div className={posTab === 'items' ? 'space-y-4' : 'hidden'}>
 
             {/* Sale Type Selector */}
@@ -1071,7 +1071,7 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Product Picker + Cart â€” two columns */}
+            {/* Product Picker + Cart — two columns */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
               {/* Left: catalogue */}
@@ -1088,7 +1088,7 @@ export default function SalesPage() {
                         <div className="font-semibold text-slate-900 dark:text-white truncate">{p.name}
                           {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{p.color}</span>}
                         </div>
-                        <div className="text-[11px] text-slate-400">{p.brand} Â· Avail: <strong>{p.availableForSale}</strong></div>
+                        <div className="text-[11px] text-slate-400">{p.brand} · Avail: <strong>{p.availableForSale}</strong></div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <div className="font-bold text-amber-500">{formatCurrency(p.defaultSellingPrice)}</div>
@@ -1129,13 +1129,13 @@ export default function SalesPage() {
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-bold" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-500">Unit Price (â‚¹)</label>
+                            <label className="text-[10px] text-slate-500">Unit Price (₹)</label>
                             <input type="number" min="0" value={item.unitPrice}
                               onChange={(e) => handleCartItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right font-semibold" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-500">Discount (â‚¹)</label>
+                            <label className="text-[10px] text-slate-500">Discount (₹)</label>
                             <input type="number" min="0" value={item.discount}
                               onChange={(e) => handleCartItemChange(idx, 'discount', parseFloat(e.target.value) || 0)}
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold" />
@@ -1149,7 +1149,7 @@ export default function SalesPage() {
                 {/* GST Summary */}
                 <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
                   <div className="flex justify-between text-slate-500"><span>Subtotal:</span><span>{formatCurrency(subtotal)}</span></div>
-                  {discountTotal > 0 && <div className="flex justify-between text-emerald-500 font-semibold"><span>Discount:</span><span>âˆ’{formatCurrency(discountTotal)}</span></div>}
+                  {discountTotal > 0 && <div className="flex justify-between text-emerald-500 font-semibold"><span>Discount:</span><span>−{formatCurrency(discountTotal)}</span></div>}
                   <div className="flex justify-between text-slate-600 dark:text-slate-300"><span>Taxable:</span><span>{formatCurrency(taxableAmount)}</span></div>
                   <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>CGST 9%:</span><span>+{formatCurrency(cgstAmount)}</span></div>
                   <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>SGST 9%:</span><span>+{formatCurrency(sgstAmount)}</span></div>
@@ -1166,14 +1166,14 @@ export default function SalesPage() {
             </div>
           </div>
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              TAB 2 â€” Payment Plan (EMI Calculator)
-          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ••••••••••••••••••••••••••••••••••••••••••
+              TAB 2 — Payment Plan (EMI Calculator)
+          •••••••••••••••••••••••••••••••••••••••••• */}
           <div className={posTab === 'payment' ? 'space-y-4' : 'hidden'}>
             {saleType === 'DIRECT' ? (
               <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 space-y-3">
                 <CheckCircle2 className="h-12 w-12 text-emerald-400" />
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Direct Sale selected â€” no EMI plan needed.</p>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Direct Sale selected — no EMI plan needed.</p>
                 <p className="text-xs">Switch to EMI on Tab 1 if you want to set up an installment plan.</p>
               </div>
             ) : (
@@ -1190,7 +1190,7 @@ export default function SalesPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">Down Payment (â‚¹) *</label>
+                      <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">Down Payment (₹) *</label>
                       <input type="number" min="0" max={grandTotal} value={downPayment}
                         onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
                         className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
@@ -1221,7 +1221,7 @@ export default function SalesPage() {
                 {emiSchedulePreview.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                      Installment Schedule â€” {emiSchedulePreview.length} Months
+                      Installment Schedule — {emiSchedulePreview.length} Months
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
                       {emiSchedulePreview.map((item) => (
@@ -1238,9 +1238,9 @@ export default function SalesPage() {
             )}
           </div>
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              TAB 3 â€” Dispatch & GST Details
-          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ••••••••••••••••••••••••••••••••••••••••••
+              TAB 3 — Dispatch & GST Details
+          •••••••••••••••••••••••••••••••••••••••••• */}
           <div className={posTab === 'dispatch' ? 'space-y-4' : 'hidden'}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="Dealer / Buyer GSTIN" placeholder="e.g. 27ADDFS8650Q1Z6" value={customerGstin} onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())} />
@@ -1267,7 +1267,7 @@ export default function SalesPage() {
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2 text-xs">
               <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px] tracking-wider block">Order Summary</span>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><span className="text-slate-500 block">Customer</span><span className="font-bold text-slate-900 dark:text-white">{customerName || 'â€”'}</span></div>
+                <div><span className="text-slate-500 block">Customer</span><span className="font-bold text-slate-900 dark:text-white">{customerName || '—'}</span></div>
                 <div><span className="text-slate-500 block">Sale Type</span><span className="font-bold text-amber-500">{saleType}</span></div>
                 <div><span className="text-slate-500 block">Items</span><span className="font-bold text-slate-900 dark:text-white">{cartItems.length} product{cartItems.length !== 1 ? 's' : ''}</span></div>
                 <div><span className="text-slate-500 block">Grand Total</span><span className="font-bold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span></div>
@@ -1277,11 +1277,11 @@ export default function SalesPage() {
         </form>
       </Modal>
 
-      {/* EMI Ledger & Payment Tracking Modal â€” Exact same workflow as Rental Ledger */}
+      {/* EMI Ledger & Payment Tracking Modal — Exact same workflow as Rental Ledger */}
       <Modal
         isOpen={!!selectedSaleForLedger}
         onClose={() => setSelectedSaleForLedger(null)}
-        title={`Customer EMI Ledger â€” ${selectedSaleForLedger?.invoiceNumber}`}
+        title={`Customer EMI Ledger — ${selectedSaleForLedger?.invoiceNumber}`}
         description="Month-by-month EMI installment schedule, payment tracking, balance calculations, and email reminder dispatch."
         maxWidth="2xl"
       >
@@ -1430,7 +1430,7 @@ export default function SalesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Pay (â‚¹) *
+                      Amount to Pay (₹) *
                     </label>
                     <input
                       type="number"
@@ -1551,7 +1551,7 @@ export default function SalesPage() {
                         <div>
                           <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
-                              â‚¹{Math.round(p.amount).toLocaleString('en-IN')}
+                              {formatCurrency(Math.round(p.amount))}
                             </span>
                             <span>&bull;</span>
                             <span>{p.paymentMethod}</span>
@@ -1792,7 +1792,7 @@ export default function SalesPage() {
                         <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (â‚¹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (₹)</label>
                         <input
                           type="number"
                           min="0"
@@ -1807,7 +1807,7 @@ export default function SalesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (â‚¹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (₹)</label>
                         <input
                           type="number"
                           min="0"
@@ -1837,7 +1837,7 @@ export default function SalesPage() {
                       <div className="text-right">
                         <span className="block text-[9px] uppercase font-bold text-slate-400">Net Total</span>
                         <span className="font-bold text-slate-900 dark:text-white font-mono">
-                          â‚¹{Math.round(lineTotal).toLocaleString('en-IN')}
+                          {formatCurrency(Math.round(lineTotal))}
                         </span>
                       </div>
                     </div>
@@ -1857,16 +1857,16 @@ export default function SalesPage() {
                   <div className="flex justify-end gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
                     <div>
                       <span className="text-slate-500">Taxable: </span>
-                      <strong className="font-mono">â‚¹{taxBase.toLocaleString('en-IN')}</strong>
+                      <strong className="font-mono">{formatCurrency(taxBase)}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500">GST (18%): </span>
-                      <strong className="font-mono">â‚¹{(cgst + sgst).toLocaleString('en-IN')}</strong>
+                      <strong className="font-mono">{formatCurrency((cgst + sgst))}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500">Recalculated Grand Total: </span>
                       <strong className="text-amber-500 text-sm font-extrabold font-mono">
-                        â‚¹{grand.toLocaleString('en-IN')}
+                        {formatCurrency(grand)}
                       </strong>
                     </div>
                   </div>
@@ -1883,7 +1883,7 @@ export default function SalesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Initial Deposit / Down Payment (â‚¹)
+                      Initial Deposit / Down Payment (₹)
                     </label>
                     <input
                       type="number"
@@ -1920,7 +1920,7 @@ export default function SalesPage() {
                       const monthly = editEmiTenureMonths > 0 ? Math.round(financed / editEmiTenureMonths) : 0;
                       return (
                         <div className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex items-center justify-end font-bold text-amber-600 dark:text-amber-400 font-mono text-xs">
-                          â‚¹{monthly.toLocaleString('en-IN')} / mo
+                          {formatCurrency(monthly)} / mo
                         </div>
                       );
                     })()}

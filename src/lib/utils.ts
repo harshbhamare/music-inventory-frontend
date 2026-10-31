@@ -5,9 +5,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency = "INR", symbol = "₹"): string {
-  if (isNaN(amount)) return `${symbol}0`;
-  return `${symbol}${amount.toLocaleString("en-IN")}`;
+/**
+ * Deterministic Indian-style currency formatter.
+ * Uses manual digit grouping (2-2-3 from right) so the ₹ symbol
+ * is always the plain Unicode character regardless of runtime locale/Intl data.
+ * Works identically in Node SSR, Chrome, Safari, and Firefox.
+ */
+export function formatCurrency(amount: number, _currency = "INR", symbol = "\u20B9"): string {
+  if (isNaN(amount) || amount == null) return `${symbol}0`;
+
+  const isNegative = amount < 0;
+  const abs = Math.abs(Math.round(amount)); // round to whole rupees
+
+  // Build the Indian digit-grouping: last 3 digits, then groups of 2
+  const str = String(abs);
+  let result = "";
+  if (str.length <= 3) {
+    result = str;
+  } else {
+    const last3 = str.slice(-3);
+    const rest  = str.slice(0, -3);
+    const groups: string[] = [];
+    for (let i = rest.length; i > 0; i -= 2) {
+      groups.unshift(rest.slice(Math.max(0, i - 2), i));
+    }
+    result = groups.join(",") + "," + last3;
+  }
+
+  return `${isNegative ? "-" : ""}${symbol}${result}`;
 }
 
 export function formatDate(dateString?: string | Date): string {
@@ -105,10 +130,29 @@ export function numberToIndianWords(num: number): string {
   return finalWords + ' Only';
 }
 
+/**
+ * Formats a number with exactly 2 decimal places using Indian grouping.
+ * Used in tax invoices where paise are needed.
+ * Falls back to manual formatting to avoid Intl locale data issues.
+ */
 export function formatIndianDecimal(num: number): string {
-  return Number(num || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  if (isNaN(num) || num == null) return "0.00";
+  const fixed = num.toFixed(2);                    // always produces e.g. "4050.00"
+  const [intPart, decPart] = fixed.split(".");
+  const str = intPart.replace(/^-/, "");
+  const isNeg = intPart.startsWith("-");
+  let grouped = "";
+  if (str.length <= 3) {
+    grouped = str;
+  } else {
+    const last3 = str.slice(-3);
+    const rest  = str.slice(0, -3);
+    const parts: string[] = [];
+    for (let i = rest.length; i > 0; i -= 2) {
+      parts.unshift(rest.slice(Math.max(0, i - 2), i));
+    }
+    grouped = parts.join(",") + "," + last3;
+  }
+  return `${isNeg ? "-" : ""}${grouped}.${decPart}`;
 }
 
