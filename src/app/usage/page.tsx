@@ -858,15 +858,15 @@ export default function UsagePage() {
           <div className="responsive-table-wrapper">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                  <th className="py-3 px-4">Agreement Ref</th>
-                  <th className="py-3 px-4">Renter / Customer</th>
-                  <th className="py-3 px-4">Rented Instrument & Accessories</th>
-                  <th className="py-3 px-4">Rental Plan & Terms</th>
-                  <th className="py-3 px-4">Rent Paid / Remaining</th>
-                  <th className="py-3 px-4">Return / Renewal</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-center">Tracking & Actions</th>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                  <th className="py-2.5 px-3 whitespace-nowrap">Agreement</th>
+                  <th className="py-2.5 px-3">Renter / Customer</th>
+                  <th className="py-2.5 px-3">Instrument &amp; Accessories</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Plan &amp; Terms</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Rent &amp; Outward Refund</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Return Deadline</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -892,6 +892,22 @@ export default function UsagePage() {
                     const paid = u.totalRentPaid || 0;
                     const due = u.totalRentDue || 0;
 
+                    const deposit = u.securityDeposit || 0;
+                    let outwardRefund = 0;
+                    if (u.depositMode) {
+                      const balance =
+                        typeof u.depositBalance === 'number'
+                          ? u.depositBalance
+                          : Math.max(0, deposit - paid);
+                      outwardRefund = Math.max(0, balance);
+                    } else {
+                      outwardRefund = Math.max(0, deposit - due);
+                    }
+
+                    const daysRemaining = Math.ceil(
+                      (new Date(u.expectedReturnDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                    );
+
                     return (
                       <tr
                         key={u._id}
@@ -899,8 +915,9 @@ export default function UsagePage() {
                           isOverdue ? 'bg-rose-500/5' : ''
                         }`}
                       >
-                        <td className="py-3 px-4">
-                          <span className="font-mono font-bold text-amber-500 block">
+                        {/* 1. Agreement Reference */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <span className="font-mono font-bold text-amber-500 block text-xs">
                             {u.issueReference}
                           </span>
                           <span className="text-[10px] text-slate-400">
@@ -908,39 +925,43 @@ export default function UsagePage() {
                           </span>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white">
+                        {/* 2. Customer Information (Compact) */}
+                        <td className="py-2 px-3 align-middle">
+                          <div className="font-bold text-slate-900 dark:text-white text-xs truncate max-w-[150px]" title={u.assignedPerson}>
                             {u.assignedPerson}
                           </div>
-                          {u.assignedPersonContact && (
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              <span>{u.assignedPersonContact}</span>
-                            </div>
-                          )}
-                          {u.customerEmail && (
-                            <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                              <Mail className="h-3 w-3 text-indigo-400" />
-                              <span>{u.customerEmail}</span>
-                            </div>
-                          )}
+                          <div className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+                            {u.assignedPersonContact && (
+                              <span className="flex items-center gap-0.5 whitespace-nowrap">
+                                <Phone className="h-2.5 w-2.5 text-slate-500" />
+                                <span>{u.assignedPersonContact}</span>
+                              </span>
+                            )}
+                            {u.customerEmail && (
+                              <span className="flex items-center gap-0.5 text-slate-400 truncate max-w-[130px]" title={u.customerEmail}>
+                                <Mail className="h-2.5 w-2.5 text-indigo-400 shrink-0" />
+                                <span className="truncate">{u.customerEmail}</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="space-y-1">
+                        {/* 3. Instrument & Single-Line Compact Accessories */}
+                        <td className="py-2 px-3 align-middle">
+                          <div className="space-y-0.5">
                             {u.items.map((it, idx) => {
                               const pName = (it.product as any)?.name || (it as any).productName || 'Musical Instrument';
                               const pColor = (it.product as any)?.color;
                               return (
-                                <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                  <span className="font-semibold">{pName}</span>
+                                <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">{pName}</span>
                                   {pColor && (
-                                    <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                    <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700">
                                       {pColor}
                                     </span>
                                   )}
                                   {it.serializedItemId && (
-                                    <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
+                                    <span className="font-mono text-amber-500 font-bold text-[10px]">
                                       [{(it.serializedItemId as any).assetId || 'Unit'}]
                                     </span>
                                   )}
@@ -948,129 +969,142 @@ export default function UsagePage() {
                               );
                             })}
 
-                            {/* Detailing: Bundled accessories tags */}
+                            {/* Sleek single-line accessories */}
                             {accessories.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 pt-1">
-                                {accessories.map((acc, aidx) => (
-                                  <span
-                                    key={aidx}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                                  >
-                                    <Tag className="h-2.5 w-2.5" />
-                                    <span>{acc}</span>
-                                  </span>
-                                ))}
+                              <div
+                                className="text-[11px] text-slate-400 flex items-center gap-1 max-w-[220px] truncate"
+                                title={accessories.join(', ')}
+                              >
+                                <Tag className="h-2.5 w-2.5 text-indigo-400 shrink-0" />
+                                <span className="truncate">{accessories.join(' • ')}</span>
                               </div>
                             ) : (
-                              <span className="text-[10px] text-slate-400 italic">No bundled accessories</span>
+                              <span className="text-[10px] text-slate-500 italic">No bundled items</span>
                             )}
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        {/* 4. Plan & Terms (Compact 2 lines) */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
                           <div className="space-y-0.5">
                             <div className="text-xs font-bold text-amber-500">
-                              {formatCurrency(u.monthlyRent || 0)} / mo
+                              {formatCurrency(u.monthlyRent || 0)} <span className="text-[10px] font-normal text-slate-400">/ mo</span>
+                              <span className="ml-1 text-[10px] font-semibold text-slate-400">• {u.lockInPeriodMonths || 3}M</span>
                             </div>
-                            <div className="text-[11px] text-slate-500">
-                              Lock-in: <strong>{u.lockInPeriodMonths || 3} Months</strong>
-                            </div>
-                            <div className="text-[11px] text-indigo-500 font-medium">
-                              Deposit: {formatCurrency(u.securityDeposit || 0)}
+                            <div className="text-[11px] text-slate-400">
+                              Deposit: <strong className="text-indigo-400 font-mono">{formatCurrency(deposit)}</strong>
+                              {u.depositMode && <span className="ml-1 text-[9px] font-semibold text-indigo-400">(Auto-deduct)</span>}
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-xs font-bold">
-                              <span className="text-emerald-500">{formatCurrency(paid)}</span>
-                              <span className="text-slate-400">/</span>
-                              <span className="text-slate-700 dark:text-slate-300">
-                                {formatCurrency(paid + due)}
-                              </span>
+                        {/* 5. Rent Collection & Outward Money Outcome */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
+                              <span className="text-slate-500">/</span>
+                              <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
+                              {due > 0 ? (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                  {formatCurrency(due)} Due
+                                </span>
+                              ) : (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
+                                  All Paid
+                                </span>
+                              )}
                             </div>
-                            {due > 0 ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                {formatCurrency(due)} Due
-                              </span>
-                            ) : (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
-                                All Paid
-                              </span>
-                            )}
+                            <div className="text-[11px] text-teal-600 dark:text-teal-400 font-medium flex items-center gap-1">
+                              <span className="text-slate-400">Outward Refund:</span>
+                              <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong>
+                            </div>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <span
-                            className={
-                              isOverdue
-                                ? 'font-bold text-rose-500 flex items-center gap-1'
-                                : 'text-slate-700 dark:text-slate-300'
-                            }
-                          >
-                            {isOverdue && <AlertTriangle className="h-3 w-3 shrink-0" />}
-                            {formatDate(u.expectedReturnDate)}
-                          </span>
+                        {/* 6. Return Deadline & Progress */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <div className="space-y-0.5">
+                            <span
+                              className={
+                                isOverdue
+                                  ? 'font-bold text-rose-500 flex items-center gap-1 text-xs'
+                                  : 'text-slate-800 dark:text-slate-200 text-xs font-semibold'
+                              }
+                            >
+                              {isOverdue && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                              {formatDate(u.expectedReturnDate)}
+                            </span>
+                            <div className="text-[10px] text-slate-400">
+                              {isReturned ? (
+                                <span className="text-emerald-500 font-medium">Closed</span>
+                              ) : isOverdue ? (
+                                <span className="text-rose-400 font-bold">Overdue by {Math.abs(daysRemaining)}d</span>
+                              ) : (
+                                <span>{daysRemaining === 0 ? 'Due Today' : `Due in ${daysRemaining}d`}</span>
+                              )}
+                            </div>
+                          </div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        {/* 7. Status */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
                           <Badge
                             variant={isReturned ? 'success' : isOverdue ? 'danger' : 'info'}
-                            className="text-[10px]"
+                            className="text-[10px] px-2 py-0.5"
                           >
                             {isReturned ? 'RETURNED' : isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
                           </Badge>
                           {u.depositMode && u.depositExhausted && (
-                            <div className="mt-1">
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20" title={`Deposit exhausted${u.continuationStartedAt ? ` • Started ${formatDate(u.continuationStartedAt)}` : ''}`}>
+                            <div className="mt-0.5">
+                              <span
+                                className="inline-flex items-center gap-1 px-1 rounded text-[9px] font-bold uppercase bg-rose-500/10 text-rose-500"
+                                title={`Deposit exhausted${u.continuationStartedAt ? ` • Started ${formatDate(u.continuationStartedAt)}` : ''}`}
+                              >
                                 <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                                Deposit Exhausted
+                                <span>Deposit Exhausted</span>
                               </span>
                             </div>
                           )}
                         </td>
 
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        {/* 8. Compact Actions Bar */}
+                        <td className="py-2 px-3 text-right whitespace-nowrap align-middle">
+                          <div className="flex items-center justify-end gap-1">
                             {/* Track Rent & Monthly Ledger button */}
                             <Button
                               size="sm"
                               variant="default"
                               onClick={() => openLedgerModal(u)}
-                              className="h-7 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                              className="h-7 px-2.5 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm"
                               title="Track Monthly Rent Payments & Ledger"
                             >
                               <CreditCard className="h-3 w-3" />
                               <span>Track Rent</span>
                             </Button>
 
-                            {/* Edit Rental Agreement (Tenure, Rent, Buyout) */}
+                            {/* Secondary Actions as sleek, compact icon buttons with clear tooltips */}
                             {!isReturned && canIssueUsage() && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => openEditAgreementModal(u)}
-                                className="h-7 text-[11px] text-blue-500 hover:text-blue-400 border-blue-500/30 gap-1"
+                                className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
                                 title="Edit Rental Agreement Terms & Tenure"
                               >
-                                <Pencil className="h-3 w-3" />
-                                <span className="hidden sm:inline">Edit</span>
+                                <Pencil className="h-3.5 w-3.5" />
                               </Button>
                             )}
 
-                            {/* Email Payment Reminder button */}
                             {!isReturned && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleSendReminder(u)}
-                                className="h-7 text-[11px] text-indigo-400 hover:text-indigo-300 border-indigo-500/30 gap-1"
-                                title="Send Email Reminder"
+                                className="h-7 w-7 p-0 text-indigo-400 hover:text-indigo-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                title="Send Email Due Reminder"
                               >
-                                <Mail className="h-3 w-3" />
-                                <span className="hidden sm:inline">Reminder</span>
+                                <Mail className="h-3.5 w-3.5" />
                               </Button>
                             )}
 
@@ -1080,19 +1114,18 @@ export default function UsagePage() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => openReturnModal(u)}
-                                  className="h-7 text-[11px] gap-1"
-                                  title="Inspect & Return Instrument"
+                                  className="h-7 w-7 p-0 text-teal-400 hover:text-teal-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                  title="Inspect & Process Instrument Return"
                                 >
-                                  <RotateCcw className="h-3 w-3" />
-                                  <span className="hidden sm:inline">Return</span>
+                                  <RotateCcw className="h-3.5 w-3.5" />
                                 </Button>
 
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => openExtendModal(u)}
-                                  className="h-7 text-[11px]"
-                                  title="Extend Duration / Renewal"
+                                  className="h-7 w-7 p-0 text-slate-400 hover:text-white border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                  title="Extend Duration / Renewal Deadline"
                                 >
                                   <CalendarPlus className="h-3.5 w-3.5" />
                                 </Button>
