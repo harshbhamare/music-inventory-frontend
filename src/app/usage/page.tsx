@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -160,11 +160,11 @@ export default function UsagePage() {
     fetchInventory();
   }, [statusFilter, search]);
 
-  // Pre-calculate expected return date whenever lockInPeriodMonths changes
+  // Pre-calculate expected return date on 1st of month whenever lockInPeriodMonths changes
   const applyLockInMonths = (months: number) => {
     setLockInPeriodMonths(months);
-    const date = new Date();
-    date.setMonth(date.getMonth() + months);
+    const base = new Date();
+    const date = new Date(base.getFullYear(), base.getMonth() + months, 1);
     setExpectedReturnDate(date.toISOString().slice(0, 16));
   };
 
@@ -605,6 +605,86 @@ export default function UsagePage() {
     }
   };
 
+  // ── Edit Rental Agreement Modal State & Handlers ──
+  const [editingAgreement, setEditingAgreement] = useState<InternalUsage | null>(null);
+  const [editAssignedPerson, setEditAssignedPerson] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerEmail, setEditCustomerEmail] = useState('');
+  const [editLockInPeriodMonths, setEditLockInPeriodMonths] = useState<number>(3);
+  const [editMonthlyRent, setEditMonthlyRent] = useState<number>(1500);
+  const [editSecurityDeposit, setEditSecurityDeposit] = useState<number>(0);
+  const [editAgreementNotes, setEditAgreementNotes] = useState('');
+  const [editPayAllNow, setEditPayAllNow] = useState(false);
+  const [editAgreementPaymentMethod, setEditAgreementPaymentMethod] = useState<'UPI' | 'CASH' | 'CARD' | 'BANK_TRANSFER'>('UPI');
+  const [editAgreementTransactionRef, setEditAgreementTransactionRef] = useState('');
+  const [isUpdatingAgreement, setIsUpdatingAgreement] = useState(false);
+  const [updateAgreementError, setUpdateAgreementError] = useState('');
+  const [updateAgreementFeedback, setUpdateAgreementFeedback] = useState('');
+
+  const openEditAgreementModal = (usage: InternalUsage) => {
+    setEditingAgreement(usage);
+    setEditAssignedPerson(usage.assignedPerson || '');
+    setEditCustomerPhone(usage.assignedPersonContact || '');
+    setEditCustomerEmail(usage.customerEmail || '');
+    setEditLockInPeriodMonths(usage.lockInPeriodMonths || 3);
+    setEditMonthlyRent(usage.monthlyRent || 1500);
+    setEditSecurityDeposit(usage.securityDeposit || 0);
+    setEditAgreementNotes(usage.notes || '');
+    setEditPayAllNow(false);
+    setEditAgreementPaymentMethod('UPI');
+    setEditAgreementTransactionRef('');
+    setUpdateAgreementError('');
+    setUpdateAgreementFeedback('');
+  };
+
+  const handleUpdateAgreement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAgreement) return;
+    setUpdateAgreementError('');
+    setIsUpdatingAgreement(true);
+
+    try {
+      if (editPayAllNow && !editAgreementTransactionRef.trim()) {
+        throw new Error('Transaction / UPI reference number is compulsory when settling remaining rent.');
+      }
+
+      const res = await api.put<{ success: boolean; data: { usage: InternalUsage } }>(
+        `/usage/${editingAgreement._id}`,
+        {
+          assignedPerson: editAssignedPerson.trim(),
+          assignedPersonContact: editCustomerPhone.trim(),
+          customerEmail: editCustomerEmail.trim().toLowerCase() || undefined,
+          lockInPeriodMonths: editLockInPeriodMonths,
+          monthlyRent: editMonthlyRent,
+          securityDeposit: editSecurityDeposit,
+          notes: editAgreementNotes.trim() || undefined,
+          payAllRemainingNow: editPayAllNow,
+          paymentMethod: editAgreementPaymentMethod,
+          transactionRef: editAgreementTransactionRef.trim() || undefined,
+        }
+      );
+
+      const updated = res.data?.usage;
+      if (updated) {
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+        if (selectedRentalForLedger && selectedRentalForLedger._id === updated._id) {
+          setSelectedRentalForLedger(updated);
+        }
+      }
+
+      setUpdateAgreementFeedback('Rental agreement updated & recalculated successfully!');
+      fetchUsages();
+      setTimeout(() => {
+        setEditingAgreement(null);
+        setUpdateAgreementFeedback('');
+      }, 1500);
+    } catch (err: any) {
+      setUpdateAgreementError(err.message || 'Failed to update rental agreement.');
+    } finally {
+      setIsUpdatingAgreement(false);
+    }
+  };
+
   // Financial KPIs for Rentals
   const activeRentals = usages.filter((u) => u.status !== 'RETURNED');
   const totalDepositsHeld = activeRentals.reduce((sum, u) => sum + (u.securityDeposit || 0), 0);
@@ -808,21 +888,25 @@ export default function UsagePage() {
 
                         <td className="py-3 px-4">
                           <div className="space-y-1">
-                            {u.items.map((it, idx) => (
-                              <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                <span className="font-semibold">{it.product?.name}</span>
-                                {it.product?.color && (
-                                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                                    {it.product.color}
-                                  </span>
-                                )}
-                                {it.serializedItemId && (
-                                  <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
-                                    [{(it.serializedItemId as any).assetId || 'Unit'}]
-                                  </span>
-                                )}
-                              </div>
-                            ))}
+                            {u.items.map((it, idx) => {
+                              const pName = (it.product as any)?.name || (it as any).productName || 'Musical Instrument';
+                              const pColor = (it.product as any)?.color;
+                              return (
+                                <div key={idx} className="text-slate-800 dark:text-slate-200">
+                                  <span className="font-semibold">{pName}</span>
+                                  {pColor && (
+                                    <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                      {pColor}
+                                    </span>
+                                  )}
+                                  {it.serializedItemId && (
+                                    <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
+                                      [{(it.serializedItemId as any).assetId || 'Unit'}]
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
 
                             {/* Detailing: Bundled accessories tags */}
                             {accessories.length > 0 ? (
@@ -913,6 +997,20 @@ export default function UsagePage() {
                               <CreditCard className="h-3 w-3" />
                               <span>Track Rent</span>
                             </Button>
+
+                            {/* Edit Rental Agreement (Tenure, Rent, Buyout) */}
+                            {!isReturned && canIssueUsage() && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditAgreementModal(u)}
+                                className="h-7 text-[11px] text-blue-500 hover:text-blue-400 border-blue-500/30 gap-1"
+                                title="Edit Rental Agreement Terms & Tenure"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                <span className="hidden sm:inline">Edit</span>
+                              </Button>
+                            )}
 
                             {/* Email Payment Reminder button */}
                             {!isReturned && (
@@ -1139,9 +1237,9 @@ export default function UsagePage() {
               <select required value={selectedProductId}
                 onChange={(e) => { setSelectedProductId(e.target.value); setSelectedSerialId(''); }}
                 className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium">
-                <option value="">Choose an instrument…</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Choose an instrument…</option>
                 {products.filter((p) => p.availableForSale > 0).map((p) => (
-                  <option key={p._id} value={p._id}>
+                  <option key={p._id} value={p._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.availableForSale} available
                   </option>
                 ))}
@@ -1604,9 +1702,23 @@ export default function UsagePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Amount to Pay (₹) *
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-semibold uppercase text-slate-500">
+                      Amount to Pay (₹) *
+                    </label>
+                    {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                          setSelectedBillingMonth('');
+                        }}
+                        className="text-[10px] font-bold text-amber-500 hover:underline"
+                      >
+                        Pay All Due (₹{selectedRentalForLedger.totalRentDue ?? 0})
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="1"
@@ -2098,6 +2210,190 @@ export default function UsagePage() {
               </Button>
               <Button type="submit" variant="default" isLoading={isExtending} className="font-bold">
                 Confirm Renewal Extension
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Edit Rental Agreement Modal */}
+      <Modal
+        isOpen={!!editingAgreement}
+        onClose={() => setEditingAgreement(null)}
+        title={`Edit Rental Agreement #${editingAgreement?.issueReference || ''}`}
+        description="Update tenure months, monthly rent amount, or settle all remaining dues directly."
+        maxWidth="xl"
+      >
+        {editingAgreement && (
+          <form onSubmit={handleUpdateAgreement} className="space-y-4">
+            {updateAgreementError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{updateAgreementError}</span>
+              </div>
+            )}
+
+            {updateAgreementFeedback && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{updateAgreementFeedback}</span>
+              </div>
+            )}
+
+            {/* Customer Details */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                1. Customer Information
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Input
+                  label="Customer Name *"
+                  required
+                  value={editAssignedPerson}
+                  onChange={(e) => setEditAssignedPerson(e.target.value)}
+                />
+                <Input
+                  label="Phone Number"
+                  value={editCustomerPhone}
+                  onChange={(e) => setEditCustomerPhone(e.target.value)}
+                />
+                <Input
+                  label="Email (for receipts)"
+                  type="email"
+                  value={editCustomerEmail}
+                  onChange={(e) => setEditCustomerEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Agreement Terms & Tenure */}
+            <div className="rounded-xl border border-amber-500/30 p-3.5 bg-amber-500/5 dark:bg-amber-950/20 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+                2. Rental Tenure &amp; Pricing Parameters
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                    Lock-In Duration
+                  </label>
+                  <div className="flex gap-1">
+                    {[1, 3, 6, 12].map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => setEditLockInPeriodMonths(m)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          editLockInPeriodMonths === m
+                            ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                            : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 hover:border-amber-400'
+                        }`}
+                      >
+                        {m}M
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                    Monthly Rent (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editMonthlyRent}
+                    onChange={(e) => setEditMonthlyRent(parseFloat(e.target.value) || 0)}
+                    className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                    Security Deposit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editSecurityDeposit}
+                    onChange={(e) => setEditSecurityDeposit(parseFloat(e.target.value) || 0)}
+                    className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs space-y-1">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Tenure Plan:</span>
+                  <strong className="text-slate-900 dark:text-white font-bold">{editLockInPeriodMonths} Month(s) Agreement</strong>
+                </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Deduction / Due Schedule:</span>
+                  <strong className="text-amber-500 font-bold">1st date of each upcoming month</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Settle All Remaining Rent at Once option */}
+            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 p-3.5 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editPayAllNow}
+                  onChange={(e) => setEditPayAllNow(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                />
+                <span className="font-bold text-xs text-indigo-900 dark:text-indigo-300">
+                  Pay & Settle All Remaining Rent Directly at Once (Buyout)
+                </span>
+              </label>
+
+              {editPayAllNow && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-indigo-100 dark:border-indigo-900/50">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                      Payment Method *
+                    </label>
+                    <select
+                      value={editAgreementPaymentMethod}
+                      onChange={(e) => setEditAgreementPaymentMethod(e.target.value as any)}
+                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500"
+                    >
+                      <option value="UPI">UPI (GPay / PhonePe)</option>
+                      <option value="CASH">Cash</option>
+                      <option value="CARD">Debit / Credit Card</option>
+                      <option value="BANK_TRANSFER">Bank IMPS</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                      Transaction / UPI Ref *
+                    </label>
+                    <input
+                      type="text"
+                      required={editPayAllNow}
+                      placeholder="e.g. UPI-998822 or CASH-RCPT"
+                      value={editAgreementTransactionRef}
+                      onChange={(e) => setEditAgreementTransactionRef(e.target.value)}
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button type="button" variant="outline" onClick={() => setEditingAgreement(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isUpdatingAgreement}
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950"
+              >
+                Save Changes &amp; Recalculate
               </Button>
             </div>
           </form>

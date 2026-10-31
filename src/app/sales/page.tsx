@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, getApiUrl } from '@/lib/api';
@@ -281,15 +281,14 @@ export default function SalesPage() {
     let runningAllocated = 0;
 
     for (let i = 1; i <= emiTenureMonths; i++) {
-      const d = new Date(baseDate);
-      d.setMonth(d.getMonth() + i);
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1);
       let amount = monthlyEmi;
       if (i === emiTenureMonths) {
         amount = Math.max(0, financedPrincipal - runningAllocated);
       } else {
         runningAllocated += amount;
       }
-      const monthName = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+      const monthName = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
       schedule.push({
         monthIndex: i,
         billingMonth: `Month ${i} (${monthName})`,
@@ -300,12 +299,140 @@ export default function SalesPage() {
     return schedule;
   }, [saleType, emiTenureMonths, financedPrincipal, monthlyEmi]);
 
+  // Dynamic step tabs based on Sale Type (EMI vs DIRECT)
+  // For Direct Selling, the EMI tab is skipped and user moves directly from Items to Dispatch & Delivery!
+  const availablePosTabs = useMemo(() => {
+    if (saleType === 'DIRECT') {
+      return [
+        { key: 'items' as const, label: '1. Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
+        { key: 'dispatch' as const, label: '2. Dispatch & Delivery', icon: <Truck className="h-3.5 w-3.5" /> },
+      ];
+    }
+    return [
+      { key: 'items' as const, label: '1. Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
+      { key: 'payment' as const, label: '2. EMI Financing Plan', icon: <CreditCard className="h-3.5 w-3.5" /> },
+      { key: 'dispatch' as const, label: '3. Dispatch & Delivery', icon: <Truck className="h-3.5 w-3.5" /> },
+    ];
+  }, [saleType]);
+
+  // If sale type is switched to DIRECT while currently on payment tab, jump directly to dispatch
+  useEffect(() => {
+    if (saleType === 'DIRECT' && posTab === 'payment') {
+      setPosTab('dispatch');
+    }
+  }, [saleType, posTab]);
+
+  // Step-by-step tab validation before advancing
+  const validateTab = (tab: 'items' | 'payment' | 'dispatch'): boolean => {
+    setSaleError('');
+
+    if (tab === 'items') {
+      if (cartItems.length === 0) {
+        setSaleError('Cart is empty. Please add at least one product before proceeding.');
+        return false;
+      }
+
+      const trimmedName = customerName.trim();
+      const trimmedPhone = customerPhone.trim();
+      const trimmedEmail = customerEmail.trim();
+
+      if (!trimmedName) {
+        setSaleError('Customer Name is required.');
+        return false;
+      }
+
+      if (!trimmedPhone) {
+        setSaleError('Customer Phone Number is mandatory for billing, warranty & EMI alerts.');
+        return false;
+      }
+
+      if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+        setSaleError('Customer Phone Number must be a valid 10-digit Indian mobile number (e.g. 9876543210).');
+        return false;
+      }
+
+      if (!trimmedEmail) {
+        setSaleError('Customer Email Address is mandatory for tax invoice & EMI payment reminders.');
+        return false;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        setSaleError('Please provide a valid Customer Email Address.');
+        return false;
+      }
+
+      return true;
+    }
+
+    if (tab === 'payment') {
+      if (saleType === 'EMI') {
+        if (effectiveDownPayment >= grandTotal) {
+          setSaleError('Down Payment is equal to or greater than Grand Total. Please choose "Direct Sale (Full Payment)" instead.');
+          return false;
+        }
+        if (emiTenureMonths < 1 || emiTenureMonths > 36) {
+          setSaleError('Please select a valid EMI tenure between 1 and 36 months.');
+          return false;
+        }
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  const handleNextTab = () => {
+    if (!validateTab(posTab)) return;
+
+    if (posTab === 'items') {
+      // Direct selling skips EMI tab and moves straight to dispatch & delivery!
+      if (saleType === 'DIRECT') {
+        setPosTab('dispatch');
+      } else {
+        setPosTab('payment');
+      }
+    } else if (posTab === 'payment') {
+      setPosTab('dispatch');
+    }
+  };
+
+  const handleBackTab = () => {
+    setSaleError('');
+    if (posTab === 'dispatch') {
+      // Direct selling goes back straight to items
+      if (saleType === 'DIRECT') {
+        setPosTab('items');
+      } else {
+        setPosTab('payment');
+      }
+    } else if (posTab === 'payment') {
+      setPosTab('items');
+    }
+  };
+
+  const handleTabClick = (targetTab: 'items' | 'payment' | 'dispatch') => {
+    if (targetTab === posTab) return;
+    if (posTab === 'items' && !validateTab('items')) return;
+    if (posTab === 'payment' && !validateTab('payment')) return;
+    setPosTab(targetTab);
+  };
+
   const handleCreateSale = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaleError('');
 
-    if (cartItems.length === 0) {
-      setSaleError('Cart is empty. Please add at least one product.');
+    // CRITICAL GUARD: Only allow sale completion and invoice generation when on the final step
+    if (posTab !== 'dispatch') {
+      return;
+    }
+
+    if (!validateTab('items')) {
+      setPosTab('items');
+      return;
+    }
+
+    if (saleType === 'EMI' && !validateTab('payment')) {
+      setPosTab('payment');
       return;
     }
 
@@ -313,42 +440,6 @@ export default function SalesPage() {
     const trimmedName = customerName.trim();
     const trimmedPhone = customerPhone.trim();
     const trimmedEmail = customerEmail.trim();
-
-    if (!trimmedName) {
-      setSaleError('Customer Name is required.');
-      return;
-    }
-
-    if (!trimmedPhone) {
-      setSaleError('Customer Phone Number is mandatory for billing, warranty & EMI alerts.');
-      return;
-    }
-
-    if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
-      setSaleError('Customer Phone Number must be a valid 10-digit Indian mobile number (e.g. 9876543210).');
-      return;
-    }
-
-    if (!trimmedEmail) {
-      setSaleError('Customer Email Address is mandatory for tax invoice & EMI payment reminders.');
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setSaleError('Please provide a valid Customer Email Address.');
-      return;
-    }
-
-    if (saleType === 'EMI') {
-      if (effectiveDownPayment >= grandTotal) {
-        setSaleError('Down Payment is equal to or greater than Grand Total. Please choose "Direct Sale (Full Payment)" instead.');
-        return;
-      }
-      if (emiTenureMonths < 1 || emiTenureMonths > 36) {
-        setSaleError('Please select a valid EMI tenure between 1 and 36 months.');
-        return;
-      }
-    }
 
     setIsSubmittingSale(true);
 
@@ -394,6 +485,7 @@ export default function SalesPage() {
       setSaleType('DIRECT');
       setDownPayment(0);
       setEmiTenureMonths(6);
+      setPosTab('items');
       fetchSales();
       fetchInventoryForSale();
       setActiveInvoice(res.sale);
@@ -406,7 +498,9 @@ export default function SalesPage() {
 
   // Open EMI Ledger
   const openEmiLedger = (sale: Sale) => {
-    setSelectedSaleForLedger(sale);
+    // Look up freshest record in case sale state was updated via Edit
+    const freshSale = sales.find((s) => s._id === sale._id) || sale;
+    setSelectedSaleForLedger(freshSale);
     setEmiLedgerError('');
     setEmiReminderFeedback('');
     setEmiTransactionRef('');
@@ -454,6 +548,7 @@ export default function SalesPage() {
 
       const updated = res.data?.sale || res.sale || selectedSaleForLedger;
       setSelectedSaleForLedger(updated);
+      setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
       setEmiTransactionRef('');
       setEmiPaymentNotes('');
       fetchSales();
@@ -570,6 +665,12 @@ export default function SalesPage() {
         setEditSaleFeedback(`Bill updated & corrected Tax Invoice sent to ${editCustomerEmail.trim()}!`);
       } else {
         setEditSaleFeedback('Sale bill successfully updated!');
+      }
+
+      // Update active sales state immediately so changes reflect everywhere (table, ledger, invoice)
+      setSales((prev) => prev.map((s) => (s._id === res.data.sale._id ? res.data.sale : s)));
+      if (selectedSaleForLedger && selectedSaleForLedger._id === res.data.sale._id) {
+        setSelectedSaleForLedger(res.data.sale);
       }
 
       fetchSales();
@@ -830,11 +931,26 @@ export default function SalesPage() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="space-y-0.5">
-                            {sale.lineItems?.map((li, idx) => (
-                              <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                â€¢ {li.product?.name} (x{li.quantity})
-                              </div>
-                            ))}
+                            {sale.lineItems?.map((li, idx) => {
+                              const pName = (li.product as any)?.name || (li as any).productName || 'Musical Product';
+                              const pColor = (li.product as any)?.color;
+                              return (
+                                <div key={idx} className="text-slate-800 dark:text-slate-200">
+                                  • <span className="font-semibold">{pName}</span>
+                                  {pColor && (
+                                    <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                      {pColor}
+                                    </span>
+                                  )}
+                                  <span className="text-slate-500 font-normal ml-1">(x{li.quantity})</span>
+                                  {li.discount ? (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold ml-1">
+                                      (−{formatCurrency(li.discount * li.quantity)})
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right font-extrabold text-slate-900 dark:text-white">
@@ -927,27 +1043,44 @@ export default function SalesPage() {
         isOpen={isNewSaleOpen}
         onClose={() => setIsNewSaleOpen(false)}
         title="New Customer Sale — POS"
-        description="Add items to cart, set customer details, choose payment plan, and confirm."
+        description={
+          saleType === 'DIRECT'
+            ? 'Direct Sale (Full Payment): Select products, enter customer details, and configure delivery dispatch.'
+            : 'EMI Plan Sale: Select products, customer details, zero-interest installment plan, and delivery dispatch.'
+        }
         maxWidth="5xl"
         footer={
           <div className="flex items-center justify-between gap-3">
-            {/* Tab navigation in footer */}
-            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+            {/* Step navigation / Back button */}
+            <div className="flex items-center gap-2">
               {posTab !== 'items' && (
                 <button
                   type="button"
-                  onClick={() => setPosTab(posTab === 'dispatch' ? 'payment' : 'items')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  onClick={handleBackTab}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition-colors text-slate-700 dark:text-slate-300"
                 >
                   ← Back
                 </button>
               )}
-              <div className="flex items-center gap-1 ml-2">
-                {(['items','payment','dispatch'] as const).map((t, i) => (
-                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${posTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+              {/* Step indicator pills */}
+              <div className="flex items-center gap-1.5 ml-1">
+                {availablePosTabs.map((t) => (
+                  <div
+                    key={t.key}
+                    title={t.label}
+                    className={`h-1.5 rounded-full transition-all duration-200 ${
+                      posTab === t.key
+                        ? 'w-8 bg-amber-500'
+                        : 'w-4 bg-slate-200 dark:bg-slate-700'
+                    }`}
+                  />
                 ))}
+                <span className="text-[11px] text-slate-400 font-medium ml-1">
+                  Step {availablePosTabs.findIndex((t) => t.key === posTab) + 1} of {availablePosTabs.length}
+                </span>
               </div>
             </div>
+
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsNewSaleOpen(false)}>
                 Cancel
@@ -958,9 +1091,9 @@ export default function SalesPage() {
                   size="sm"
                   variant="default"
                   className="font-bold gap-1.5"
-                  onClick={() => setPosTab(posTab === 'items' ? 'payment' : 'dispatch')}
+                  onClick={handleNextTab}
                 >
-                  Next →
+                  <span>{posTab === 'items' && saleType === 'DIRECT' ? 'Next: Dispatch & Delivery →' : 'Next →'}</span>
                 </Button>
               ) : (
                 <Button
@@ -969,16 +1102,29 @@ export default function SalesPage() {
                   size="sm"
                   variant="default"
                   isLoading={isSubmittingSale}
-                  className="font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                  className="font-bold gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md px-4"
                 >
-                  {saleType === 'EMI' ? 'Confirm & Setup EMI Plan' : 'Confirm & Complete Sale'}
+                  <Receipt className="h-4 w-4" />
+                  <span>{saleType === 'EMI' ? 'Generate Invoice & Setup EMI Plan' : 'Generate Invoice & Complete Sale'}</span>
                 </Button>
               )}
             </div>
           </div>
         }
       >
-        <form id="pos-sale-form" onSubmit={handleCreateSale}>
+        <form
+          id="pos-sale-form"
+          onSubmit={handleCreateSale}
+          onKeyDown={(e) => {
+            // Prevent accidental early submission when pressing Enter in input fields
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+              e.preventDefault();
+              if (posTab !== 'dispatch') {
+                handleNextTab();
+              }
+            }
+          }}
+        >
           {saleError && (
             <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -986,25 +1132,21 @@ export default function SalesPage() {
             </div>
           )}
 
-          {/* ── Tab Bar ── */}
+          {/* ── Dynamic Tab Bar ── */}
           <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-            {([
-              { key: 'items',    label: 'Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
-              { key: 'payment',  label: 'Payment Plan',     icon: <CreditCard className="h-3.5 w-3.5" /> },
-              { key: 'dispatch', label: 'Dispatch & GST',   icon: <Truck className="h-3.5 w-3.5" /> },
-            ] as const).map((tab) => (
+            {availablePosTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setPosTab(tab.key)}
+                onClick={() => handleTabClick(tab.key)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
                   posTab === tab.key
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-slate-700 font-bold'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
               >
                 {tab.icon}
-                {tab.label}
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -1084,11 +1226,11 @@ export default function SalesPage() {
                       onClick={() => handleAddToCart(p)}
                       className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-amber-500 bg-white dark:bg-slate-950 cursor-pointer transition-colors flex justify-between items-center text-xs"
                     >
-                      <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white truncate">{p.name}
-                          {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{p.color}</span>}
+                      <div className="min-w-0 pr-2">
+                        <div className="font-semibold text-slate-900 dark:text-white break-words leading-tight">{p.name}
+                          {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">{p.color}</span>}
                         </div>
-                        <div className="text-[11px] text-slate-400">{p.brand} · Avail: <strong>{p.availableForSale}</strong></div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{p.brand} · Avail: <strong>{p.availableForSale}</strong></div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <div className="font-bold text-amber-500">{formatCurrency(p.defaultSellingPrice)}</div>
@@ -1113,11 +1255,11 @@ export default function SalesPage() {
                   <div className="space-y-2 max-h-[240px] overflow-y-auto pr-0.5">
                     {cartItems.map((item, idx) => (
                       <div key={item.product._id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-slate-900 dark:text-white truncate">{item.product.name}
-                            {item.product.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{item.product.color}</span>}
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-bold text-slate-900 dark:text-white break-words leading-tight pr-2">{item.product.name}
+                            {item.product.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">{item.product.color}</span>}
                           </span>
-                          <button type="button" onClick={() => handleRemoveFromCart(item.product._id)} className="text-slate-400 hover:text-red-500 ml-2 shrink-0">
+                          <button type="button" onClick={() => handleRemoveFromCart(item.product._id)} className="text-slate-400 hover:text-red-500 shrink-0">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -1263,14 +1405,60 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Final order summary before confirm */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2 text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px] tracking-wider block">Order Summary</span>
+            {/* Final order summary before invoice generation */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="font-bold text-slate-800 dark:text-slate-200 uppercase text-[11px] tracking-wider">
+                  Order &amp; Billing Summary Review
+                </span>
+                <span className="text-[10px] font-semibold text-slate-500">
+                  Ready for Invoice Generation
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><span className="text-slate-500 block">Customer</span><span className="font-bold text-slate-900 dark:text-white">{customerName || '—'}</span></div>
-                <div><span className="text-slate-500 block">Sale Type</span><span className="font-bold text-amber-500">{saleType}</span></div>
-                <div><span className="text-slate-500 block">Items</span><span className="font-bold text-slate-900 dark:text-white">{cartItems.length} product{cartItems.length !== 1 ? 's' : ''}</span></div>
-                <div><span className="text-slate-500 block">Grand Total</span><span className="font-bold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span></div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Customer</span>
+                  <span className="font-bold text-slate-900 dark:text-white block">{customerName || '—'}</span>
+                  <span className="text-[11px] text-slate-400 block">{customerPhone}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Sale Mode</span>
+                  <span className="font-bold text-amber-500 block">{saleType === 'DIRECT' ? 'Direct Sale' : 'EMI Financing Plan'}</span>
+                  <span className="text-[11px] text-slate-400 block">{saleType === 'DIRECT' ? paymentMethod : `${emiTenureMonths} Mo. Plan`}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Dispatch To</span>
+                  <span className="font-bold text-slate-900 dark:text-white block truncate">{destination || 'PUNE'}</span>
+                  <span className="text-[11px] text-slate-400 block truncate">{dispatchThrough || 'XP India'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Cart Items</span>
+                  <span className="font-bold text-slate-900 dark:text-white block">{cartItems.length} Product{cartItems.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[11px] text-slate-400 block">{cartItems.reduce((acc, i) => acc + i.quantity, 0)} Units Total</span>
+                </div>
+              </div>
+
+              {/* Financial Totals Row */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div>
+                  <span className="text-slate-500 block">Gross Subtotal:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(subtotal)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Discount Offered:</span>
+                  <span className={`font-bold ${discountTotal > 0 ? 'text-emerald-500 font-extrabold' : 'text-slate-400'}`}>
+                    {discountTotal > 0 ? `−${formatCurrency(discountTotal)}` : '₹0'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Taxable Base:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(taxableAmount)}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 block">Grand Total:</span>
+                  <span className="font-extrabold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1429,9 +1617,23 @@ export default function SalesPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Pay (₹) *
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[10px] font-semibold uppercase text-slate-500">
+                        Amount to Pay (₹) *
+                      </label>
+                      {(selectedSaleForLedger.totalEmiDue ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmiPaymentAmount(selectedSaleForLedger.totalEmiDue ?? 0);
+                            setSelectedEmiBillingMonth('');
+                          }}
+                          className="text-[10px] font-bold text-amber-500 hover:underline"
+                        >
+                          Pay Full Balance (₹{selectedSaleForLedger.totalEmiDue ?? 0})
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="number"
                       min="1"
@@ -1786,8 +1988,8 @@ export default function SalesPage() {
                       className="grid grid-cols-1 sm:grid-cols-6 gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 items-center text-xs"
                     >
                       <div className="sm:col-span-2">
-                        <span className="font-bold text-slate-900 dark:text-white block truncate">
-                          {li.productName}
+                        <span className="font-bold text-slate-900 dark:text-white block break-words">
+                          {(li as any).productName || (li.product as any)?.name || 'Musical Product'}
                         </span>
                         <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
                       </div>

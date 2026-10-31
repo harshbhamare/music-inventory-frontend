@@ -66,8 +66,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       // First try public or full settings
       const res = await api.get<{ setting?: AppSettingData; companyName?: string; storeName?: string; currencySymbol?: string }>('/meta/settings/public').catch(() => null);
       if (res) {
-        setSettings((prev) => ({
-          ...prev,
+        setSettings((prev: AppSettingData | null) => ({
+          ...(prev || ({} as AppSettingData)),
           companyName: sanitizeCompanyName(res.companyName),
           storeName: sanitizeStoreName(res.storeName),
           currencySymbol: res.currencySymbol || '₹',
