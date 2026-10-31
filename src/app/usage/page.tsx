@@ -584,10 +584,6 @@ export default function UsagePage() {
   const editingTotalSettlementAmount = editingUnpaidScheduledTotal + editingExtraFutureTotal;
   const editingRemainingMonthsToSettle = editingUnpaidMonths.length + editingExtraFutureMonths;
 
-  // Product price and recovery metrics for agreement modal
-  const editingProduct = editingAgreement?.items?.[0]?.product as any;
-  const editingProductPrice = editingProduct?.defaultSellingPrice || editingProduct?.purchaseCost || 0;
-
   const handleUpdateAgreement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAgreement) return;
@@ -678,7 +674,6 @@ export default function UsagePage() {
         const prod = firstItem?.product as any;
         const instrumentName = prod?.name || (firstItem as any)?.productName || 'Musical Instrument';
         const instrumentBrand = prod?.brand || '';
-        const instrumentCost = prod?.defaultSellingPrice ?? prod?.purchaseCost ?? 0;
         const assetId = (firstItem?.serializedItemId as any)?.assetId || (firstItem as any)?.assetId;
         const serialNo = (firstItem?.serializedItemId as any)?.manufacturerSerial;
 
@@ -689,7 +684,6 @@ export default function UsagePage() {
           customerEmail: u.customerEmail || '',
           instrumentName,
           instrumentBrand,
-          instrumentCost,
           assetId,
           serialNo,
           depositMode: !!u.depositMode,
@@ -975,18 +969,12 @@ export default function UsagePage() {
                             {u.items.map((it, idx) => {
                               const pName = (it.product as any)?.name || (it as any).productName || 'Musical Instrument';
                               const pColor = (it.product as any)?.color;
-                              const pPrice = (it.product as any)?.defaultSellingPrice || (it.product as any)?.purchaseCost || 0;
                               return (
                                 <div key={idx} className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">{pName}</span>
                                   {pColor && (
                                     <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700">
                                       {pColor}
-                                    </span>
-                                  )}
-                                  {pPrice > 0 && (
-                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 font-mono" title="Product Retail Price (MRP)">
-                                      MRP: {formatCurrency(pPrice)}
                                     </span>
                                   )}
                                   {it.serializedItemId && (
@@ -1029,40 +1017,25 @@ export default function UsagePage() {
 
                         {/* 5. Rent Collection & Outward Money Outcome */}
                         <td className="py-2 px-3 whitespace-nowrap align-middle">
-                          {(() => {
-                            const mainProd = u.items[0]?.product as any;
-                            const mainProdPrice = mainProd?.defaultSellingPrice || mainProd?.purchaseCost || 0;
-                            const directPaidRent = (u.monthlyPayments || []).filter((p) => p.status === 'PAID' && p.paymentMethod !== 'DEPOSIT').reduce((s, p) => s + (p.amountPaid || 0), 0);
-                            const custTotalMoney = u.depositMode ? (deposit + directPaidRent) : (deposit + paid);
-                            const custRecoveryPct = mainProdPrice > 0 ? Math.min(100, Math.round((custTotalMoney / mainProdPrice) * 100)) : 0;
-
-                            return (
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-1 text-xs">
-                                  <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
-                                  <span className="text-slate-500">/</span>
-                                  <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
-                                  {due > 0 ? (
-                                    <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                      {formatCurrency(due)} Due
-                                    </span>
-                                  ) : (
-                                    <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
-                                      All Paid
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] flex items-center justify-between gap-1 text-teal-600 dark:text-teal-400 font-medium">
-                                  <span>Refund: <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong></span>
-                                  {mainProdPrice > 0 && (
-                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded" title={`Customer paid ${formatCurrency(custTotalMoney)} of ${formatCurrency(mainProdPrice)} product value`}>
-                                      {custRecoveryPct}% val
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
+                              <span className="text-slate-500">/</span>
+                              <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
+                              {due > 0 ? (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                  {formatCurrency(due)} Due
+                                </span>
+                              ) : (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
+                                  All Paid
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] flex items-center justify-between gap-1 text-teal-600 dark:text-teal-400 font-medium">
+                              <span>Refund: <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong></span>
+                            </div>
+                          </div>
                         </td>
 
                         {/* 6. Return Deadline & Progress */}
@@ -1193,7 +1166,7 @@ export default function UsagePage() {
         isOpen={!!selectedRentalForLedger}
         onClose={() => setSelectedRentalForLedger(null)}
         title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
-        description="Comprehensive product valuation, customer recovery tracking, month-by-month rental ledger, and payment settlement."
+        description="Month-by-month rental ledger, deposit reconciliation, and payment settlement."
         maxWidth="4xl"
       >
         {selectedRentalForLedger && (
@@ -1211,165 +1184,66 @@ export default function UsagePage() {
               </div>
             )}
 
-            {/* 1. HERO: Instrument Valuation & Customer Price Recovery Banner */}
+            {/* 1. Renter & Instrument Agreement Header */}
             {(() => {
               const primaryIt = selectedRentalForLedger.items?.[0];
               const prod = primaryIt?.product as any;
-              const prodPrice = prod?.defaultSellingPrice || prod?.purchaseCost || 0;
               const serialUnit = primaryIt?.serializedItemId as any;
               const pName = prod?.name || (primaryIt as any)?.productName || 'Musical Instrument';
 
-              // Money collected directly from customer:
-              // In deposit mode: upfront deposit + direct continuation payments (method != 'DEPOSIT')
-              // In normal mode: security deposit + totalRentPaid
-              const directRent = (selectedRentalForLedger.monthlyPayments || [])
-                .filter((p) => p.status === 'PAID' && p.paymentMethod !== 'DEPOSIT')
-                .reduce((sum, p) => sum + (p.amountPaid || 0), 0);
-
-              const totalCollectedFromCustomer = selectedRentalForLedger.depositMode
-                ? (selectedRentalForLedger.securityDeposit || 0) + directRent
-                : (selectedRentalForLedger.securityDeposit || 0) + (selectedRentalForLedger.totalRentPaid || 0);
-
-              const remainingToProductPrice = prodPrice > 0 ? Math.max(0, prodPrice - totalCollectedFromCustomer) : 0;
-              const recoveryPercent = prodPrice > 0 ? Math.min(100, Math.round((totalCollectedFromCustomer / prodPrice) * 100)) : 100;
-              const isFullyRecovered = prodPrice > 0 && totalCollectedFromCustomer >= prodPrice;
-
               return (
-                <div className="p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-gradient-to-br from-indigo-50/70 via-white to-amber-50/40 dark:from-indigo-950/40 dark:via-slate-900/60 dark:to-amber-950/20 shadow-sm space-y-3.5">
-                  {/* Top row: Product info & Retail Price Badge */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-indigo-900/40">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                        <Music2 className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-extrabold text-sm text-slate-900 dark:text-white">
-                            {pName}
+                <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
+                      <Music2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">
+                          {pName}
+                        </span>
+                        {prod?.color && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700">
+                            {prod.color}
                           </span>
-                          {prod?.color && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700">
-                              {prod.color}
-                            </span>
-                          )}
-                          {serialUnit?.assetId && (
-                            <span className="font-mono text-amber-500 font-bold text-xs bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                              [{serialUnit.assetId}]
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Renter: <strong className="text-slate-700 dark:text-slate-300">{selectedRentalForLedger.assignedPerson}</strong> ({selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPersonContact || 'No email'}) • Ref: <strong className="font-mono text-slate-700 dark:text-slate-300">{selectedRentalForLedger.issueReference}</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Product MRP Banner */}
-                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900/90 px-3.5 py-2 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 shrink-0">
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block">
-                          Product Retail MRP
-                        </span>
-                        <span className="text-lg font-black font-mono text-indigo-600 dark:text-indigo-400">
-                          {prodPrice > 0 ? formatCurrency(prodPrice) : '₹—'}
-                        </span>
-                      </div>
-                      {isFullyRecovered ? (
-                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                          <span>100% Value Paid</span>
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                          {recoveryPercent}% Recovered
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Financial Recovery Metrics 4-Card Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Product Retail Price</span>
-                      <span className="text-base font-black font-mono text-slate-900 dark:text-white">
-                        {prodPrice > 0 ? formatCurrency(prodPrice) : '₹—'}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">Target customer liability</span>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Collected So Far</span>
-                      <span className="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(totalCollectedFromCustomer)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">
-                        Deposit ({formatCurrency(selectedRentalForLedger.securityDeposit || 0)}) + Rent
-                      </span>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Remaining to MRP</span>
-                        {remainingToProductPrice > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPaymentAmount(remainingToProductPrice);
-                              setSelectedBillingMonth('');
-                              setRentalPaymentNotes('Settlement to reach 100% instrument MRP');
-                              if (!rentalTransactionRef) {
-                                setRentalTransactionRef(`BUYOUT-${selectedRentalForLedger.issueReference}`);
-                              }
-                            }}
-                            className="text-[9px] font-bold text-indigo-500 hover:underline"
-                            title="Fill exact shortfall to reach instrument retail MRP"
-                          >
-                            Fill ₹{remainingToProductPrice}
-                          </button>
                         )}
+                        {serialUnit?.assetId && (
+                          <span className="font-mono text-amber-500 font-bold text-xs bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                            [{serialUnit.assetId}]
+                          </span>
+                        )}
+                        <Badge
+                          variant={selectedRentalForLedger.status === 'ACTIVE' ? 'success' : 'default'}
+                          className="text-[10px]"
+                        >
+                          {selectedRentalForLedger.status}
+                        </Badge>
                       </div>
-                      <span className={`text-base font-black font-mono ${remainingToProductPrice > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                        {formatCurrency(remainingToProductPrice)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">
-                        {remainingToProductPrice > 0 ? 'Shortfall to cover full price' : '✓ 100% value recovered'}
-                      </span>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Schedule Rent Due</span>
-                      <span className={`text-base font-black font-mono ${(selectedRentalForLedger.totalRentDue ?? 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        {formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">All upcoming unpaid months</span>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Renter: <strong className="text-slate-800 dark:text-slate-200">{selectedRentalForLedger.assignedPerson}</strong>
+                        {selectedRentalForLedger.assignedPersonContact && ` (${selectedRentalForLedger.assignedPersonContact})`}
+                        {selectedRentalForLedger.customerEmail && ` • ${selectedRentalForLedger.customerEmail}`}
+                        {' '}• Agreement: <strong className="font-mono text-slate-800 dark:text-slate-200">{selectedRentalForLedger.issueReference}</strong>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Progress Bar of Product Price Recovery */}
-                  {prodPrice > 0 && (
-                    <div className="space-y-1 pt-1">
-                      <div className="flex justify-between items-center text-[10px] font-bold">
-                        <span className="text-slate-500">
-                          Total Customer Recovery Progress: {formatCurrency(totalCollectedFromCustomer)} collected towards {formatCurrency(prodPrice)} instrument value
-                        </span>
-                        <span className={isFullyRecovered ? 'text-emerald-500 font-black' : 'text-indigo-500 font-mono font-bold'}>
-                          {recoveryPercent}%
-                        </span>
-                      </div>
-                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-500 rounded-full ${
-                            isFullyRecovered
-                              ? 'bg-emerald-500'
-                              : recoveryPercent > 60
-                              ? 'bg-gradient-to-r from-indigo-500 to-amber-500'
-                              : 'bg-amber-500'
-                          }`}
-                          style={{ width: `${recoveryPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const agreement = selectedRentalForLedger;
+                        setSelectedRentalForLedger(null);
+                        openEditAgreementModal(agreement);
+                      }}
+                      className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Edit Agreement</span>
+                    </Button>
+                  </div>
                 </div>
               );
             })()}
@@ -1555,27 +1429,6 @@ export default function UsagePage() {
                           </td>
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
-                              {/* Quick Pay button right inside the row */}
-                              {p.status !== 'PAID' && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => {
-                                    setSelectedBillingMonth(p.billingMonth);
-                                    setPaymentAmount(Math.max(0, p.amountDue - (p.amountPaid || 0)));
-                                    if (!rentalTransactionRef) {
-                                      setRentalTransactionRef(`UPI-${Date.now().toString().slice(-6)}`);
-                                    }
-                                  }}
-                                  className="h-6 px-2 text-[10px] font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                                  title={`Fill payment for ${p.billingMonth}`}
-                                >
-                                  <Check className="h-2.5 w-2.5" />
-                                  <span>Pay</span>
-                                </Button>
-                              )}
-
                               {p.status !== 'PAID' && (
                                 <Button
                                   type="button"
@@ -2737,22 +2590,7 @@ export default function UsagePage() {
                         <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium border border-amber-200 dark:border-amber-800/40">
                           Months to Clear: <strong>{editingRemainingMonthsToSettle} Mo</strong>
                         </span>
-                        {editingProductPrice > 0 && (
-                          <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-200 dark:border-indigo-800/40">
-                            Product Retail MRP: <strong>{formatCurrency(editingProductPrice)}</strong>
-                          </span>
-                        )}
                       </div>
-
-                      {editingProductPrice > 0 && (
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
-                          <span>Total Customer Investment After Buyout:</span>
-                          <strong className="text-slate-900 dark:text-white font-mono">
-                            {formatCurrency(editingAlreadyPaidTotal + (editingAgreement?.securityDeposit || 0) + editingTotalSettlementAmount)}
-                            {' '}({Math.min(100, Math.round(((editingAlreadyPaidTotal + (editingAgreement?.securityDeposit || 0) + editingTotalSettlementAmount) / editingProductPrice) * 100))}%)
-                          </strong>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
@@ -2993,11 +2831,6 @@ export default function UsagePage() {
                             </span>
                           ) : (
                             <span className="text-[11px] text-slate-400">Standard Stock</span>
-                          )}
-                          {item.instrumentCost > 0 && (
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              Value: {formatCurrency(item.instrumentCost)}
-                            </div>
                           )}
                         </div>
                       </div>
