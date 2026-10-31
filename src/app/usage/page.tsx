@@ -40,6 +40,7 @@ import {
   PlusCircle,
   ClipboardList,
   Wallet,
+  Zap,
 } from 'lucide-react';
 
 const COMMON_ACCESSORIES = [
@@ -152,6 +153,8 @@ export default function UsagePage() {
   const [newExtendedDate, setNewExtendedDate] = useState('');
   const [extensionReason, setExtensionReason] = useState('');
   const [extendError, setExtendError] = useState('');
+  const [extendFeedback, setExtendFeedback] = useState('');
+  const [addRentalMonthsOnExtend, setAddRentalMonthsOnExtend] = useState(true);
   const [isExtending, setIsExtending] = useState(false);
 
   useEffect(() => {
@@ -585,27 +588,84 @@ export default function UsagePage() {
     }
   };
 
+  const formatLocalDateForInput = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  };
+
   const openExtendModal = (usage: InternalUsage) => {
     setExtendModalUsage(usage);
-    setNewExtendedDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
-    setExtensionReason('');
+    const currentExpected = usage.expectedReturnDate ? new Date(usage.expectedReturnDate) : new Date();
+    const effectiveBase = currentExpected.getTime() > Date.now() ? currentExpected : new Date();
+    // Default to +30 days (1 month) from whichever is later: current deadline or today!
+    const defaultDate = new Date(effectiveBase.getTime() + 30 * 24 * 60 * 60 * 1000);
+    setNewExtendedDate(formatLocalDateForInput(defaultDate));
+    setExtensionReason('Customer requested rental return deadline extension');
+    setAddRentalMonthsOnExtend(true);
     setExtendError('');
+    setExtendFeedback('');
+  };
+
+  const setQuickExtensionDays = (days: number) => {
+    if (!extendModalUsage) return;
+    const currentExpected = extendModalUsage.expectedReturnDate
+      ? new Date(extendModalUsage.expectedReturnDate)
+      : new Date();
+    const effectiveBase = currentExpected.getTime() > Date.now() ? currentExpected : new Date();
+    const target = new Date(effectiveBase.getTime() + days * 24 * 60 * 60 * 1000);
+    setNewExtendedDate(formatLocalDateForInput(target));
   };
 
   const handleExtendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!extendModalUsage) return;
     setExtendError('');
+    setExtendFeedback('');
     setIsExtending(true);
 
     try {
-      await api.post(`/usage/${extendModalUsage._id}/extend`, {
-        extendedDate: newExtendedDate,
-        reason: extensionReason.trim(),
-      });
+      if (!newExtendedDate) {
+        throw new Error('Please select a new expected return date.');
+      }
 
-      setExtendModalUsage(null);
+      const chosenDate = new Date(newExtendedDate);
+      const currentReturn = new Date(extendModalUsage.expectedReturnDate);
+      if (isNaN(chosenDate.getTime())) {
+        throw new Error('Please enter a valid date and time.');
+      }
+      if (chosenDate <= currentReturn) {
+        throw new Error(
+          `The new return date must be strictly later than current deadline (${formatDate(extendModalUsage.expectedReturnDate)}).`
+        );
+      }
+
+      const res = await api.post<{ success?: boolean; data?: { usage: InternalUsage }; usage?: InternalUsage }>(
+        `/usage/${extendModalUsage._id}/extend`,
+        {
+          extendedDate: chosenDate.toISOString(),
+          reason: extensionReason.trim() || 'Customer requested return extension',
+          addRentalMonths: addRentalMonthsOnExtend,
+        }
+      );
+
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+        if (selectedRentalForLedger && selectedRentalForLedger._id === updated._id) {
+          setSelectedRentalForLedger(updated);
+        }
+      }
+
+      setExtendFeedback(`Return deadline successfully extended to ${formatDateTime(chosenDate)}!`);
       fetchUsages();
+      setTimeout(() => {
+        setExtendModalUsage(null);
+        setExtendFeedback('');
+      }, 1400);
     } catch (err: any) {
       setExtendError(err.message || 'Failed to extend rental schedule.');
     } finally {
@@ -645,6 +705,15 @@ export default function UsagePage() {
     setUpdateAgreementFeedback('');
   };
 
+  // Computed values for editing agreement buyout calculation
+  const editingExistingPayments = editingAgreement?.monthlyPayments || [];
+  const editingPaidMonths = editingExistingPayments.filter((p) => p.status === 'PAID');
+  const editingPaidCount = editingPaidMonths.length;
+  const editingAlreadyPaidTotal = editingPaidMonths.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+  const editingTargetTenure = Math.max(1, editLockInPeriodMonths || 1);
+  const editingRemainingMonthsToSettle = Math.max(0, editingTargetTenure - editingPaidCount);
+  const editingTotalSettlementAmount = editingRemainingMonthsToSettle * (editMonthlyRent || 0);
+
   const handleUpdateAgreement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAgreement) return;
@@ -652,7 +721,7 @@ export default function UsagePage() {
     setIsUpdatingAgreement(true);
 
     try {
-      if (editPayAllNow && !editAgreementTransactionRef.trim()) {
+      if (editPayAllNow && editingTotalSettlementAmount > 0 && !editAgreementTransactionRef.trim()) {
         throw new Error('Transaction / UPI reference number is compulsory when settling remaining rent.');
       }
 
@@ -668,7 +737,7 @@ export default function UsagePage() {
           notes: editAgreementNotes.trim() || undefined,
           payAllRemainingNow: editPayAllNow,
           paymentMethod: editAgreementPaymentMethod,
-          transactionRef: editAgreementTransactionRef.trim() || undefined,
+          transactionRef: editAgreementTransactionRef.trim() || (editPayAllNow ? `SETTLE-${editingAgreement.issueReference}` : undefined),
         }
       );
 
@@ -680,7 +749,13 @@ export default function UsagePage() {
         }
       }
 
-      setUpdateAgreementFeedback('Rental agreement updated & recalculated successfully!');
+      setUpdateAgreementFeedback(
+        editPayAllNow
+          ? editingTotalSettlementAmount > 0
+            ? `Rental buyout settled successfully for ${formatCurrency(editingTotalSettlementAmount)}! All remaining dues cleared.`
+            : 'Rental agreement updated and marked fully satisfied!'
+          : 'Rental agreement updated & recalculated successfully!'
+      );
       fetchUsages();
       setTimeout(() => {
         setEditingAgreement(null);
@@ -987,6 +1062,14 @@ export default function UsagePage() {
                           >
                             {isReturned ? 'RETURNED' : isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
                           </Badge>
+                          {u.depositMode && u.depositExhausted && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20" title={`Deposit exhausted${u.continuationStartedAt ? ` • Started ${formatDate(u.continuationStartedAt)}` : ''}`}>
+                                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                                Deposit Exhausted
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 text-center">
@@ -1624,21 +1707,20 @@ export default function UsagePage() {
               </form>
             )}
 
-            {/* Deposit exhausted — continuation mode notice */}
+            {/* Deposit exhausted indicator */}
             {selectedRentalForLedger.depositMode && selectedRentalForLedger.depositExhausted && (
-              <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50/60 dark:bg-rose-950/20 space-y-2">
-                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>Deposit Fully Utilised — Continuation Rent Mode Active</span>
+              <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-rose-300 dark:border-rose-900/40 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 text-xs font-semibold">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                  <span>Deposit Exhausted</span>
+                  <span className="font-normal text-slate-500 dark:text-slate-400 hidden sm:inline">
+                    — Continuation Mode Active
+                  </span>
                 </div>
-                <p className="text-[11px] text-rose-600 dark:text-rose-400/80">
-                  The security deposit has been fully exhausted. The customer must now pay monthly rent directly.
-                  Use the "Record Rent Payment" form below to collect and log payments for ongoing months.
-                </p>
                 {selectedRentalForLedger.continuationStartedAt && (
-                  <p className="text-[11px] text-slate-500">
-                    Continuation started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
-                  </p>
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
+                  </span>
                 )}
               </div>
             )}
@@ -1704,6 +1786,40 @@ export default function UsagePage() {
                 </span>
                 <span className="text-[11px] text-slate-500">Instant ledger update + receipt email</span>
               </div>
+
+              {/* Settle All Remaining Rent Directly at Once (Buyout) Quick Banner */}
+              {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                        Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)
+                      </span>
+                      <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                        Remaining balance across all upcoming months: <strong className="text-amber-600 dark:text-amber-400 font-bold">{formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                      setSelectedBillingMonth('');
+                      setRentalPaymentNotes('Full rental buyout/settlement in one payment');
+                      if (!rentalTransactionRef) {
+                        setRentalTransactionRef(`SETTLE-${selectedRentalForLedger.issueReference}`);
+                      }
+                    }}
+                    className="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm transition-colors flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Fill Buyout ({formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)})</span>
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
@@ -1833,7 +1949,19 @@ export default function UsagePage() {
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  openExtendModal(selectedRentalForLedger);
+                }}
+                className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold"
+              >
+                <CalendarPlus className="h-3.5 w-3.5" />
+                <span>Extend Return Deadline</span>
+              </Button>
               <Button variant="outline" onClick={() => setSelectedRentalForLedger(null)}>
                 Close Ledger
               </Button>
@@ -2182,39 +2310,181 @@ export default function UsagePage() {
         isOpen={!!extendModalUsage}
         onClose={() => setExtendModalUsage(null)}
         title="Extend Rental Return Deadline"
-        description={`Extend schedule for rental ${extendModalUsage?.issueReference}`}
-        maxWidth="md"
+        description={`Extend return date & schedule for ${extendModalUsage?.issueReference || ''}`}
+        maxWidth="lg"
       >
         {extendModalUsage && (
-          <form onSubmit={handleExtendSubmit} className="space-y-4">
+          <form onSubmit={handleExtendSubmit} className="space-y-4 text-xs">
             {extendError && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
-                {extendError}
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{extendError}</span>
+              </div>
+            )}
+            {extendFeedback && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs font-semibold text-emerald-600 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{extendFeedback}</span>
               </div>
             )}
 
-            <Input
-              label="New Expected Return Date & Time *"
-              type="datetime-local"
-              required
-              value={newExtendedDate}
-              onChange={(e) => setNewExtendedDate(e.target.value)}
-            />
+            {/* Current Status Overview */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Agreement Ref</span>
+                <span className="font-mono font-bold text-amber-500">{extendModalUsage.issueReference}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Renter</span>
+                <span className="font-bold text-slate-900 dark:text-white">{extendModalUsage.assignedPerson}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Current Return Deadline</span>
+                <span className="font-bold font-mono text-rose-600 dark:text-rose-400">
+                  {formatDateTime(extendModalUsage.expectedReturnDate)}
+                </span>
+              </div>
+            </div>
 
-            <Input
-              label="Reason for Extension *"
-              required
-              placeholder="e.g. Customer renewed rental agreement for another 3 months"
-              value={extensionReason}
-              onChange={(e) => setExtensionReason(e.target.value)}
-            />
+            {/* Quick Extension Presets */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-semibold uppercase text-slate-500">
+                Quick Extension Presets (From Current Deadline)
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: '+7 Days', days: 7 },
+                  { label: '+15 Days', days: 15 },
+                  { label: '+1 Month', days: 30, recommended: true },
+                  { label: '+3 Months', days: 90 },
+                ].map((preset) => (
+                  <button
+                    type="button"
+                    key={preset.days}
+                    onClick={() => setQuickExtensionDays(preset.days)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold border transition-all text-center ${
+                      preset.recommended
+                        ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm hover:bg-amber-600'
+                        : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date Input */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-semibold uppercase text-slate-500">
+                New Expected Return Date &amp; Time *
+              </label>
+              <input
+                type="datetime-local"
+                required
+                min={formatLocalDateForInput(new Date(extendModalUsage.expectedReturnDate))}
+                value={newExtendedDate}
+                onChange={(e) => setNewExtendedDate(e.target.value)}
+                className="w-full h-10 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white"
+              />
+              {newExtendedDate && (
+                <div className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1 font-medium">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span>
+                    New return deadline will be: <strong>{formatDateTime(newExtendedDate)}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Sync Rental Schedule Checkbox */}
+            {extendModalUsage.isRental && (extendModalUsage.monthlyRent || 0) > 0 && (
+              <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/20">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addRentalMonthsOnExtend}
+                    onChange={(e) => setAddRentalMonthsOnExtend(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold text-xs text-indigo-900 dark:text-indigo-300 block">
+                      Sync rental schedule (add monthly rent for extended tenure)
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Adds upcoming month(s) at {formatCurrency(extendModalUsage.monthlyRent || 0)}/mo to the ledger tracker so the customer can be billed accurately.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Reason with Quick Chips */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-semibold uppercase text-slate-500">
+                  Reason for Extension *
+                </label>
+                <div className="flex gap-1.5 text-[10px]">
+                  {['Customer Renewal', 'Grace Extension', 'Event Delay'].map((tag) => (
+                    <button
+                      type="button"
+                      key={tag}
+                      onClick={() => setExtensionReason(tag)}
+                      className="font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="text"
+                required
+                value={extensionReason}
+                onChange={(e) => setExtensionReason(e.target.value)}
+                placeholder="e.g. Customer renewed rental agreement for another month"
+                className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {/* Previous Extensions */}
+            {(extendModalUsage.extensions || []).length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                  Extension History ({(extendModalUsage.extensions || []).length})
+                </span>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {(extendModalUsage.extensions || []).map((ext, idx) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between text-[11px] p-1.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+                    >
+                      <span className="text-slate-600 dark:text-slate-400 truncate max-w-[220px]">
+                        {ext.reason}
+                      </span>
+                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {formatDate(ext.extendedDate)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="outline" onClick={() => setExtendModalUsage(null)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="default" isLoading={isExtending} className="font-bold">
-                Confirm Renewal Extension
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isExtending}
+                disabled={isExtending || !!extendFeedback}
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 gap-1.5"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                <span>Confirm Return Extension</span>
               </Button>
             </div>
           </form>
@@ -2273,15 +2543,25 @@ export default function UsagePage() {
 
             {/* Agreement Terms & Tenure */}
             <div className="rounded-xl border border-amber-500/30 p-3.5 bg-amber-500/5 dark:bg-amber-950/20 space-y-3">
-              <span className="font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
-                2. Rental Tenure &amp; Pricing Parameters
-              </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+                  2. Rental Tenure &amp; Pricing Parameters
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  Paid so far: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{editingPaidCount} of {editingAgreement.lockInPeriodMonths || 3} Mo</strong> ({formatCurrency(editingAlreadyPaidTotal)})
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
-                    Lock-In Duration
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400">
+                      Lock-In Duration
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                      {editLockInPeriodMonths} Months
+                    </span>
+                  </div>
                   <div className="flex gap-1">
                     {[1, 3, 6, 12].map((m) => (
                       <button
@@ -2337,53 +2617,154 @@ export default function UsagePage() {
                   <span>Deduction / Due Schedule:</span>
                   <strong className="text-amber-500 font-bold">1st date of each upcoming month</strong>
                 </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Remaining Unpaid under this Plan:</span>
+                  <strong className={editingRemainingMonthsToSettle > 0 ? "text-rose-500 font-bold" : "text-emerald-500 font-bold"}>
+                    {editingRemainingMonthsToSettle > 0
+                      ? `${editingRemainingMonthsToSettle} Month(s) (${formatCurrency(editingTotalSettlementAmount)})`
+                      : 'All Planned Months Satisfied (₹0 Due)'}
+                  </strong>
+                </div>
               </div>
             </div>
 
-            {/* Settle All Remaining Rent at Once option */}
-            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 p-3.5 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editPayAllNow}
-                  onChange={(e) => setEditPayAllNow(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                />
-                <span className="font-bold text-xs text-indigo-900 dark:text-indigo-300">
-                  Pay & Settle All Remaining Rent Directly at Once (Buyout)
-                </span>
-              </label>
+            {/* 3. Pay & Settle All Remaining Rent Directly at Once (Buyout) */}
+            <div className={`rounded-xl border transition-all ${
+              editPayAllNow
+                ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/30 p-4 space-y-3.5 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 p-3.5'
+            }`}>
+              <div className="flex items-start sm:items-center justify-between gap-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editPayAllNow}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditPayAllNow(checked);
+                      if (checked && !editAgreementTransactionRef && editingTotalSettlementAmount > 0) {
+                        setEditAgreementTransactionRef(`BUYOUT-${editingAgreement.issueReference}`);
+                      }
+                    }}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span>Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Collect remaining rent and close out all future dues immediately in a single transaction
+                    </span>
+                  </div>
+                </label>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Settlement</span>
+                  <span className="text-sm font-black font-mono text-indigo-600 dark:text-indigo-400">
+                    {formatCurrency(editingTotalSettlementAmount)}
+                  </span>
+                </div>
+              </div>
 
               {editPayAllNow && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-indigo-100 dark:border-indigo-900/50">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Payment Method *
-                    </label>
-                    <select
-                      value={editAgreementPaymentMethod}
-                      onChange={(e) => setEditAgreementPaymentMethod(e.target.value as any)}
-                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500"
-                    >
-                      <option value="UPI">UPI (GPay / PhonePe)</option>
-                      <option value="CASH">Cash</option>
-                      <option value="CARD">Debit / Credit Card</option>
-                      <option value="BANK_TRANSFER">Bank IMPS</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Transaction / UPI Ref *
-                    </label>
-                    <input
-                      type="text"
-                      required={editPayAllNow}
-                      placeholder="e.g. UPI-998822 or CASH-RCPT"
-                      value={editAgreementTransactionRef}
-                      onChange={(e) => setEditAgreementTransactionRef(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
-                    />
-                  </div>
+                <div className="pt-3 border-t border-indigo-200 dark:border-indigo-800/60 space-y-3">
+                  {/* Financial Settlement Breakdown Alert */}
+                  {editingTotalSettlementAmount > 0 ? (
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                            Exact Amount Manager / Admin Must Collect:
+                          </span>
+                          <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-tight mt-0.5">
+                            {formatCurrency(editingTotalSettlementAmount)}
+                          </div>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                            {editingRemainingMonthsToSettle} Unpaid {editingRemainingMonthsToSettle === 1 ? 'Month' : 'Months'} × {formatCurrency(editMonthlyRent)}
+                          </span>
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            ✓ Clears all remaining months in 1 transaction
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                          Agreed Tenure: <strong>{editingTargetTenure} Months</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium border border-emerald-200 dark:border-emerald-800/40">
+                          Already Paid: <strong>{editingPaidCount} Mo ({formatCurrency(editingAlreadyPaidTotal)})</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium border border-amber-200 dark:border-amber-800/40">
+                          Months to Clear: <strong>{editingRemainingMonthsToSettle} Mo</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                      <span>
+                        All {editingPaidCount} month(s) under this {editingTargetTenure}-month agreement are already paid ({formatCurrency(editingAlreadyPaidTotal)} collected). No additional payment required!
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Payment Details Inputs */}
+                  {editingTotalSettlementAmount > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">
+                          Payment Method *
+                        </label>
+                        <select
+                          value={editAgreementPaymentMethod}
+                          onChange={(e) => setEditAgreementPaymentMethod(e.target.value as any)}
+                          className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-slate-900 dark:text-white"
+                        >
+                          <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                          <option value="CASH">Cash at Store Counter</option>
+                          <option value="CARD">Debit / Credit Card</option>
+                          <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400">
+                            Transaction / Receipt Ref *
+                          </label>
+                          <div className="flex gap-1.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setEditAgreementTransactionRef(`CASH-${Date.now().toString().slice(-6)}`)}
+                              className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Cash Receipt
+                            </button>
+                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setEditAgreementTransactionRef(`UPI-${Date.now().toString().slice(-6)}`)}
+                              className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              UPI Ref
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          required={editPayAllNow && editingTotalSettlementAmount > 0}
+                          placeholder="e.g. UPI-998822 or CASH-RCPT"
+                          value={editAgreementTransactionRef}
+                          onChange={(e) => setEditAgreementTransactionRef(e.target.value)}
+                          className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2396,9 +2777,23 @@ export default function UsagePage() {
                 type="submit"
                 variant="default"
                 isLoading={isUpdatingAgreement}
-                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950"
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 gap-1.5"
               >
-                Save Changes &amp; Recalculate
+                {editPayAllNow ? (
+                  editingTotalSettlementAmount > 0 ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Confirm &amp; Settle {formatCurrency(editingTotalSettlementAmount)} (Buyout)</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Save Agreement (Fully Satisfied)</span>
+                    </>
+                  )
+                ) : (
+                  <span>Save Changes &amp; Recalculate</span>
+                )}
               </Button>
             </div>
           </form>
