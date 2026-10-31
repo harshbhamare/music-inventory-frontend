@@ -156,3 +156,25 @@ export function formatIndianDecimal(num: number): string {
   return `${isNeg ? "-" : ""}${grouped}.${decPart}`;
 }
 
+/**
+ * Calculates a future date by adding `monthsToAdd` months to `baseDate`,
+ * preserving the exact same day of the month (e.g. 15th to 15th, 20th to 20th).
+ * If the target month has fewer days than the start day (e.g. Feb 30),
+ * it caps to the last valid day of that month (e.g. Feb 28/29).
+ */
+export function addMonthsPreservingDay(baseDate: Date | string, monthsToAdd: number): Date {
+  const d = new Date(baseDate);
+  const targetYear = d.getFullYear();
+  const targetMonth = d.getMonth() + monthsToAdd;
+  const targetDay = d.getDate();
+  const maxDaysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return new Date(
+    targetYear,
+    targetMonth,
+    Math.min(targetDay, maxDaysInTargetMonth),
+    d.getHours() || 12,
+    d.getMinutes() || 0,
+    d.getSeconds() || 0
+  );
+}
+

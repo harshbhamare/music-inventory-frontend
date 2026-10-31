@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, getApiUrl } from '@/lib/api';
 import { Sale, Product, StockLocation, EmiMonthlyPayment } from '@/lib/types';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime, addMonthsPreservingDay } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -280,7 +280,7 @@ export default function SalesPage() {
     let runningAllocated = 0;
 
     for (let i = 1; i <= emiTenureMonths; i++) {
-      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1);
+      const d = addMonthsPreservingDay(baseDate, i);
       let amount = monthlyEmi;
       if (i === emiTenureMonths) {
         amount = Math.max(0, financedPrincipal - runningAllocated);
