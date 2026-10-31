@@ -17,7 +17,6 @@ import {
   Building2,
   Receipt,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface SystemInfo {
   counts: {
@@ -144,19 +143,16 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
-      <div className="flex items-center gap-3">
-        <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-            <Settings className="h-6 w-6 text-amber-500" />
-            <span>System Configuration & Store Management</span>
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isSuperAdmin()
-              ? 'Manage your organization identity, retail store details, GST tax identification, and billing information.'
-              : 'Personalize your workspace display appearance and preferences.'}
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+          <Settings className="h-6 w-6 text-amber-500" />
+          <span>System Configuration & Store Management</span>
+        </h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          {isSuperAdmin()
+            ? 'Manage your organization identity, retail store details, GST tax identification, and billing information.'
+            : 'Personalize your workspace display appearance and preferences.'}
+        </p>
       </div>
 
       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">

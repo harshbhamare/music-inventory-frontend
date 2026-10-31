@@ -40,7 +40,6 @@ import {
   User,
   Truck,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
 
 export default function SalesPage() {
@@ -726,16 +725,13 @@ export default function SalesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Sales &amp; Point of Sale (POS)
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Sales &amp; Point of Sale (POS)
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
+          </p>
         </div>
 
         {canMakeSales() && (
@@ -1931,7 +1927,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerName}
                     onChange={(e) => setEditCustomerName(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1943,7 +1939,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerPhone}
                     onChange={(e) => setEditCustomerPhone(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1955,7 +1951,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerEmail}
                     onChange={(e) => setEditCustomerEmail(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1967,7 +1963,7 @@ export default function SalesPage() {
                     placeholder="e.g. 27AAAAA0000A1Z5"
                     value={editCustomerGstin}
                     onChange={(e) => setEditCustomerGstin(e.target.value.toUpperCase())}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono uppercase"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono uppercase text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -1979,7 +1975,7 @@ export default function SalesPage() {
                     placeholder="Full street address, City, Pincode"
                     value={editCustomerAddress}
                     onChange={(e) => setEditCustomerAddress(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -1998,7 +1994,7 @@ export default function SalesPage() {
                   <select
                     value={editPaymentMethod}
                     onChange={(e) => setEditPaymentMethod(e.target.value as any)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-900 dark:text-white"
                   >
                     <option value="UPI">UPI (GPay / PhonePe)</option>
                     <option value="CARD">Debit / Credit Card</option>
@@ -2015,7 +2011,7 @@ export default function SalesPage() {
                     type="text"
                     value={editDispatchThrough}
                     onChange={(e) => setEditDispatchThrough(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -2026,7 +2022,7 @@ export default function SalesPage() {
                     type="text"
                     value={editDestination}
                     onChange={(e) => setEditDestination(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -2037,7 +2033,7 @@ export default function SalesPage() {
                     type="text"
                     value={editEWayBillNo}
                     onChange={(e) => setEditEWayBillNo(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -2057,57 +2053,70 @@ export default function SalesPage() {
                       className="grid grid-cols-1 sm:grid-cols-6 gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 items-center text-xs"
                     >
                       <div className="sm:col-span-2">
-                        <span className="font-bold text-slate-900 dark:text-white block break-words">
+                        <span className="font-bold text-slate-950 dark:text-white block break-words">
                           {(li as any).productName || (li.product as any)?.name || 'Musical Product'}
                         </span>
-                        <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
+                        <span className="inline-block mt-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                          Qty: {li.quantity}
+                        </span>
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Unit Price (₹)
+                        </label>
                         <input
                           type="number"
                           min="0"
                           step="any"
+                          placeholder="0"
                           value={li.unitPrice}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].unitPrice = parseFloat(e.target.value) || 0;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-950 dark:text-white font-bold font-mono text-right placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Discount/Unit (₹)
+                        </label>
                         <input
                           type="number"
                           min="0"
                           step="any"
+                          placeholder="0"
                           value={li.discount}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].discount = parseFloat(e.target.value) || 0;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 font-bold font-mono text-right placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">HSN/SAC</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          HSN/SAC
+                        </label>
                         <input
                           type="text"
+                          placeholder="9202"
                           value={li.hsnCode}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].hsnCode = e.target.value;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-center"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-950 dark:text-white font-bold font-mono text-center placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs"
                         />
                       </div>
                       <div className="text-right">
-                        <span className="block text-[9px] uppercase font-bold text-slate-400">Net Total</span>
-                        <span className="font-bold text-slate-900 dark:text-white font-mono">
+                        <span className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Net Total
+                        </span>
+                        <span className="font-extrabold text-slate-950 dark:text-white font-mono text-xs">
                           {formatCurrency(Math.round(lineTotal))}
                         </span>
                       </div>
@@ -2211,7 +2220,7 @@ export default function SalesPage() {
                   placeholder="Notes printed on invoice"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                 />
               </div>
               <div>
@@ -2223,7 +2232,7 @@ export default function SalesPage() {
                   placeholder="Internal audit notes"
                   value={editRemarks}
                   onChange={(e) => setEditRemarks(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                 />
               </div>
             </div>

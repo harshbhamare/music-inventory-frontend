@@ -41,7 +41,6 @@ import {
   Coins,
   Activity,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useAuth } from '@/context/AuthContext';
 import {
   BarChart,
@@ -402,19 +401,16 @@ export default function ReportsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <span>Reporting & Analytics Center</span>
-              <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400 border-amber-500/30">
-                Superadmin
-              </Badge>
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Stereobliss Retail — Live operational reports, periodic financial summaries, rental instrument profit tracking, and audit verification.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <span>Reporting & Analytics Center</span>
+            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400 border-amber-500/30">
+              Superadmin
+            </Badge>
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            Stereobliss Retail — Live operational reports, periodic financial summaries, rental instrument profit tracking, and audit verification.
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
