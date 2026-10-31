@@ -345,14 +345,18 @@ export default function UsagePage() {
     setIsAddingMonth(true);
 
     try {
-      const res = await api.post<{ usage: InternalUsage }>(
+      const res = await api.post<{ usage?: InternalUsage; data?: { usage: InternalUsage } }>(
         `/usage/${selectedRentalForLedger._id}/add-month`,
         {
           amountDue: selectedRentalForLedger.monthlyRent || 1500,
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
+        setSelectedRentalForLedger(updated);
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? { ...u, ...updated } : u)));
+      }
       fetchUsages();
     } catch (err: any) {
       alert(err.message || 'Failed to add next rental month.');
@@ -545,7 +549,9 @@ export default function UsagePage() {
     setEditAssignedPerson(usage.assignedPerson || '');
     setEditCustomerPhone(usage.assignedPersonContact || '');
     setEditCustomerEmail(usage.customerEmail || '');
-    setEditLockInPeriodMonths(usage.lockInPeriodMonths || 3);
+    // Ensure lock-in tenure is at least the current length of scheduled monthly payments
+    const currentScheduleLength = (usage.monthlyPayments || []).length;
+    setEditLockInPeriodMonths(Math.max(usage.lockInPeriodMonths || 3, currentScheduleLength));
     setEditMonthlyRent(usage.monthlyRent || 1500);
     setEditSecurityDeposit(usage.securityDeposit || 0);
     setEditAgreementNotes(usage.notes || '');
@@ -561,9 +567,26 @@ export default function UsagePage() {
   const editingPaidMonths = editingExistingPayments.filter((p) => p.status === 'PAID');
   const editingPaidCount = editingPaidMonths.length;
   const editingAlreadyPaidTotal = editingPaidMonths.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+
+  // Unpaid months in the existing schedule (including manually added months like Month 4, adjusted months, etc.)
+  const editingUnpaidMonths = editingExistingPayments.filter((p) => p.status !== 'PAID');
+  const editingUnpaidScheduledTotal = editingUnpaidMonths.reduce(
+    (sum, p) => sum + Math.max(0, p.amountDue - (p.amountPaid || 0)),
+    0
+  );
+
+  // If user sets a higher tenure than current schedule length, calculate extra future months
   const editingTargetTenure = Math.max(1, editLockInPeriodMonths || 1);
-  const editingRemainingMonthsToSettle = Math.max(0, editingTargetTenure - editingPaidCount);
-  const editingTotalSettlementAmount = editingRemainingMonthsToSettle * (editMonthlyRent || 0);
+  const editingExtraFutureMonths = Math.max(0, editingTargetTenure - editingExistingPayments.length);
+  const editingExtraFutureTotal = editingExtraFutureMonths * (editMonthlyRent || 0);
+
+  // Total settlement buyout amount across all remaining unpaid months + any extended future months
+  const editingTotalSettlementAmount = editingUnpaidScheduledTotal + editingExtraFutureTotal;
+  const editingRemainingMonthsToSettle = editingUnpaidMonths.length + editingExtraFutureMonths;
+
+  // Product price and recovery metrics for agreement modal
+  const editingProduct = editingAgreement?.items?.[0]?.product as any;
+  const editingProductPrice = editingProduct?.defaultSellingPrice || editingProduct?.purchaseCost || 0;
 
   const handleUpdateAgreement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -952,12 +975,18 @@ export default function UsagePage() {
                             {u.items.map((it, idx) => {
                               const pName = (it.product as any)?.name || (it as any).productName || 'Musical Instrument';
                               const pColor = (it.product as any)?.color;
+                              const pPrice = (it.product as any)?.defaultSellingPrice || (it.product as any)?.purchaseCost || 0;
                               return (
                                 <div key={idx} className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">{pName}</span>
                                   {pColor && (
                                     <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700">
                                       {pColor}
+                                    </span>
+                                  )}
+                                  {pPrice > 0 && (
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 font-mono" title="Product Retail Price (MRP)">
+                                      MRP: {formatCurrency(pPrice)}
                                     </span>
                                   )}
                                   {it.serializedItemId && (
@@ -1000,26 +1029,40 @@ export default function UsagePage() {
 
                         {/* 5. Rent Collection & Outward Money Outcome */}
                         <td className="py-2 px-3 whitespace-nowrap align-middle">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1 text-xs">
-                              <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
-                              <span className="text-slate-500">/</span>
-                              <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
-                              {due > 0 ? (
-                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                  {formatCurrency(due)} Due
-                                </span>
-                              ) : (
-                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
-                                  All Paid
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-teal-600 dark:text-teal-400 font-medium flex items-center gap-1">
-                              <span className="text-slate-400">Outward Refund:</span>
-                              <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong>
-                            </div>
-                          </div>
+                          {(() => {
+                            const mainProd = u.items[0]?.product as any;
+                            const mainProdPrice = mainProd?.defaultSellingPrice || mainProd?.purchaseCost || 0;
+                            const directPaidRent = (u.monthlyPayments || []).filter((p) => p.status === 'PAID' && p.paymentMethod !== 'DEPOSIT').reduce((s, p) => s + (p.amountPaid || 0), 0);
+                            const custTotalMoney = u.depositMode ? (deposit + directPaidRent) : (deposit + paid);
+                            const custRecoveryPct = mainProdPrice > 0 ? Math.min(100, Math.round((custTotalMoney / mainProdPrice) * 100)) : 0;
+
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-xs">
+                                  <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
+                                  <span className="text-slate-500">/</span>
+                                  <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
+                                  {due > 0 ? (
+                                    <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                      {formatCurrency(due)} Due
+                                    </span>
+                                  ) : (
+                                    <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
+                                      All Paid
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] flex items-center justify-between gap-1 text-teal-600 dark:text-teal-400 font-medium">
+                                  <span>Refund: <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong></span>
+                                  {mainProdPrice > 0 && (
+                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded" title={`Customer paid ${formatCurrency(custTotalMoney)} of ${formatCurrency(mainProdPrice)} product value`}>
+                                      {custRecoveryPct}% val
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 6. Return Deadline & Progress */}
@@ -1150,11 +1193,11 @@ export default function UsagePage() {
         isOpen={!!selectedRentalForLedger}
         onClose={() => setSelectedRentalForLedger(null)}
         title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
-        description="Track month-by-month rent payments, pending balances, bundled accessories, and send email reminders."
-        maxWidth="2xl"
+        description="Comprehensive product valuation, customer recovery tracking, month-by-month rental ledger, and payment settlement."
+        maxWidth="4xl"
       >
         {selectedRentalForLedger && (
-          <div className="space-y-6 text-xs text-slate-900 dark:text-white">
+          <div className="space-y-5 text-xs text-slate-900 dark:text-white">
             {paymentError && (
               <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 font-semibold text-red-500">
                 {paymentError}
@@ -1168,20 +1211,175 @@ export default function UsagePage() {
               </div>
             )}
 
-            {/* Renter & Financial Summary Header */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Renter</span>
-                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                  {selectedRentalForLedger.assignedPerson}
-                </span>
-                <span className="text-[11px] text-slate-400 block">{selectedRentalForLedger.customerEmail}</span>
-              </div>
+            {/* 1. HERO: Instrument Valuation & Customer Price Recovery Banner */}
+            {(() => {
+              const primaryIt = selectedRentalForLedger.items?.[0];
+              const prod = primaryIt?.product as any;
+              const prodPrice = prod?.defaultSellingPrice || prod?.purchaseCost || 0;
+              const serialUnit = primaryIt?.serializedItemId as any;
+              const pName = prod?.name || (primaryIt as any)?.productName || 'Musical Instrument';
 
+              // Money collected directly from customer:
+              // In deposit mode: upfront deposit + direct continuation payments (method != 'DEPOSIT')
+              // In normal mode: security deposit + totalRentPaid
+              const directRent = (selectedRentalForLedger.monthlyPayments || [])
+                .filter((p) => p.status === 'PAID' && p.paymentMethod !== 'DEPOSIT')
+                .reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+
+              const totalCollectedFromCustomer = selectedRentalForLedger.depositMode
+                ? (selectedRentalForLedger.securityDeposit || 0) + directRent
+                : (selectedRentalForLedger.securityDeposit || 0) + (selectedRentalForLedger.totalRentPaid || 0);
+
+              const remainingToProductPrice = prodPrice > 0 ? Math.max(0, prodPrice - totalCollectedFromCustomer) : 0;
+              const recoveryPercent = prodPrice > 0 ? Math.min(100, Math.round((totalCollectedFromCustomer / prodPrice) * 100)) : 100;
+              const isFullyRecovered = prodPrice > 0 && totalCollectedFromCustomer >= prodPrice;
+
+              return (
+                <div className="p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-gradient-to-br from-indigo-50/70 via-white to-amber-50/40 dark:from-indigo-950/40 dark:via-slate-900/60 dark:to-amber-950/20 shadow-sm space-y-3.5">
+                  {/* Top row: Product info & Retail Price Badge */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-indigo-900/40">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                        <Music2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            {pName}
+                          </span>
+                          {prod?.color && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700">
+                              {prod.color}
+                            </span>
+                          )}
+                          {serialUnit?.assetId && (
+                            <span className="font-mono text-amber-500 font-bold text-xs bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                              [{serialUnit.assetId}]
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Renter: <strong className="text-slate-700 dark:text-slate-300">{selectedRentalForLedger.assignedPerson}</strong> ({selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPersonContact || 'No email'}) • Ref: <strong className="font-mono text-slate-700 dark:text-slate-300">{selectedRentalForLedger.issueReference}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Product MRP Banner */}
+                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900/90 px-3.5 py-2 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 shrink-0">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block">
+                          Product Retail MRP
+                        </span>
+                        <span className="text-lg font-black font-mono text-indigo-600 dark:text-indigo-400">
+                          {prodPrice > 0 ? formatCurrency(prodPrice) : '₹—'}
+                        </span>
+                      </div>
+                      {isFullyRecovered ? (
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>100% Value Paid</span>
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          {recoveryPercent}% Recovered
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Financial Recovery Metrics 4-Card Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Product Retail Price</span>
+                      <span className="text-base font-black font-mono text-slate-900 dark:text-white">
+                        {prodPrice > 0 ? formatCurrency(prodPrice) : '₹—'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">Target customer liability</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Collected So Far</span>
+                      <span className="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(totalCollectedFromCustomer)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        Deposit ({formatCurrency(selectedRentalForLedger.securityDeposit || 0)}) + Rent
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Remaining to MRP</span>
+                        {remainingToProductPrice > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentAmount(remainingToProductPrice);
+                              setSelectedBillingMonth('');
+                              setRentalPaymentNotes('Settlement to reach 100% instrument MRP');
+                              if (!rentalTransactionRef) {
+                                setRentalTransactionRef(`BUYOUT-${selectedRentalForLedger.issueReference}`);
+                              }
+                            }}
+                            className="text-[9px] font-bold text-indigo-500 hover:underline"
+                            title="Fill exact shortfall to reach instrument retail MRP"
+                          >
+                            Fill ₹{remainingToProductPrice}
+                          </button>
+                        )}
+                      </div>
+                      <span className={`text-base font-black font-mono ${remainingToProductPrice > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {formatCurrency(remainingToProductPrice)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        {remainingToProductPrice > 0 ? 'Shortfall to cover full price' : '✓ 100% value recovered'}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Schedule Rent Due</span>
+                      <span className={`text-base font-black font-mono ${(selectedRentalForLedger.totalRentDue ?? 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                        {formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">All upcoming unpaid months</span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar of Product Price Recovery */}
+                  {prodPrice > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-slate-500">
+                          Total Customer Recovery Progress: {formatCurrency(totalCollectedFromCustomer)} collected towards {formatCurrency(prodPrice)} instrument value
+                        </span>
+                        <span className={isFullyRecovered ? 'text-emerald-500 font-black' : 'text-indigo-500 font-mono font-bold'}>
+                          {recoveryPercent}%
+                        </span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 rounded-full ${
+                            isFullyRecovered
+                              ? 'bg-emerald-500'
+                              : recoveryPercent > 60
+                              ? 'bg-gradient-to-r from-indigo-500 to-amber-500'
+                              : 'bg-amber-500'
+                          }`}
+                          style={{ width: `${recoveryPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 2. Renter Terms & Deposit Status Breakdown */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               {selectedRentalForLedger.depositMode ? (
                 <>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Collected</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Initial Security Deposit</span>
                     <span className="font-bold text-indigo-400 text-sm">
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
@@ -1190,50 +1388,64 @@ export default function UsagePage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Balance</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Custody Balance</span>
                     <span className={`font-bold text-sm ${(selectedRentalForLedger.depositBalance || 0) <= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      {selectedRentalForLedger.depositExhausted ? '⚠️ Exhausted — continuation mode' : 'Remaining'}
+                      {selectedRentalForLedger.depositExhausted ? '⚠️ Exhausted — continuation mode' : 'Available for deductions'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Months Deducted</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Monthly Deduction Rate</span>
                     <span className="font-bold text-amber-500 text-sm">
-                      {(selectedRentalForLedger.depositDeductions || []).length}
-                      {' / '}
-                      {selectedRentalForLedger.lockInPeriodMonths || '—'}
+                      {formatCurrency(selectedRentalForLedger.monthlyRent || 0)} / mo
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Tenure: {selectedRentalForLedger.lockInPeriodMonths || '—'} Months
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Deductions</span>
+                    <span className="font-bold text-indigo-400 text-sm">
+                      {(selectedRentalForLedger.depositDeductions || []).length} Recorded
                     </span>
                     <span className="text-[10px] text-slate-500 block">
                       {(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length > 0
                         ? `⚡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
-                        : 'All notices sent'}
+                        : 'All notices dispatched'}
                     </span>
                   </div>
                 </>
               ) : (
                 <>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Security Deposit</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Security Deposit (Refundable)</span>
                     <span className="font-bold text-indigo-400 text-sm">
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Refundable</span>
+                    <span className="text-[10px] text-slate-500 block">Disbursed upon return</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Rent Paid</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Agreed Monthly Rent</span>
+                    <span className="font-bold text-amber-500 text-sm">
+                      {formatCurrency(selectedRentalForLedger.monthlyRent || 0)} / mo
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">Tenure: {selectedRentalForLedger.lockInPeriodMonths || 3} Months</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Rent Paid to Date</span>
                     <span className="font-bold text-emerald-500 text-sm">
                       {formatCurrency(selectedRentalForLedger.totalRentPaid || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Received to date</span>
+                    <span className="text-[10px] text-slate-500 block">Logged via UPI/Cash/Card</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Remaining Due</span>
-                    <span className="font-bold text-rose-500 text-sm">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Remaining Rent Due</span>
+                    <span className={`font-bold text-sm ${(selectedRentalForLedger.totalRentDue || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {formatCurrency(selectedRentalForLedger.totalRentDue || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Outstanding rent</span>
+                    <span className="text-[10px] text-slate-500 block">Outstanding balance</span>
                   </div>
                 </>
               )}
@@ -1245,25 +1457,34 @@ export default function UsagePage() {
                 Bundled Items & Accessories with Instrument:
               </span>
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {(selectedRentalForLedger.includedAccessories || []).map((acc, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                  >
-                    <Check className="h-3 w-3" />
-                    <span>{acc}</span>
-                  </span>
-                ))}
+                {(selectedRentalForLedger.includedAccessories || []).length > 0 ? (
+                  (selectedRentalForLedger.includedAccessories || []).map((acc, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>{acc}</span>
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-400 italic text-[11px]">No extra accessories bundled</span>
+                )}
               </div>
             </div>
 
-            {/* Month-by-Month Schedule Table */}
+            {/* 3. Month-by-Month Schedule Table with Quick Actions */}
             <div className="space-y-2">
-              <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                Month-by-Month Rental Payment Schedule ({selectedRentalForLedger.monthlyPayments?.length || 0} Months)
-              </h4>
+              <div className="flex justify-between items-center">
+                <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                  Month-by-Month Rental Payment Schedule ({selectedRentalForLedger.monthlyPayments?.length || 0} Months)
+                </h4>
+                <span className="text-[11px] text-slate-400">
+                  Editing rent auto-carries difference to next month
+                </span>
+              </div>
 
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
@@ -1277,77 +1498,114 @@ export default function UsagePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {(selectedRentalForLedger.monthlyPayments || []).map((p, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
-                          {p.billingMonth}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-500">
-                          {formatDate(p.dueDate)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500">
-                          {formatCurrency(p.amountDue)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-500">
-                          {formatCurrency(p.amountPaid || 0)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <Badge
-                            variant={p.status === 'PAID' ? 'success' : 'danger'}
-                            className="text-[10px]"
-                          >
-                            {p.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-500">
-                          {p.paymentMethod ? (
-                            <div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {p.paymentMethod}
-                              </span>
-                              {p.transactionRef && (
-                                <span className="ml-1 text-[11px] font-mono text-amber-500">
-                                  ({p.transactionRef})
+                    {(selectedRentalForLedger.monthlyPayments || []).map((p, idx) => {
+                      const isOverdueMonth = p.status !== 'PAID' && new Date(p.dueDate) < new Date();
+                      const hasAdjustment = p.notes && (p.notes.includes('Auto-adjusted') || p.notes.includes('Auto-generated') || p.notes.includes('carry'));
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{p.billingMonth}</span>
+                              {hasAdjustment && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-500 border border-indigo-200 dark:border-indigo-800" title={p.notes}>
+                                  Adjusted
                                 </span>
                               )}
-                              {p.notes && (
-                                <div className="text-[10px] text-slate-400 italic">{p.notes}</div>
-                              )}
                             </div>
-                          ) : (
-                            <span className="text-slate-400 italic">Pending payment</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenEditPayment(p)}
-                              className="h-6 px-2 text-[10px] font-bold gap-1 text-amber-500 hover:text-amber-400 border-amber-500/30"
-                              title="Edit Price, Trn No. & Adjust Next Month Rent"
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={isOverdueMonth ? 'font-bold text-rose-500 flex items-center gap-1' : 'text-slate-500'}>
+                              {isOverdueMonth && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                              {formatDate(p.dueDate)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500 whitespace-nowrap">
+                            {formatCurrency(p.amountDue)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-500 whitespace-nowrap">
+                            {formatCurrency(p.amountPaid || 0)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <Badge
+                              variant={p.status === 'PAID' ? 'success' : isOverdueMonth ? 'danger' : 'warning'}
+                              className="text-[10px]"
                             >
-                              <Pencil className="h-2.5 w-2.5" />
-                              <span>Edit</span>
-                            </Button>
-                            {p.status !== 'PAID' && (
+                              {p.status === 'PAID' ? 'PAID' : isOverdueMonth ? 'OVERDUE' : 'DUE'}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {p.paymentMethod ? (
+                              <div>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {p.paymentMethod}
+                                </span>
+                                {p.transactionRef && (
+                                  <span className="ml-1 text-[11px] font-mono text-amber-500">
+                                    ({p.transactionRef})
+                                  </span>
+                                )}
+                                {p.notes && (
+                                  <div className="text-[10px] text-slate-400 italic line-clamp-1" title={p.notes}>{p.notes}</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Pending payment</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Quick Pay button right inside the row */}
+                              {p.status !== 'PAID' && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => {
+                                    setSelectedBillingMonth(p.billingMonth);
+                                    setPaymentAmount(Math.max(0, p.amountDue - (p.amountPaid || 0)));
+                                    if (!rentalTransactionRef) {
+                                      setRentalTransactionRef(`UPI-${Date.now().toString().slice(-6)}`);
+                                    }
+                                  }}
+                                  className="h-6 px-2 text-[10px] font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                                  title={`Fill payment for ${p.billingMonth}`}
+                                >
+                                  <Check className="h-2.5 w-2.5" />
+                                  <span>Pay</span>
+                                </Button>
+                              )}
+
+                              {p.status !== 'PAID' && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenAdjustMonthDue(p)}
+                                  className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                                  title="Adjust Rent Due for this Month (Auto-carries difference)"
+                                >
+                                  <SlidersHorizontal className="h-2.5 w-2.5" />
+                                  <span>Adjust</span>
+                                </Button>
+                              )}
+
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleOpenAdjustMonthDue(p)}
-                                className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
-                                title="Adjust Rent Due for this Month"
+                                onClick={() => handleOpenEditPayment(p)}
+                                className="h-6 px-2 text-[10px] font-bold gap-1 text-amber-500 hover:text-amber-400 border-amber-500/30"
+                                title="Edit Paid Amount, Trn No. & Payment Method"
                               >
-                                <SlidersHorizontal className="h-2.5 w-2.5" />
-                                <span>Adjust Rent</span>
+                                <Pencil className="h-2.5 w-2.5" />
+                                <span>Edit</span>
                               </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1361,14 +1619,11 @@ export default function UsagePage() {
                   onClick={handleAddRentalMonth}
                   isLoading={isAddingMonth}
                   disabled={isAddingMonth}
-                  className="h-7 text-xs font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                  className="h-7 text-xs font-bold gap-1.5 text-indigo-400 hover:text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/10"
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
                   <span>+ Add Next Rental Month</span>
                 </Button>
-                <span className="text-[11px] text-slate-400">
-                  Click &quot;Edit&quot; on any month to update price &amp; trn no. or adjust next month&apos;s rent.
-                </span>
               </div>
             </div>
 
@@ -1919,6 +2174,18 @@ export default function UsagePage() {
               />
             </div>
 
+            {adjustingMonth && adjustAmountDue !== adjustingMonth.amountDue && (
+              <div className="p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-400 font-medium">
+                ⚡ Difference of{' '}
+                <strong>
+                  {adjustAmountDue < adjustingMonth.amountDue
+                    ? `+₹${adjustingMonth.amountDue - adjustAmountDue} shortfall`
+                    : `-₹${adjustAmountDue - adjustingMonth.amountDue} credit`}
+                </strong>{' '}
+                will automatically be carried forward to next month&apos;s schedule!
+              </div>
+            )}
+
             <div>
               <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
                 Reason / Adjustment Note
@@ -2440,7 +2707,7 @@ export default function UsagePage() {
                 <div className="pt-3 border-t border-indigo-200 dark:border-indigo-800/60 space-y-3">
                   {/* Financial Settlement Breakdown Alert */}
                   {editingTotalSettlementAmount > 0 ? (
-                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 space-y-2">
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 space-y-2.5">
                       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
                         <div>
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
@@ -2452,10 +2719,10 @@ export default function UsagePage() {
                         </div>
                         <div className="text-left sm:text-right">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                            {editingRemainingMonthsToSettle} Unpaid {editingRemainingMonthsToSettle === 1 ? 'Month' : 'Months'} × {formatCurrency(editMonthlyRent)}
+                            {editingRemainingMonthsToSettle} Unpaid {editingRemainingMonthsToSettle === 1 ? 'Month' : 'Months'} to Clear
                           </span>
                           <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                            ✓ Clears all remaining months in 1 transaction
+                            ✓ Clears all remaining scheduled &amp; added dues in 1 payment
                           </span>
                         </div>
                       </div>
@@ -2470,7 +2737,22 @@ export default function UsagePage() {
                         <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium border border-amber-200 dark:border-amber-800/40">
                           Months to Clear: <strong>{editingRemainingMonthsToSettle} Mo</strong>
                         </span>
+                        {editingProductPrice > 0 && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-200 dark:border-indigo-800/40">
+                            Product Retail MRP: <strong>{formatCurrency(editingProductPrice)}</strong>
+                          </span>
+                        )}
                       </div>
+
+                      {editingProductPrice > 0 && (
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <span>Total Customer Investment After Buyout:</span>
+                          <strong className="text-slate-900 dark:text-white font-mono">
+                            {formatCurrency(editingAlreadyPaidTotal + (editingAgreement?.securityDeposit || 0) + editingTotalSettlementAmount)}
+                            {' '}({Math.min(100, Math.round(((editingAlreadyPaidTotal + (editingAgreement?.securityDeposit || 0) + editingTotalSettlementAmount) / editingProductPrice) * 100))}%)
+                          </strong>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
