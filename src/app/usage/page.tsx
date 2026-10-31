@@ -42,6 +42,9 @@ import {
   ClipboardList,
   Wallet,
   Zap,
+  ArrowUpRight,
+  ExternalLink,
+  Eye,
 } from 'lucide-react';
 
 export default function UsagePage() {
@@ -114,6 +117,11 @@ export default function UsagePage() {
   const [extendFeedback, setExtendFeedback] = useState('');
   const [addRentalMonthsOnExtend, setAddRentalMonthsOnExtend] = useState(true);
   const [isExtending, setIsExtending] = useState(false);
+
+  // Outward Money / Deposit Refunds Due Modal State
+  const [isOutwardModalOpen, setIsOutwardModalOpen] = useState(false);
+  const [outwardSearch, setOutwardSearch] = useState('');
+  const [outwardModeFilter, setOutwardModeFilter] = useState<'ALL' | 'DEPOSIT_MODE' | 'STANDARD'>('ALL');
 
   useEffect(() => {
     fetchUsages();
@@ -617,6 +625,85 @@ export default function UsagePage() {
   const totalRentCollected = usages.reduce((sum, u) => sum + (u.totalRentPaid || 0), 0);
   const totalRentPending = activeRentals.reduce((sum, u) => sum + (u.totalRentDue || 0), 0);
 
+  // ── Outward Money / Deposit Refunds Calculation ──
+  // Example scenario: Customer deposited ₹5,000; total rent paid/deducted is ₹3,000; remaining deposit balance is ₹2,000 outward refund!
+  const outwardRefundList = React.useMemo(() => {
+    return usages
+      .filter((u) => (u.securityDeposit || 0) > 0 && u.status !== 'RETURNED')
+      .map((u) => {
+        const deposit = u.securityDeposit || 0;
+        let rentPaidOrDeducted = 0;
+        let outwardRefundDue = 0;
+
+        if (u.depositMode) {
+          // Deposit deduction mode: rent is deducted from the deposit
+          const balance =
+            typeof u.depositBalance === 'number'
+              ? u.depositBalance
+              : Math.max(0, deposit - (u.totalRentPaid || 0));
+          rentPaidOrDeducted = Math.max(0, deposit - balance);
+          outwardRefundDue = Math.max(0, balance);
+        } else {
+          // Standard rental mode: deposit is held; rent is paid directly.
+          // If any rent installments are unpaid (totalRentDue), that is offset against deposit upon return.
+          rentPaidOrDeducted = u.totalRentPaid || 0;
+          const rentDue = u.totalRentDue || 0;
+          outwardRefundDue = Math.max(0, deposit - rentDue);
+        }
+
+        const firstItem = u.items && u.items[0];
+        const prod = firstItem?.product as any;
+        const instrumentName = prod?.name || (firstItem as any)?.productName || 'Musical Instrument';
+        const instrumentBrand = prod?.brand || '';
+        const instrumentCost = prod?.defaultSellingPrice ?? prod?.purchaseCost ?? 0;
+        const assetId = (firstItem?.serializedItemId as any)?.assetId || (firstItem as any)?.assetId;
+        const serialNo = (firstItem?.serializedItemId as any)?.manufacturerSerial;
+
+        return {
+          usage: u,
+          customerName: u.assignedPerson || 'Unnamed Renter',
+          customerPhone: u.assignedPersonContact || '',
+          customerEmail: u.customerEmail || '',
+          instrumentName,
+          instrumentBrand,
+          instrumentCost,
+          assetId,
+          serialNo,
+          depositMode: !!u.depositMode,
+          depositCollected: deposit,
+          rentPaidOrDeducted,
+          outwardRefundDue,
+          status: u.status,
+          issueDate: u.issueDate || u.createdAt,
+          expectedReturnDate: u.expectedReturnDate,
+        };
+      })
+      .filter((r) => r.outwardRefundDue > 0);
+  }, [usages]);
+
+  const totalOutwardRefund = React.useMemo(() => {
+    return outwardRefundList.reduce((sum, r) => sum + r.outwardRefundDue, 0);
+  }, [outwardRefundList]);
+
+  // Filtered outward refund list by search query and mode filter
+  const filteredOutwardRefundList = React.useMemo(() => {
+    return outwardRefundList.filter((r) => {
+      if (outwardModeFilter === 'DEPOSIT_MODE' && !r.depositMode) return false;
+      if (outwardModeFilter === 'STANDARD' && r.depositMode) return false;
+
+      if (!outwardSearch.trim()) return true;
+      const q = outwardSearch.toLowerCase().trim();
+      return (
+        r.customerName.toLowerCase().includes(q) ||
+        r.customerPhone.toLowerCase().includes(q) ||
+        r.customerEmail.toLowerCase().includes(q) ||
+        r.instrumentName.toLowerCase().includes(q) ||
+        (r.assetId && r.assetId.toLowerCase().includes(q)) ||
+        r.usage.issueReference.toLowerCase().includes(q)
+      );
+    });
+  }, [outwardRefundList, outwardSearch, outwardModeFilter]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -624,7 +711,7 @@ export default function UsagePage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <Music2 className="h-6 w-6 text-amber-500" />
-            <span>Rent Instrument & Instrument Loans</span>
+            <span>Rent Instrument &amp; Instrument Loans</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
@@ -645,44 +732,44 @@ export default function UsagePage() {
         )}
       </div>
 
-      {/* Rental Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Rental Financial Overview Cards (5 Columns with Outward Deposit Refunds) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <Card className="border-l-4 border-l-amber-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Active Rentals & Loans</span>
+              <span>Active Rentals</span>
               <Music2 className="h-4 w-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {activeRentals.length}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Instruments currently on rent/loan</p>
+            <p className="text-[11px] text-slate-400 mt-1">Instruments on active rent</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-indigo-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Security Deposits Held</span>
+              <span>Deposits Held</span>
               <Shield className="h-4 w-4 text-indigo-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {formatCurrency(totalDepositsHeld)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Refundable customer safety deposits</p>
+            <p className="text-[11px] text-slate-400 mt-1">Customer safety deposits</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-emerald-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Total Rent Collected</span>
+              <span>Rent Collected</span>
               <IndianRupee className="h-4 w-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
               {formatCurrency(totalRentCollected)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Monthly rental income processed</p>
+            <p className="text-[11px] text-slate-400 mt-1">Rental income processed</p>
           </CardContent>
         </Card>
 
@@ -695,7 +782,36 @@ export default function UsagePage() {
             <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
               {formatCurrency(totalRentPending)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Outstanding rental installments</p>
+            <p className="text-[11px] text-slate-400 mt-1">Outstanding installments</p>
+          </CardContent>
+        </Card>
+
+        {/* 5. Outward Money / Deposit Refunds Due Card (Clickable to inspect users and instruments) */}
+        <Card
+          onClick={() => {
+            setOutwardSearch('');
+            setOutwardModeFilter('ALL');
+            setIsOutwardModalOpen(true);
+          }}
+          className="border-l-4 border-l-teal-500 hover:border-teal-400 bg-teal-500/5 dark:bg-teal-950/20 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-[0.99] group"
+        >
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-teal-700 dark:text-teal-300 text-xs font-bold uppercase tracking-wider">
+              <span>Outward Refunds Due</span>
+              <Wallet className="h-4 w-4 text-teal-500 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black text-teal-600 dark:text-teal-400 mt-1">
+              {formatCurrency(totalOutwardRefund)}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400">
+                {outwardRefundList.length} customer{outwardRefundList.length === 1 ? '' : 's'} refundable
+              </span>
+              <span className="font-bold text-teal-600 dark:text-teal-400 group-hover:underline flex items-center gap-0.5">
+                <span>Inspect</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -2418,6 +2534,242 @@ export default function UsagePage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* ── Outward Money / Deposit Refunds Due Modal ── */}
+      <Modal
+        isOpen={isOutwardModalOpen}
+        onClose={() => setIsOutwardModalOpen(false)}
+        title="Outward Deposit Refunds — Customer & Instrument Breakdown"
+        description="Comprehensive summary of security deposit balances held in custody that will be disbursed outward to customers upon instrument return or contract settlement."
+        maxWidth="4xl"
+      >
+        <div className="space-y-4 pt-1">
+          {/* Outward Liability Summary Banner */}
+          <div className="p-4 rounded-xl bg-teal-500/10 border border-teal-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                <Wallet className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <span>Total Outward Money Due for Refund</span>
+              </span>
+              <div className="text-3xl font-black font-mono text-teal-600 dark:text-teal-400">
+                {formatCurrency(totalOutwardRefund)}
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Formula: <strong>Security Deposit Collected − Rent Paid / Rent Deducted</strong> = Outward Refundable Balance
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="px-3.5 py-2 rounded-lg bg-white dark:bg-slate-900 border border-teal-500/30 text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Eligible Customers</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {outwardRefundList.length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-between pt-1">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search customer, phone, instrument, asset ID..."
+                value={outwardSearch}
+                onChange={(e) => setOutwardSearch(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex gap-1 self-start sm:self-auto p-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+              {(['ALL', 'DEPOSIT_MODE', 'STANDARD'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setOutwardModeFilter(mode)}
+                  className={`px-2.5 py-1 font-bold rounded-md transition-colors text-[11px] ${
+                    outwardModeFilter === mode
+                      ? 'bg-teal-500 text-slate-950 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {mode === 'ALL'
+                    ? `All (${outwardRefundList.length})`
+                    : mode === 'DEPOSIT_MODE'
+                    ? 'Deposit Auto-Deduct'
+                    : 'Standard Deposit'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Customer & Instrument Cards List */}
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+            {filteredOutwardRefundList.length === 0 ? (
+              <div className="p-8 text-center rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-300 dark:border-slate-800 text-slate-500 text-xs">
+                No outward deposit refund records found matching your query.
+              </div>
+            ) : (
+              filteredOutwardRefundList.map((item) => (
+                <div
+                  key={item.usage._id}
+                  className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-colors space-y-3 shadow-sm"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    {/* Customer & Instrument Details */}
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <User className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                          <span>{item.customerName}</span>
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          #{item.usage.issueReference}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            item.depositMode
+                              ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {item.depositMode ? 'Deposit Auto-Deduct' : 'Standard Deposit'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                        {item.customerPhone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{item.customerPhone}</span>
+                          </span>
+                        )}
+                        {item.customerEmail && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{item.customerEmail}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Instrument Information */}
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Music2 className="h-3.5 w-3.5 text-amber-500" />
+                            <span>{item.instrumentName}</span>
+                            {item.instrumentBrand && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({item.instrumentBrand})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Return Deadline: <strong className="text-slate-700 dark:text-slate-300">{formatDate(item.expectedReturnDate)}</strong>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          {item.assetId ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              Asset: {item.assetId}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Standard Stock</span>
+                          )}
+                          {item.instrumentCost > 0 && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Value: {formatCurrency(item.instrumentCost)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Financial Snapshot & Outward Money */}
+                    <div className="sm:text-right flex sm:flex-col justify-between items-end gap-2 bg-teal-500/5 dark:bg-teal-950/30 p-3 rounded-xl border border-teal-500/20 shrink-0 min-w-[200px]">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-400 block tracking-wider">
+                          Outward Money (Refund Due)
+                        </span>
+                        <div className="text-2xl font-black font-mono text-teal-600 dark:text-teal-400">
+                          {formatCurrency(item.outwardRefundDue)}
+                        </div>
+                      </div>
+
+                      <div className="text-xs space-y-0.5 text-slate-500 dark:text-slate-400 text-left sm:text-right">
+                        <div>
+                          Deposit Collected:{' '}
+                          <strong className="text-slate-900 dark:text-white font-mono">
+                            {formatCurrency(item.depositCollected)}
+                          </strong>
+                        </div>
+                        <div>
+                          Rent Deducted/Paid:{' '}
+                          <strong className="text-slate-900 dark:text-white font-mono">
+                            {formatCurrency(item.rentPaidOrDeducted)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions for this Customer & Instrument */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="text-[11px] text-slate-400">
+                      Rented on {formatDate(item.issueDate)}
+                    </span>
+
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsOutwardModalOpen(false);
+                          openLedgerModal(item.usage);
+                        }}
+                        className="h-7 text-xs font-semibold gap-1"
+                      >
+                        <ClipboardList className="h-3.5 w-3.5 text-indigo-500" />
+                        <span>View Ledger</span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        onClick={() => {
+                          setIsOutwardModalOpen(false);
+                          openReturnModal(item.usage);
+                        }}
+                        className="h-7 text-xs font-bold gap-1 bg-teal-600 hover:bg-teal-700 text-white"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>Process Return &amp; Refund</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <span className="text-slate-500">
+              Showing {filteredOutwardRefundList.length} of {outwardRefundList.length} refundable agreement(s)
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsOutwardModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

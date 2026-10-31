@@ -241,7 +241,27 @@ export default function NewRentalPage() {
     }
   };
 
-  // Financial summary
+  // Financial summary & Instrument Retail Valuation
+  const instrumentRetailPrice = useMemo(() => {
+    if (!selectedProduct) return 0;
+    return (
+      selectedProduct.defaultSellingPrice ??
+      (selectedProduct as any).sellingPrice ??
+      selectedProduct.purchaseCost ??
+      0
+    );
+  }, [selectedProduct]);
+
+  const depositCoveragePercent = useMemo(() => {
+    if (!instrumentRetailPrice || instrumentRetailPrice <= 0) return 0;
+    return Math.round((securityDeposit / instrumentRetailPrice) * 100);
+  }, [instrumentRetailPrice, securityDeposit]);
+
+  const rentPercentageOfValue = useMemo(() => {
+    if (!instrumentRetailPrice || instrumentRetailPrice <= 0) return '0.0';
+    return ((monthlyRent / instrumentRetailPrice) * 100).toFixed(1);
+  }, [instrumentRetailPrice, monthlyRent]);
+
   const totalCommitment = lockInPeriodMonths * monthlyRent;
   const initialPaymentDue = depositMode
     ? securityDeposit
@@ -352,6 +372,35 @@ export default function NewRentalPage() {
                 </select>
               </div>
 
+              {selectedProduct && (
+                <div className="p-3 rounded-xl bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>{selectedProduct.name}</span>
+                      {selectedProduct.brand && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold">
+                          {selectedProduct.brand}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      SKU: <span className="font-mono">{selectedProduct.sku}</span> • Available In Stock:{' '}
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {selectedProduct.availableForSale} unit(s)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="sm:text-right shrink-0 p-2 sm:p-0 rounded-lg bg-white/70 dark:bg-slate-900/70 sm:bg-transparent">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                      Instrument Cost / Retail Value
+                    </span>
+                    <span className="text-base font-black font-mono text-slate-900 dark:text-white">
+                      {instrumentRetailPrice > 0 ? formatCurrency(instrumentRetailPrice) : 'Not specified'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {isSerializedMissing && (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
@@ -459,6 +508,48 @@ export default function NewRentalPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Instrument Pricing Valuation & Guidance Bar */}
+              {selectedProduct && (
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Instrument Cost / Value
+                    </span>
+                    <strong className="text-sm font-black font-mono text-slate-900 dark:text-white">
+                      {instrumentRetailPrice > 0 ? formatCurrency(instrumentRetailPrice) : '₹0'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Deposit Taken
+                    </span>
+                    <strong className="text-sm font-black font-mono text-indigo-600 dark:text-indigo-400">
+                      {formatCurrency(securityDeposit)}
+                    </strong>
+                    {depositCoveragePercent > 0 && (
+                      <span className="text-[10px] text-indigo-500 block font-semibold">
+                        ({depositCoveragePercent}% coverage)
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Monthly Rent
+                    </span>
+                    <strong className="text-sm font-black font-mono text-amber-600 dark:text-amber-400">
+                      {formatCurrency(monthlyRent)} / mo
+                    </strong>
+                    {Number(rentPercentageOfValue) > 0 && (
+                      <span className="text-[10px] text-amber-500 block font-semibold">
+                        ({rentPercentageOfValue}% / mo)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Monthly Rent & Deposit */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
@@ -667,7 +758,7 @@ export default function NewRentalPage() {
 
             <CardContent className="pt-4 space-y-4 text-xs">
               {/* Customer & Instrument Snapshot */}
-              <div className="space-y-2 p-3 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800">
+              <div className="space-y-2 p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between items-baseline">
                   <span className="text-slate-500 text-[11px]">Renter:</span>
                   <strong className="text-slate-900 dark:text-white font-semibold">
@@ -680,6 +771,14 @@ export default function NewRentalPage() {
                     {selectedProduct ? selectedProduct.name : 'No instrument chosen'}
                   </strong>
                 </div>
+                {selectedProduct && (
+                  <div className="flex justify-between items-baseline pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                    <span className="text-slate-500 text-[11px] font-semibold">Instrument Retail Value:</span>
+                    <strong className="font-mono text-slate-900 dark:text-white font-bold text-xs">
+                      {instrumentRetailPrice > 0 ? formatCurrency(instrumentRetailPrice) : 'Not specified'}
+                    </strong>
+                  </div>
+                )}
                 {selectedSerialId && (
                   <div className="flex justify-between items-baseline">
                     <span className="text-slate-500 text-[11px]">Asset ID:</span>
@@ -723,28 +822,72 @@ export default function NewRentalPage() {
                 </div>
               </div>
 
-              {/* Financial Box */}
-              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Monthly Rent:</span>
-                  <strong className="font-mono text-slate-900 dark:text-white">{formatCurrency(monthlyRent)} / mo</strong>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Security Deposit:</span>
-                  <strong className="font-mono text-indigo-500">{formatCurrency(securityDeposit)}</strong>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Contract Commitment:</span>
-                  <strong className="font-mono text-slate-900 dark:text-white">{formatCurrency(totalCommitment)}</strong>
+              {/* Financial Box: Instrument Cost vs Deposit vs Rent */}
+              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Pricing &amp; Deposit Breakdown
                 </div>
 
-                <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-baseline">
+                {/* 1. Instrument Cost */}
+                <div className="flex justify-between items-center py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block">
+                      1. Instrument Retail Cost
+                    </span>
+                    <span className="text-[10px] text-slate-400">Total equipment value</span>
+                  </div>
+                  <strong className="font-mono text-slate-900 dark:text-white font-bold text-xs">
+                    {instrumentRetailPrice > 0 ? formatCurrency(instrumentRetailPrice) : '—'}
+                  </strong>
+                </div>
+
+                {/* 2. Security Deposit */}
+                <div className="flex justify-between items-center py-1.5 px-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50">
+                  <div>
+                    <span className="text-[11px] font-semibold text-indigo-900 dark:text-indigo-200 block">
+                      2. Security Deposit Taken
+                    </span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400">
+                      {depositMode ? 'Auto-deduct balance' : 'Refundable safety deposit'}
+                      {depositCoveragePercent > 0 && ` • ${depositCoveragePercent}% of value`}
+                    </span>
+                  </div>
+                  <strong className="font-mono text-indigo-600 dark:text-indigo-400 font-black text-sm">
+                    {formatCurrency(securityDeposit)}
+                  </strong>
+                </div>
+
+                {/* 3. Monthly Rent */}
+                <div className="flex justify-between items-center py-1.5 px-2.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/50">
+                  <div>
+                    <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-200 block">
+                      3. Monthly Rent
+                    </span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                      Recurring monthly installment
+                    </span>
+                  </div>
+                  <strong className="font-mono text-amber-600 dark:text-amber-400 font-black text-sm">
+                    {formatCurrency(monthlyRent)} / mo
+                  </strong>
+                </div>
+
+                {/* 4. Total Commitment */}
+                <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 px-1 pt-1">
+                  <span className="text-[11px]">Contract Commitment ({lockInPeriodMonths}M):</span>
+                  <strong className="font-mono text-slate-900 dark:text-white font-semibold">
+                    {formatCurrency(totalCommitment)}
+                  </strong>
+                </div>
+
+                {/* 5. Initial Payment Due Today */}
+                <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800 flex justify-between items-baseline px-1">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
                       Initial Due Today
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      {depositMode ? 'Deposit covers rent' : 'Deposit + 1st Month'}
+                      {depositMode ? 'Security Deposit covers rent' : 'Security Deposit + 1st Month Rent'}
                     </span>
                   </div>
                   <div className="text-xl font-black font-mono text-amber-500">
