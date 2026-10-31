@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, getApiUrl } from '@/lib/api';
@@ -36,6 +36,9 @@ import {
   Save,
   Send,
   FileEdit,
+  Package,
+  User,
+  Truck,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
@@ -50,6 +53,8 @@ export default function SalesPage() {
 
   // New Sale POS state
   const [isNewSaleOpen, setIsNewSaleOpen] = useState(false);
+  // POS modal tab state
+  const [posTab, setPosTab] = useState<'items' | 'payment' | 'dispatch'>('items');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -617,7 +622,7 @@ export default function SalesPage() {
               Sales &amp; Point of Sale (POS)
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
+              Stereobliss Retail â€” Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
             </p>
           </div>
         </div>
@@ -628,6 +633,7 @@ export default function SalesPage() {
             variant="default"
             onClick={() => {
               setIsNewSaleOpen(true);
+              setPosTab('items');
               setSaleError('');
             }}
             className="gap-1.5 text-xs font-bold shadow-md"
@@ -712,7 +718,7 @@ export default function SalesPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search invoice, customer, phone…"
+              placeholder="Search invoice, customer, phoneâ€¦"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-colors"
@@ -723,7 +729,7 @@ export default function SalesPage() {
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
-                ✕
+                âœ•
               </button>
             )}
           </div>
@@ -826,7 +832,7 @@ export default function SalesPage() {
                           <div className="space-y-0.5">
                             {sale.lineItems?.map((li, idx) => (
                               <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                • {li.product?.name} (x{li.quantity})
+                                â€¢ {li.product?.name} (x{li.quantity})
                               </div>
                             ))}
                           </div>
@@ -839,7 +845,7 @@ export default function SalesPage() {
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-2">
 
-                            {/* ── Primary actions: Invoice + PDF ── */}
+                            {/* â”€â”€ Primary actions: Invoice + PDF â”€â”€ */}
                             <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs divide-x divide-slate-200 dark:divide-slate-700">
                               {/* Tax Invoice */}
                               <button
@@ -868,12 +874,12 @@ export default function SalesPage() {
                               </button>
                             </div>
 
-                            {/* ── EMI Ledger (only for EMI sales) ── */}
+                            {/* â”€â”€ EMI Ledger (only for EMI sales) â”€â”€ */}
                             {isEmi && (
                               <button
                                 type="button"
                                 onClick={() => openEmiLedger(sale)}
-                                title="EMI Ledger — month-by-month installment tracker"
+                                title="EMI Ledger â€” month-by-month installment tracker"
                                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors shadow-xs ${
                                   isEmiFullySettled
                                     ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
@@ -892,7 +898,7 @@ export default function SalesPage() {
                               </button>
                             )}
 
-                            {/* ── Edit (manager/admin only) ── */}
+                            {/* â”€â”€ Edit (manager/admin only) â”€â”€ */}
                             {canEditBills && (
                               <button
                                 type="button"
@@ -920,487 +926,362 @@ export default function SalesPage() {
       <Modal
         isOpen={isNewSaleOpen}
         onClose={() => setIsNewSaleOpen(false)}
-        title="Record Customer Sale (POS)"
-        description="Select available products, customer contact details, choose Direct Sale or EMI installment plan, and confirm."
-        maxWidth="4xl"
+        title="New Customer Sale â€” POS"
+        description="Add items to cart, set customer details, choose payment plan, and confirm."
+        maxWidth="5xl"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            {/* Tab navigation in footer */}
+            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+              {posTab !== 'items' && (
+                <button
+                  type="button"
+                  onClick={() => setPosTab(posTab === 'dispatch' ? 'payment' : 'items')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  â† Back
+                </button>
+              )}
+              <div className="flex items-center gap-1 ml-2">
+                {(['items','payment','dispatch'] as const).map((t, i) => (
+                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${posTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsNewSaleOpen(false)}>
+                Cancel
+              </Button>
+              {posTab !== 'dispatch' ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="font-bold gap-1.5"
+                  onClick={() => setPosTab(posTab === 'items' ? 'payment' : 'dispatch')}
+                >
+                  Next â†’
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  form="pos-sale-form"
+                  size="sm"
+                  variant="default"
+                  isLoading={isSubmittingSale}
+                  className="font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                >
+                  {saleType === 'EMI' ? 'Confirm & Setup EMI Plan' : 'Confirm & Complete Sale'}
+                </Button>
+              )}
+            </div>
+          </div>
+        }
       >
-        <form onSubmit={handleCreateSale} className="space-y-6">
+        <form id="pos-sale-form" onSubmit={handleCreateSale}>
           {saleError && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
+            <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{saleError}</span>
             </div>
           )}
 
-          {/* Type of Selling Selector: Direct vs EMI */}
-          <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Select Selling Type *
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div
-                onClick={() => setSaleType('DIRECT')}
-                className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                  saleType === 'DIRECT'
-                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-950/20 text-slate-900 dark:text-white'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+          {/* â”€â”€ Tab Bar â”€â”€ */}
+          <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+            {([
+              { key: 'items',    label: 'Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
+              { key: 'payment',  label: 'Payment Plan',     icon: <CreditCard className="h-3.5 w-3.5" /> },
+              { key: 'dispatch', label: 'Dispatch & GST',   icon: <Truck className="h-3.5 w-3.5" /> },
+            ] as const).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setPosTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  posTab === tab.key
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
               >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+              TAB 1 â€” Items & Customer
+          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          <div className={posTab === 'items' ? 'space-y-4' : 'hidden'}>
+
+            {/* Sale Type Selector */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { type: 'DIRECT' as const, label: '1. Direct Sale (Full Payment)', badge: 'Standard POS', badgeColor: 'text-emerald-600 bg-emerald-500/10', desc: 'Full amount paid upfront via UPI, Card, Cash, or Bank Transfer.' },
+                { type: 'EMI' as const,    label: '2. EMI Installment Financing', badge: 'Ledger Plan', badgeColor: 'text-amber-600 bg-amber-500/10', desc: 'Down payment + monthly installments with automated reminders.' },
+              ].map(({ type, label, badge, badgeColor, desc }) => (
                 <div
-                  className={`mt-0.5 h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
-                    saleType === 'DIRECT'
-                      ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-slate-400'
+                  key={type}
+                  onClick={() => {
+                    setSaleType(type);
+                    if (type === 'EMI' && downPayment === 0 && grandTotal > 0) setDownPayment(Math.round(grandTotal * 0.2));
+                  }}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                    saleType === type
+                      ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-950/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-500 hover:border-slate-300'
                   }`}
                 >
-                  {saleType === 'DIRECT' && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
-                </div>
-                <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5">
-                    <span>1. Direct Sale (Full Payment)</span>
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded">
-                      Standard POS
-                    </span>
+                  <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${saleType === type ? 'border-amber-500 bg-amber-500' : 'border-slate-400'}`}>
+                    {saleType === type && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Customer pays full amount upfront via UPI, Card, Cash, or Bank Transfer.
-                  </p>
+                  <div>
+                    <div className="text-xs font-bold flex items-center gap-1.5 flex-wrap">
+                      <span className="text-slate-900 dark:text-white">{label}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 rounded ${badgeColor}`}>{badge}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Customer Details */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Customer Details</span>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <Input label="Customer Name *" required placeholder="e.g. Rahul Sharma" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                <Input label="Phone Number *" required placeholder="9876543210" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                <Input label="Email Address *" type="email" required placeholder="rahul@example.com" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    {saleType === 'DIRECT' ? 'Payment Method *' : 'Down Payment Via *'}
+                  </label>
+                  <select
+                    value={saleType === 'DIRECT' ? paymentMethod : downPaymentMethod}
+                    onChange={(e) => saleType === 'DIRECT' ? setPaymentMethod(e.target.value as any) : setDownPaymentMethod(e.target.value as any)}
+                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-amber-500"
+                  >
+                    <option value="UPI">UPI (GPay / PhonePe)</option>
+                    <option value="CARD">Credit / Debit Card</option>
+                    <option value="CASH">Cash</option>
+                    <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Product Picker + Cart â€” two columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+              {/* Left: catalogue */}
+              <div className="lg:col-span-2 space-y-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Available Products</h3>
+                <div className="max-h-[320px] overflow-y-auto space-y-1.5 pr-0.5">
+                  {products.filter((p) => p.availableForSale > 0).map((p) => (
+                    <div
+                      key={p._id}
+                      onClick={() => handleAddToCart(p)}
+                      className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-amber-500 bg-white dark:bg-slate-950 cursor-pointer transition-colors flex justify-between items-center text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900 dark:text-white truncate">{p.name}
+                          {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{p.color}</span>}
+                        </div>
+                        <div className="text-[11px] text-slate-400">{p.brand} Â· Avail: <strong>{p.availableForSale}</strong></div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="font-bold text-amber-500">{formatCurrency(p.defaultSellingPrice)}</div>
+                        <div className="text-[10px] text-slate-400 font-semibold">+ Add</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div
-                onClick={() => {
-                  setSaleType('EMI');
-                  if (downPayment === 0 && grandTotal > 0) {
-                    setDownPayment(Math.round(grandTotal * 0.2));
-                  }
-                }}
-                className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                  saleType === 'EMI'
-                    ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-950/20 text-slate-900 dark:text-white'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                }`}
-              >
-                <div
-                  className={`mt-0.5 h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
-                    saleType === 'EMI'
-                      ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-slate-400'
-                  }`}
-                >
-                  {saleType === 'EMI' && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
-                </div>
-                <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5">
-                    <span>2. EMI Installment Financing</span>
-                    <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded">
-                      Rental Style Ledger
-                    </span>
+              {/* Right: cart + totals */}
+              <div className="lg:col-span-3 space-y-3">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Cart ({cartItems.length} item{cartItems.length !== 1 ? 's' : ''})
+                </h3>
+
+                {cartItems.length === 0 ? (
+                  <div className="h-28 flex items-center justify-center text-xs text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                    Click a product on the left to add it to the cart
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Down payment + scheduled monthly installments with automated email reminders.
-                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[240px] overflow-y-auto pr-0.5">
+                    {cartItems.map((item, idx) => (
+                      <div key={item.product._id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-bold text-slate-900 dark:text-white truncate">{item.product.name}
+                            {item.product.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{item.product.color}</span>}
+                          </span>
+                          <button type="button" onClick={() => handleRemoveFromCart(item.product._id)} className="text-slate-400 hover:text-red-500 ml-2 shrink-0">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500">Qty</label>
+                            <input type="number" min="1" max={item.product.availableForSale} value={item.quantity}
+                              onChange={(e) => handleCartItemChange(idx, 'quantity', parseInt(e.target.value, 10) || 1)}
+                              className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-bold" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Unit Price (â‚¹)</label>
+                            <input type="number" min="0" value={item.unitPrice}
+                              onChange={(e) => handleCartItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right font-semibold" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Discount (â‚¹)</label>
+                            <input type="number" min="0" value={item.discount}
+                              onChange={(e) => handleCartItemChange(idx, 'discount', parseFloat(e.target.value) || 0)}
+                              className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* GST Summary */}
+                <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-500"><span>Subtotal:</span><span>{formatCurrency(subtotal)}</span></div>
+                  {discountTotal > 0 && <div className="flex justify-between text-emerald-500 font-semibold"><span>Discount:</span><span>âˆ’{formatCurrency(discountTotal)}</span></div>}
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300"><span>Taxable:</span><span>{formatCurrency(taxableAmount)}</span></div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>CGST 9%:</span><span>+{formatCurrency(cgstAmount)}</span></div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>SGST 9%:</span><span>+{formatCurrency(sgstAmount)}</span></div>
+                  <div className="flex justify-between font-extrabold text-slate-900 dark:text-white text-sm pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                    <span>Grand Total:</span><span className="text-amber-500">{formatCurrency(grandTotal)}</span>
+                  </div>
+                  {saleType === 'EMI' && (
+                    <div className="flex justify-between font-bold text-amber-600 dark:text-amber-400 pt-0.5">
+                      <span>Due at POS (down payment):</span><span>{formatCurrency(effectiveDownPayment)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Customer Details — Phone and Email strictly required */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            <Input
-              label="Customer Name *"
-              required
-              placeholder="e.g. Rahul Sharma"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-            />
-
-            <Input
-              label="Customer Phone Number *"
-              required
-              placeholder="e.g. 9876543210 (10 digits)"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-            />
-
-            <Input
-              label="Customer Email Address *"
-              type="email"
-              required
-              placeholder="rahul@example.com"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-            />
-
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+              TAB 2 â€” Payment Plan (EMI Calculator)
+          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          <div className={posTab === 'payment' ? 'space-y-4' : 'hidden'}>
             {saleType === 'DIRECT' ? (
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Payment Method *
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as any)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-amber-500"
-                >
-                  <option value="UPI">UPI (GPay / PhonePe)</option>
-                  <option value="CARD">Credit / Debit Card</option>
-                  <option value="CASH">Cash</option>
-                  <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
-                </select>
+              <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 space-y-3">
+                <CheckCircle2 className="h-12 w-12 text-emerald-400" />
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Direct Sale selected â€” no EMI plan needed.</p>
+                <p className="text-xs">Switch to EMI on Tab 1 if you want to set up an installment plan.</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Down Payment Method *
-                </label>
-                <select
-                  value={downPaymentMethod}
-                  onChange={(e) => setDownPaymentMethod(e.target.value as any)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-amber-500"
-                >
-                  <option value="UPI">UPI (GPay / PhonePe)</option>
-                  <option value="CARD">Credit / Debit Card</option>
-                  <option value="CASH">Cash</option>
-                  <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
-                </select>
+              <div className="space-y-5">
+                {/* Calculator */}
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-amber-500" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">EMI Financing Terms</span>
+                    </div>
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Zero Interest In-Store Plan</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">Down Payment (â‚¹) *</label>
+                      <input type="number" min="0" max={grandTotal} value={downPayment}
+                        onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
+                      <span className="text-[10px] text-slate-400 block mt-1">Paid at POS checkout</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">EMI Tenure *</label>
+                      <div className="grid grid-cols-5 gap-1 pt-1">
+                        {[3, 6, 9, 12, 18].map((m) => (
+                          <button key={m} type="button" onClick={() => setEmiTenureMonths(m)}
+                            className={`h-9 rounded text-xs font-bold transition-all ${emiTenureMonths === m ? 'bg-amber-500 text-slate-950 shadow-sm' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 hover:border-amber-400'}`}>
+                            {m}M
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg border border-amber-500/20 bg-white dark:bg-slate-900 space-y-1.5">
+                      <div className="flex justify-between text-[11px] text-slate-500"><span>Grand Total:</span><span className="font-bold text-slate-900 dark:text-white">{formatCurrency(grandTotal)}</span></div>
+                      <div className="flex justify-between text-[11px] text-slate-500"><span>Financed:</span><span className="font-bold text-slate-900 dark:text-white">{formatCurrency(financedPrincipal)}</span></div>
+                      <div className="flex justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200 dark:border-slate-800"><span>Monthly EMI:</span><span className="font-extrabold text-amber-500 text-sm">{formatCurrency(monthlyEmi)} / mo</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Schedule preview */}
+                {emiSchedulePreview.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                      Installment Schedule â€” {emiSchedulePreview.length} Months
+                    </span>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {emiSchedulePreview.map((item) => (
+                        <div key={item.monthIndex} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-center text-[11px]">
+                          <div className="font-bold text-slate-700 dark:text-slate-300 truncate">{item.billingMonth}</div>
+                          <div className="text-[10px] text-slate-400">Due: {formatDate(item.dueDate)}</div>
+                          <div className="font-mono font-extrabold text-amber-500 mt-1">{formatCurrency(item.amountDue)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* If EMI: EMI Configuration & Schedule Live Calculator */}
-          {saleType === 'EMI' && (
-            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-amber-500" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                    EMI Financing Terms &amp; Calculation
-                  </span>
-                </div>
-                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
-                  Zero Interest In-Store Plan
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">
-                    Down Payment (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={grandTotal}
-                    value={downPayment}
-                    onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
-                    placeholder="e.g. 5000"
-                    className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Paid at POS checkout
-                  </span>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">
-                    EMI Tenure (Months) *
-                  </label>
-                  <div className="grid grid-cols-5 gap-1 pt-1">
-                    {[3, 6, 9, 12, 18].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setEmiTenureMonths(m)}
-                        className={`h-8 rounded text-xs font-bold transition-all ${
-                          emiTenureMonths === m
-                            ? 'bg-amber-500 text-slate-950 shadow-xs'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-400'
-                        }`}
-                      >
-                        {m}M
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg border border-amber-500/20 bg-white dark:bg-slate-900 space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>Financed Principal:</span>
-                    <span className="font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(financedPrincipal)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>Monthly Installment:</span>
-                    <span className="font-extrabold text-amber-500 text-sm">
-                      {formatCurrency(monthlyEmi)} / mo
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 text-right">
-                    Over {emiTenureMonths} equal monthly installments
-                  </div>
-                </div>
-              </div>
-
-              {/* Installment Schedule Preview */}
-              {emiSchedulePreview.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-amber-500/20">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
-                    Scheduled Installments Preview ({emiSchedulePreview.length} Months)
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                    {emiSchedulePreview.map((item) => (
-                      <div
-                        key={item.monthIndex}
-                        className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-center text-[11px]"
-                      >
-                        <div className="font-bold text-slate-700 dark:text-slate-300">
-                          {item.billingMonth}
-                        </div>
-                        <div className="text-[10px] text-slate-400">Due: {formatDate(item.dueDate)}</div>
-                        <div className="font-mono font-extrabold text-amber-500 mt-1">
-                          {formatCurrency(item.amountDue)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+              TAB 3 â€” Dispatch & GST Details
+          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          <div className={posTab === 'dispatch' ? 'space-y-4' : 'hidden'}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Dealer / Buyer GSTIN" placeholder="e.g. 27ADDFS8650Q1Z6" value={customerGstin} onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())} />
+              <Input label="Delivery / Billing Address" placeholder="e.g. Pimple Saudagar, Pune 411027" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} />
+              <Input label="Dispatched Through" placeholder="XP India / Hand Delivery" value={dispatchThrough} onChange={(e) => setDispatchThrough(e.target.value)} />
+              <Input label="Destination City" placeholder="PUNE" value={destination} onChange={(e) => setDestination(e.target.value)} />
+              <Input label="e-Way Bill No." placeholder="e.g. 331000000001" value={eWayBillNo} onChange={(e) => setEWayBillNo(e.target.value)} />
             </div>
-          )}
 
-          {/* Dealer GST & Dispatch Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40">
-            <Input
-              label="Dealer / Buyer GSTIN"
-              placeholder="e.g. 27ADDFS8650Q1Z6"
-              value={customerGstin}
-              onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())}
-            />
-
-            <Input
-              label="Delivery / Billing Address"
-              placeholder="e.g. Pimple Saudagar, Pune 411027"
-              value={customerAddress}
-              onChange={(e) => setCustomerAddress(e.target.value)}
-            />
-
-            <Input
-              label="Dispatched Through"
-              placeholder="XP India / Hand Delivery"
-              value={dispatchThrough}
-              onChange={(e) => setDispatchThrough(e.target.value)}
-            />
-
-            <Input
-              label="Destination City"
-              placeholder="PUNE"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-            />
-          </div>
-
-          {/* Item Selector & Cart */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Available Products Picker */}
-            <div className="lg:col-span-1 space-y-3 border-r border-slate-200 dark:border-slate-800 pr-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Available Products Catalogue
-              </h3>
-              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                {products
-                  .filter((p) => p.availableForSale > 0)
-                  .map((p) => (
-                    <div
-                      key={p._id}
-                      onClick={() => handleAddToCart(p)}
-                      className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-amber-500 bg-white dark:bg-slate-950 cursor-pointer transition-colors flex justify-between items-center text-xs"
-                    >
-                      <div>
-                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                          <span>{p.name}</span>
-                          {p.color && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                              {p.color}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          {p.brand} | Available: <strong>{p.availableForSale}</strong>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-amber-500">
-                          {formatCurrency(p.defaultSellingPrice)}
-                        </div>
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                          + Add
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Notes (printed on invoice)</label>
+                <input type="text" placeholder="e.g. Thank you for your purchase." value={notes} onChange={(e) => setNotes(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Internal Remarks</label>
+                <input type="text" placeholder="Internal audit note" value={remarks} onChange={(e) => setRemarks(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
               </div>
             </div>
 
-            {/* Right: Cart & Serialized Selection */}
-            <div className="lg:col-span-2 space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Sale Items ({cartItems.length})
-              </h3>
-
-              {cartItems.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-300 dark:border-slate-800 rounded-xl">
-                  Click on an available product on the left to add it to this sale.
-                </div>
-              ) : (
-                <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-                  {cartItems.map((item, idx) => {
-                    return (
-                      <div
-                        key={item.product._id}
-                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3 text-xs"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="font-bold text-slate-900 dark:text-white">
-                              {item.product.name}
-                            </span>
-                            {item.product.color && (
-                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                                {item.product.color}
-                              </span>
-                            )}
-                            <span className="ml-2 text-[10px] font-mono text-amber-500">
-                              {item.product.sku}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFromCart(item.product._id)}
-                            className="text-slate-400 hover:text-red-500 p-1"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        {/* Pricing & Quantity controls */}
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="text-[10px] text-slate-500">Quantity</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={item.product.availableForSale}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleCartItemChange(
-                                  idx,
-                                  'quantity',
-                                  parseInt(e.target.value, 10) || 1
-                                )
-                              }
-                              className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-bold"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] text-slate-500">Unit Price (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.unitPrice}
-                              onChange={(e) =>
-                                handleCartItemChange(
-                                  idx,
-                                  'unitPrice',
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right font-semibold"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] text-slate-500">Discount (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.discount}
-                              onChange={(e) =>
-                                handleCartItemChange(
-                                  idx,
-                                  'discount',
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Total & Checkout GST summary */}
-              <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 space-y-1.5 text-xs border border-slate-200 dark:border-slate-800">
-                <div className="flex justify-between text-slate-500">
-                  <span>Gross Subtotal:</span>
-                  <span>{formatCurrency(subtotal)}</span>
-                </div>
-                {discountTotal > 0 && (
-                  <div className="flex justify-between text-emerald-500 font-semibold">
-                    <span>Discount:</span>
-                    <span>-{formatCurrency(discountTotal)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-slate-700 dark:text-slate-300 font-medium">
-                  <span>Taxable Value:</span>
-                  <span>{formatCurrency(taxableAmount)}</span>
-                </div>
-                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                  <span>Central GST (CGST 9%):</span>
-                  <span>+{formatCurrency(cgstAmount)}</span>
-                </div>
-                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                  <span>State GST (SGST 9%):</span>
-                  <span>+{formatCurrency(sgstAmount)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500 text-[11px] border-t border-slate-200 dark:border-slate-800 pt-1">
-                  <span>Total Tax (18% GST):</span>
-                  <span>+{formatCurrency(totalGst)}</span>
-                </div>
-                <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <span>Grand Total Payable:</span>
-                  <span className="text-amber-500">{formatCurrency(grandTotal)}</span>
-                </div>
-                {saleType === 'EMI' && (
-                  <div className="flex justify-between text-xs font-bold text-amber-600 dark:text-amber-400 pt-1">
-                    <span>Down Payment due at POS:</span>
-                    <span>{formatCurrency(effectiveDownPayment)}</span>
-                  </div>
-                )}
+            {/* Final order summary before confirm */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2 text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px] tracking-wider block">Order Summary</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><span className="text-slate-500 block">Customer</span><span className="font-bold text-slate-900 dark:text-white">{customerName || 'â€”'}</span></div>
+                <div><span className="text-slate-500 block">Sale Type</span><span className="font-bold text-amber-500">{saleType}</span></div>
+                <div><span className="text-slate-500 block">Items</span><span className="font-bold text-slate-900 dark:text-white">{cartItems.length} product{cartItems.length !== 1 ? 's' : ''}</span></div>
+                <div><span className="text-slate-500 block">Grand Total</span><span className="font-bold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span></div>
               </div>
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="outline" onClick={() => setIsNewSaleOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="default" isLoading={isSubmittingSale} className="font-bold">
-              {saleType === 'EMI' ? 'Confirm & Setup EMI Plan' : 'Confirm & Complete Sale'}
-            </Button>
           </div>
         </form>
       </Modal>
 
-      {/* EMI Ledger & Payment Tracking Modal — Exact same workflow as Rental Ledger */}
+      {/* EMI Ledger & Payment Tracking Modal â€” Exact same workflow as Rental Ledger */}
       <Modal
         isOpen={!!selectedSaleForLedger}
         onClose={() => setSelectedSaleForLedger(null)}
-        title={`Customer EMI Ledger — ${selectedSaleForLedger?.invoiceNumber}`}
+        title={`Customer EMI Ledger â€” ${selectedSaleForLedger?.invoiceNumber}`}
         description="Month-by-month EMI installment schedule, payment tracking, balance calculations, and email reminder dispatch."
         maxWidth="2xl"
       >
@@ -1549,7 +1430,7 @@ export default function SalesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Pay (₹) *
+                      Amount to Pay (â‚¹) *
                     </label>
                     <input
                       type="number"
@@ -1670,7 +1551,7 @@ export default function SalesPage() {
                         <div>
                           <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
-                              ₹{Math.round(p.amount).toLocaleString('en-IN')}
+                              â‚¹{Math.round(p.amount).toLocaleString('en-IN')}
                             </span>
                             <span>&bull;</span>
                             <span>{p.paymentMethod}</span>
@@ -1679,7 +1560,7 @@ export default function SalesPage() {
                             </span>
                           </div>
                           <div className="text-[10px] text-slate-500 mt-0.5">
-                            {p.billingMonth || p.paymentType} {p.notes ? `• ${p.notes}` : ''}
+                            {p.billingMonth || p.paymentType} {p.notes ? `â€¢ ${p.notes}` : ''}
                           </div>
                         </div>
                         <span className="text-slate-400 text-[10px] font-medium whitespace-nowrap">
@@ -1911,7 +1792,7 @@ export default function SalesPage() {
                         <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (â‚¹)</label>
                         <input
                           type="number"
                           min="0"
@@ -1926,7 +1807,7 @@ export default function SalesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (â‚¹)</label>
                         <input
                           type="number"
                           min="0"
@@ -1956,7 +1837,7 @@ export default function SalesPage() {
                       <div className="text-right">
                         <span className="block text-[9px] uppercase font-bold text-slate-400">Net Total</span>
                         <span className="font-bold text-slate-900 dark:text-white font-mono">
-                          ₹{Math.round(lineTotal).toLocaleString('en-IN')}
+                          â‚¹{Math.round(lineTotal).toLocaleString('en-IN')}
                         </span>
                       </div>
                     </div>
@@ -1976,16 +1857,16 @@ export default function SalesPage() {
                   <div className="flex justify-end gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
                     <div>
                       <span className="text-slate-500">Taxable: </span>
-                      <strong className="font-mono">₹{taxBase.toLocaleString('en-IN')}</strong>
+                      <strong className="font-mono">â‚¹{taxBase.toLocaleString('en-IN')}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500">GST (18%): </span>
-                      <strong className="font-mono">₹{(cgst + sgst).toLocaleString('en-IN')}</strong>
+                      <strong className="font-mono">â‚¹{(cgst + sgst).toLocaleString('en-IN')}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500">Recalculated Grand Total: </span>
                       <strong className="text-amber-500 text-sm font-extrabold font-mono">
-                        ₹{grand.toLocaleString('en-IN')}
+                        â‚¹{grand.toLocaleString('en-IN')}
                       </strong>
                     </div>
                   </div>
@@ -2002,7 +1883,7 @@ export default function SalesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Initial Deposit / Down Payment (₹)
+                      Initial Deposit / Down Payment (â‚¹)
                     </label>
                     <input
                       type="number"
@@ -2039,7 +1920,7 @@ export default function SalesPage() {
                       const monthly = editEmiTenureMonths > 0 ? Math.round(financed / editEmiTenureMonths) : 0;
                       return (
                         <div className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex items-center justify-end font-bold text-amber-600 dark:text-amber-400 font-mono text-xs">
-                          ₹{monthly.toLocaleString('en-IN')} / mo
+                          â‚¹{monthly.toLocaleString('en-IN')} / mo
                         </div>
                       );
                     })()}

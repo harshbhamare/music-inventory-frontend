@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -38,6 +38,8 @@ import {
   Pencil,
   SlidersHorizontal,
   PlusCircle,
+  ClipboardList,
+  Wallet,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -62,6 +64,10 @@ export default function UsagePage() {
 
   // Issue / Rent Equipment Modal State
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  // Issue modal tab state
+  const [issueTab, setIssueTab] = useState<'customer' | 'terms' | 'instrument'>('customer');
+  // Ledger modal tab state
+  const [ledgerTab, setLedgerTab] = useState<'schedule' | 'payment'>('schedule');
   const [purpose, setPurpose] = useState<
     'CLASS' | 'PRACTICE' | 'REHEARSAL' | 'DEMONSTRATION' | 'EVENT' | 'REPAIR' | 'OTHER'
   >('CLASS');
@@ -201,18 +207,26 @@ export default function UsagePage() {
     }
   };
 
-  const handleAddCustomAccessory = (e: React.KeyboardEvent | React.MouseEvent) => {
-    if ('key' in e && e.key !== 'Enter') return;
-    e.preventDefault();
+  const addCustomAccessory = () => {
     const trimmed = customAccessoryInput.trim();
     if (trimmed && !includedAccessories.includes(trimmed)) {
-      setIncludedAccessories([...includedAccessories, trimmed]);
+      setIncludedAccessories((prev) => [...prev, trimmed]);
       setCustomAccessoryInput('');
     }
   };
 
+  const handleAddCustomAccessory = (e: React.KeyboardEvent | React.MouseEvent) => {
+    if ('key' in e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    addCustomAccessory();
+  };
+
   const openIssueModal = () => {
     setIsIssueModalOpen(true);
+    setIssueTab('customer');
     setIsRental(true);
     applyLockInMonths(3);
     setSecurityDeposit(5000);
@@ -278,6 +292,7 @@ export default function UsagePage() {
   // Open Monthly Payment Tracker & Ledger Modal
   const openLedgerModal = (usage: InternalUsage) => {
     setSelectedRentalForLedger(usage);
+    setLedgerTab('schedule');
     const firstDue = usage.monthlyPayments?.find((p) => p.status !== 'PAID');
     setPaymentAmount(firstDue?.amountDue || usage.monthlyRent || 1500);
     setSelectedBillingMonth(firstDue?.billingMonth || '');
@@ -375,7 +390,7 @@ export default function UsagePage() {
         setDeductionBillingMonth('');
       }
       setDeductionFeedback(
-        `₹${selectedRentalForLedger.monthlyRent?.toLocaleString()} deducted from deposit for ${deductionBillingMonth}. Remaining balance: ₹${updated.depositBalance?.toLocaleString() ?? 0}. Manager will receive a bell notification to send the customer notice email.`
+        `â‚¹${selectedRentalForLedger.monthlyRent?.toLocaleString()} deducted from deposit for ${deductionBillingMonth}. Remaining balance: â‚¹${updated.depositBalance?.toLocaleString() ?? 0}. Manager will receive a bell notification to send the customer notice email.`
       );
       fetchUsages();
     } catch (err: any) {
@@ -608,7 +623,7 @@ export default function UsagePage() {
               <span>Rent Instrument & Instrument Loans</span>
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
+              Stereobliss Retail â€” Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
             </p>
           </div>
         </div>
@@ -699,7 +714,7 @@ export default function UsagePage() {
                 : s === 'ACTIVE'
                 ? 'Active Rentals'
                 : s === 'OVERDUE'
-                ? '⚠️ Due / Overdue'
+                ? 'âš ï¸ Due / Overdue'
                 : 'Returned / Closed'}
             </button>
           ))}
@@ -853,7 +868,7 @@ export default function UsagePage() {
                             </div>
                             {due > 0 ? (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                ₹{due.toLocaleString()} Due
+                                â‚¹{due.toLocaleString()} Due
                               </span>
                             ) : (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
@@ -954,288 +969,223 @@ export default function UsagePage() {
         isOpen={isIssueModalOpen}
         onClose={() => setIsIssueModalOpen(false)}
         title="Rent Instrument & Create Agreement"
-        description="Configure 3-month lock-in period, security deposit, monthly rent, and bundled accessory detailing."
-        maxWidth="2xl"
+        description="Customer details, rental terms, deposit, instrument selection and accessories."
+        maxWidth="4xl"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {issueTab !== 'customer' && (
+                <button type="button" onClick={() => setIssueTab(issueTab === 'instrument' ? 'terms' : 'customer')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                  â† Back
+                </button>
+              )}
+              <div className="flex items-center gap-1 ml-1">
+                {(['customer','terms','instrument'] as const).map((t) => (
+                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${issueTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsIssueModalOpen(false)}>Cancel</Button>
+              {issueTab !== 'instrument' ? (
+                <Button type="button" size="sm" variant="default" className="font-bold gap-1.5"
+                  onClick={() => setIssueTab(issueTab === 'customer' ? 'terms' : 'instrument')}>
+                  Next â†’
+                </Button>
+              ) : (
+                <Button type="submit" form="issue-rental-form" size="sm" variant="default" isLoading={isIssuing} className="font-bold">
+                  Confirm & Issue Agreement
+                </Button>
+              )}
+            </div>
+          </div>
+        }
       >
-        <form onSubmit={handleIssueSubmit} className="space-y-4">
+        <form id="issue-rental-form" onSubmit={handleIssueSubmit}>
           {issueError && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
+            <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
               {issueError}
             </div>
           )}
 
-          {/* Customer / Renter Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            <Input
-              label="Renter / Customer Name *"
-              required
-              placeholder="e.g. Rohan Deshmukh"
-              value={assignedPerson}
-              onChange={(e) => setAssignedPerson(e.target.value)}
-            />
-
-            <Input
-              label="Phone Number"
-              placeholder="+91 98765 43210"
-              value={assignedPersonContact}
-              onChange={(e) => setAssignedPersonContact(e.target.value)}
-            />
-
-            <Input
-              label="Email Address (For Rent Reminders) *"
-              type="email"
-              required
-              placeholder="rohan@example.com"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-            />
+          {/* â”€â”€ Tab Bar â”€â”€ */}
+          <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+            {([
+              { key: 'customer',   label: 'Customer',            icon: <User className="h-3.5 w-3.5" /> },
+              { key: 'terms',      label: 'Rental Terms',        icon: <Shield className="h-3.5 w-3.5" /> },
+              { key: 'instrument', label: 'Instrument & Accessories', icon: <Music2 className="h-3.5 w-3.5" /> },
+            ] as const).map((tab) => (
+              <button key={tab.key} type="button" onClick={() => setIssueTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  issueTab === tab.key ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                }`}>
+                {tab.icon}{tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* Rental Agreement & Lock-in Period */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-500">
-                Rental Plan & Lock-In Period
-              </span>
-              <span className="text-[11px] text-slate-500">Standard retail agreement: 3 months</span>
+          {/* â•â• TAB 1 â€” Customer â•â• */}
+          <div className={issueTab === 'customer' ? 'space-y-4' : 'hidden'}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input label="Renter / Customer Name *" required placeholder="e.g. Rohan Deshmukh"
+                value={assignedPerson} onChange={(e) => setAssignedPerson(e.target.value)} />
+              <Input label="Phone Number" placeholder="+91 98765 43210"
+                value={assignedPersonContact} onChange={(e) => setAssignedPersonContact(e.target.value)} />
+              <Input label="Email (for reminders) *" type="email" required placeholder="rohan@example.com"
+                value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
             </div>
+            <Input label="Agreement Remarks / Special Terms"
+              placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by Stereobliss."
+              value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Lock-In Duration
-                </label>
-                <div className="flex gap-1">
-                  {[1, 3, 6, 12].map((m) => (
-                    <button
-                      type="button"
-                      key={m}
-                      onClick={() => applyLockInMonths(m)}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                        lockInPeriodMonths === m
-                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
-                          : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
-                      }`}
-                    >
-                      {m}M
-                    </button>
-                  ))}
+          {/* â•â• TAB 2 â€” Rental Terms & Deposit â•â• */}
+          <div className={issueTab === 'terms' ? 'space-y-4' : 'hidden'}>
+            {/* Lock-in + rent + deposit */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Rental Plan & Lock-In Period</span>
+                <span className="text-[11px] text-slate-500">Standard: 3 months</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Lock-In Duration</label>
+                  <div className="flex gap-1">
+                    {[1, 3, 6, 12].map((m) => (
+                      <button type="button" key={m} onClick={() => applyLockInMonths(m)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${lockInPeriodMonths === m ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 hover:border-amber-400'}`}>
+                        {m}M
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Monthly Rent (â‚¹) *</label>
+                  <input type="number" min="0" required value={monthlyRent}
+                    onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
+                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Security Deposit (â‚¹)</label>
+                  <input type="number" min="0" value={securityDeposit}
+                    onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
+                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right" />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Monthly Rent (₹) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={monthlyRent}
-                  onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Security Deposit (₹)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={securityDeposit}
-                  onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right"
-                />
+              <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
+                <span>Agreement end date:</span>
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {expectedReturnDate ? new Date(expectedReturnDate).toLocaleDateString('en-IN') : 'N/A'} ({lockInPeriodMonths}M tenure)
+                </strong>
               </div>
             </div>
 
-            {/* Deposit collection details — mandatory when deposit > 0 */}
+            {/* Deposit details (only when deposit > 0) */}
             {securityDeposit > 0 && (
-              <div className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3">
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" />
-                    Security Deposit Details (Mandatory)
+                    <Shield className="h-3.5 w-3.5" />Security Deposit Details (Mandatory)
                   </span>
-                  <span className="text-[11px] text-indigo-500">Transaction reference is required</span>
+                  <span className="text-[11px] text-indigo-500">Transaction ref required</span>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
-                      Deposit Collected Via *
-                    </label>
-                    <select
-                      value={depositPaymentMethod}
-                      onChange={(e) => setDepositPaymentMethod(e.target.value as any)}
-                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500"
-                    >
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Deposit Collected Via *</label>
+                    <select value={depositPaymentMethod} onChange={(e) => setDepositPaymentMethod(e.target.value as any)}
+                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500">
                       <option value="CASH">Cash</option>
                       <option value="UPI">UPI (GPay / PhonePe)</option>
                       <option value="CARD">Card</option>
                       <option value="BANK_TRANSFER">Bank Transfer / IMPS</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
-                      Transaction / Receipt No. *
-                    </label>
-                    <input
-                      type="text"
-                      required={securityDeposit > 0}
-                      placeholder="e.g. CASH-RCPT-001 / UPI-8837261"
-                      value={depositTransactionRef}
-                      onChange={(e) => setDepositTransactionRef(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
-                    />
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Transaction / Receipt No. *</label>
+                    <input type="text" required={securityDeposit > 0} placeholder="e.g. CASH-RCPT-001 / UPI-8837261"
+                      value={depositTransactionRef} onChange={(e) => setDepositTransactionRef(e.target.value)}
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono" />
                   </div>
                 </div>
-
-                {/* Deposit Mode toggle */}
-                <div
-                  onClick={() => setDepositMode(!depositMode)}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                    depositMode
-                      ? 'border-indigo-500 bg-indigo-100/70 dark:bg-indigo-950/40'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'
-                  }`}
-                >
-                  <div
-                    className={`mt-0.5 h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
-                      depositMode
-                        ? 'border-indigo-500 bg-indigo-500'
-                        : 'border-slate-400 bg-white dark:bg-slate-800'
-                    }`}
-                  >
+                {/* Deposit-as-Rent toggle */}
+                <div onClick={() => setDepositMode(!depositMode)}
+                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${depositMode ? 'border-indigo-500 bg-indigo-100/70 dark:bg-indigo-950/40' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'}`}>
+                  <div className={`mt-0.5 h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center ${depositMode ? 'border-indigo-500 bg-indigo-500' : 'border-slate-400 bg-white dark:bg-slate-800'}`}>
                     {depositMode && <Check className="h-2.5 w-2.5 text-white" />}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white">
-                      Deposit-as-Rent Mode
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Monthly rent will be auto-deducted from this deposit each month. Customer pays nothing extra
-                      during the lock-in period. When deposit is exhausted, continuation rent tracking begins.
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">Deposit-as-Rent Mode</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Monthly rent is auto-deducted from this deposit. No separate monthly payment needed during lock-in. When exhausted, continuation rent tracking begins.
                     </div>
                     {depositMode && monthlyRent > 0 && (
                       <div className="mt-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                        ₹{securityDeposit.toLocaleString()} deposit ÷ ₹{monthlyRent.toLocaleString()}/mo
-                        = {Math.floor(securityDeposit / monthlyRent)} months covered
-                        {securityDeposit % monthlyRent > 0 && ` (partial month ₹${(securityDeposit % monthlyRent).toLocaleString()} remaining)`}
+                        â‚¹{securityDeposit.toLocaleString()} Ã· â‚¹{monthlyRent.toLocaleString()}/mo = {Math.floor(securityDeposit / monthlyRent)} months covered
+                        {securityDeposit % monthlyRent > 0 && ` (â‚¹${(securityDeposit % monthlyRent).toLocaleString()} remaining)`}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             )}
-
-            <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
-              <span>Expected Return / Renewal Date:</span>
-              <strong className="text-slate-800 dark:text-slate-200">
-                {expectedReturnDate ? new Date(expectedReturnDate).toLocaleDateString() : 'N/A'} ({lockInPeriodMonths} months tenure)
-              </strong>
-            </div>
           </div>
 
-          {/* Instrument / Product Selection */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Select Instrument *
-              </label>
-              <select
-                required
-                value={selectedProductId}
-                onChange={(e) => {
-                  setSelectedProductId(e.target.value);
-                  setSelectedSerialId('');
-                }}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium"
-              >
-                <option value="">Select an instrument...</option>
-                {products
-                  .filter((p) => p.availableForSale > 0)
-                  .map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — Available: {p.availableForSale} units
-                    </option>
-                  ))}
+          {/* â•â• TAB 3 â€” Instrument & Accessories â•â• */}
+          <div className={issueTab === 'instrument' ? 'space-y-4' : 'hidden'}>
+            {/* Instrument select */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Select Instrument *</label>
+              <select required value={selectedProductId}
+                onChange={(e) => { setSelectedProductId(e.target.value); setSelectedSerialId(''); }}
+                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium">
+                <option value="">Choose an instrumentâ€¦</option>
+                {products.filter((p) => p.availableForSale > 0).map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) â€” {p.availableForSale} available
+                  </option>
+                ))}
               </select>
             </div>
-          </div>
 
-          {/* Included Accessories & Detailing Checklist */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2.5">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Bundled Accessories & Detailing Checklist
-              </span>
-              <span className="text-[11px] text-slate-500">e.g. Keyboard Stand, Power Adapter, Bag</span>
+            {/* Accessories checklist */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Bundled Accessories & Checklist</span>
+                <span className="text-[11px] text-slate-500">{includedAccessories.length} selected</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {COMMON_ACCESSORIES.map((acc) => {
+                  const isChecked = includedAccessories.includes(acc);
+                  return (
+                    <div key={acc} onClick={() => toggleAccessory(acc)}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-colors ${isChecked ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 hover:border-slate-400'}`}>
+                      {isChecked ? <CheckSquare className="h-4 w-4 shrink-0 text-amber-500" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
+                      <span>{acc}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Custom item add */}
+              <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+                <input type="text" placeholder="Add custom item (e.g. Sheet Music Stand)â€¦"
+                  value={customAccessoryInput} onChange={(e) => setCustomAccessoryInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addCustomAccessory(); } }}
+                  className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
+                <Button type="button" variant="outline" size="sm" onClick={addCustomAccessory} className="h-8 text-xs font-bold">+ Add</Button>
+              </div>
+              {/* Show custom items */}
+              {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).map((acc, i) => (
+                    <span key={i} onClick={() => toggleAccessory(acc)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors" title="Click to remove">
+                      {acc} Ã—
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {COMMON_ACCESSORIES.map((acc) => {
-                const isChecked = includedAccessories.includes(acc);
-                return (
-                  <div
-                    key={acc}
-                    onClick={() => toggleAccessory(acc)}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs font-semibold transition-colors ${
-                      isChecked
-                        ? 'bg-amber-500/10 border-amber-500 text-amber-500'
-                        : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-400'
-                    }`}
-                  >
-                    {isChecked ? (
-                      <CheckSquare className="h-4 w-4 shrink-0 text-amber-500" />
-                    ) : (
-                      <Square className="h-4 w-4 shrink-0 text-slate-400" />
-                    )}
-                    <span>{acc}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Custom Accessory Add */}
-            <div className="flex gap-2 pt-2">
-              <input
-                type="text"
-                placeholder="+ Add other item (e.g. Sheet Music Stand, Strap)..."
-                value={customAccessoryInput}
-                onChange={(e) => setCustomAccessoryInput(e.target.value)}
-                onKeyDown={handleAddCustomAccessory}
-                className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddCustomAccessory}
-                className="h-8 text-xs font-bold"
-              >
-                + Add Item
-              </Button>
-            </div>
-          </div>
-
-          <Input
-            label="Agreement Remarks / Special Terms"
-            placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by Stereobliss."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="outline" onClick={() => setIsIssueModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="default" isLoading={isIssuing} className="font-bold">
-              Confirm & Issue Rental Agreement
-            </Button>
           </div>
         </form>
       </Modal>
@@ -1244,7 +1194,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!selectedRentalForLedger}
         onClose={() => setSelectedRentalForLedger(null)}
-        title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
+        title={`Monthly Rental Ledger â€” ${selectedRentalForLedger?.issueReference}`}
         description="Track month-by-month rent payments, pending balances, bundled accessories, and send email reminders."
         maxWidth="2xl"
       >
@@ -1281,7 +1231,7 @@ export default function UsagePage() {
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      Txn: {selectedRentalForLedger.depositTransactionRef || '—'}
+                      Txn: {selectedRentalForLedger.depositTransactionRef || 'â€”'}
                     </span>
                   </div>
                   <div>
@@ -1290,7 +1240,7 @@ export default function UsagePage() {
                       {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      {selectedRentalForLedger.depositExhausted ? '⚠ Exhausted — continuation mode' : 'Remaining'}
+                      {selectedRentalForLedger.depositExhausted ? 'âš  Exhausted â€” continuation mode' : 'Remaining'}
                     </span>
                   </div>
                   <div>
@@ -1298,11 +1248,11 @@ export default function UsagePage() {
                     <span className="font-bold text-amber-500 text-sm">
                       {(selectedRentalForLedger.depositDeductions || []).length}
                       {' / '}
-                      {selectedRentalForLedger.lockInPeriodMonths || '—'}
+                      {selectedRentalForLedger.lockInPeriodMonths || 'â€”'}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
                       {(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length > 0
-                        ? `⚡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
+                        ? `âš¡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
                         : 'All notices sent'}
                     </span>
                   </div>
@@ -1512,12 +1462,12 @@ export default function UsagePage() {
                       }}
                       className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
                     >
-                      <option value="">Select month…</option>
+                      <option value="">Select monthâ€¦</option>
                       {(selectedRentalForLedger.monthlyPayments || [])
                         .filter((p) => p.status !== 'PAID')
                         .map((p) => (
                           <option key={p.monthIndex} value={p.billingMonth}>
-                            {p.billingMonth} — ₹{p.amountDue.toLocaleString()}
+                            {p.billingMonth} â€” â‚¹{p.amountDue.toLocaleString()}
                           </option>
                         ))}
                     </select>
@@ -1534,7 +1484,7 @@ export default function UsagePage() {
                               (p) => p.monthIndex === deductionMonthIndex
                             )?.amountDue || 0
                           )
-                        : '—'}
+                        : 'â€”'}
                     </div>
                   </div>
 
@@ -1571,12 +1521,12 @@ export default function UsagePage() {
               </form>
             )}
 
-            {/* Deposit exhausted — continuation mode notice */}
+            {/* Deposit exhausted â€” continuation mode notice */}
             {selectedRentalForLedger.depositMode && selectedRentalForLedger.depositExhausted && (
               <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50/60 dark:bg-rose-950/20 space-y-2">
                 <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>Deposit Fully Utilised — Continuation Rent Mode Active</span>
+                  <span>Deposit Fully Utilised â€” Continuation Rent Mode Active</span>
                 </div>
                 <p className="text-[11px] text-rose-600 dark:text-rose-400/80">
                   The security deposit has been fully exhausted. The customer must now pay monthly rent directly.
@@ -1612,7 +1562,7 @@ export default function UsagePage() {
                         <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${!d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
                           <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">{d.billingMonth}</td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
-                            − {formatCurrency(d.deductedAmount)}
+                            âˆ’ {formatCurrency(d.deductedAmount)}
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(d.depositBalanceAfter)}
@@ -1639,7 +1589,7 @@ export default function UsagePage() {
               </div>
             )}
 
-            {/* Record Monthly Payment Form — shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
+            {/* Record Monthly Payment Form â€” shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
             {(!selectedRentalForLedger.depositMode || selectedRentalForLedger.depositExhausted) && (
             <form
               onSubmit={handleRecordPayment}
@@ -1655,7 +1605,7 @@ export default function UsagePage() {
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Amount to Pay (₹) *
+                    Amount to Pay (â‚¹) *
                   </label>
                   <input
                     type="number"
@@ -1779,7 +1729,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!editingPayment}
         onClose={() => setEditingPayment(null)}
-        title={`Edit Payment & Rent — ${editingPayment?.billingMonth}`}
+        title={`Edit Payment & Rent â€” ${editingPayment?.billingMonth}`}
         description="Update paid amount, transaction reference (trn no.), payment method, and adjust next month's rent."
         maxWidth="md"
       >
@@ -1794,7 +1744,7 @@ export default function UsagePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                  Monthly Rent Due (₹) *
+                  Monthly Rent Due (â‚¹) *
                 </label>
                 <input
                   type="number"
@@ -1808,7 +1758,7 @@ export default function UsagePage() {
 
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                  Price / Paid Amount (₹) *
+                  Price / Paid Amount (â‚¹) *
                 </label>
                 <input
                   type="number"
@@ -1875,11 +1825,11 @@ export default function UsagePage() {
                   <span className="font-mono font-bold text-xs">
                     {editAmountPaid < editAmountDue ? (
                       <span className="text-rose-400">
-                        Shortfall: -₹{editAmountDue - editAmountPaid}
+                        Shortfall: -â‚¹{editAmountDue - editAmountPaid}
                       </span>
                     ) : (
                       <span className="text-emerald-400">
-                        Surplus: +₹{editAmountPaid - editAmountDue}
+                        Surplus: +â‚¹{editAmountPaid - editAmountDue}
                       </span>
                     )}
                   </span>
@@ -1887,8 +1837,8 @@ export default function UsagePage() {
 
                 <p className="text-[11px] text-slate-400">
                   {editAmountPaid < editAmountDue
-                    ? `Customer underpaid by ₹${editAmountDue - editAmountPaid}. You can automatically carry over and add this balance to next month's rent.`
-                    : `Customer overpaid by ₹${editAmountPaid - editAmountDue}. You can credit and deduct this amount from next month's rent.`}
+                    ? `Customer underpaid by â‚¹${editAmountDue - editAmountPaid}. You can automatically carry over and add this balance to next month's rent.`
+                    : `Customer overpaid by â‚¹${editAmountPaid - editAmountDue}. You can credit and deduct this amount from next month's rent.`}
                 </p>
 
                 <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-200">
@@ -1900,8 +1850,8 @@ export default function UsagePage() {
                   />
                   <span className="font-semibold text-xs">
                     {editAmountPaid < editAmountDue
-                      ? `Adjust Next Month: Add ₹${editAmountDue - editAmountPaid} to next month's rent`
-                      : `Adjust Next Month: Deduct ₹${editAmountPaid - editAmountDue} from next month's rent`}
+                      ? `Adjust Next Month: Add â‚¹${editAmountDue - editAmountPaid} to next month's rent`
+                      : `Adjust Next Month: Deduct â‚¹${editAmountPaid - editAmountDue} from next month's rent`}
                   </span>
                 </label>
               </div>
@@ -1929,7 +1879,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!adjustingMonth}
         onClose={() => setAdjustingMonth(null)}
-        title={`Adjust Rent Due — ${adjustingMonth?.billingMonth}`}
+        title={`Adjust Rent Due â€” ${adjustingMonth?.billingMonth}`}
         description="Modify the agreed monthly rent due for this billing cycle."
         maxWidth="sm"
       >
@@ -1943,7 +1893,7 @@ export default function UsagePage() {
 
             <div>
               <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                New Rent Due Amount (₹) *
+                New Rent Due Amount (â‚¹) *
               </label>
               <input
                 type="number"
@@ -1961,7 +1911,7 @@ export default function UsagePage() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. ₹500 discount given or carryover adjustment"
+                placeholder="e.g. â‚¹500 discount given or carryover adjustment"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
                 className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
@@ -1990,7 +1940,7 @@ export default function UsagePage() {
       <Modal
         isOpen={!!returnModalUsage}
         onClose={() => setReturnModalUsage(null)}
-        title={`Return Inspection — ${returnModalUsage?.issueReference}`}
+        title={`Return Inspection â€” ${returnModalUsage?.issueReference}`}
         description="Inspect physical condition of returned equipment, bundled accessories, and process deposit release."
         maxWidth="2xl"
       >
@@ -2071,13 +2021,13 @@ export default function UsagePage() {
                           className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-transparent font-bold text-amber-500"
                         >
                           <option value="OK_TO_STOCK">
-                            ✅ OK to Stock (Return to Available Pool)
+                            âœ… OK to Stock (Return to Available Pool)
                           </option>
                           <option value="NEEDS_MAINTENANCE">
-                            🔧 Needs Maintenance (Send for Repair)
+                            ðŸ”§ Needs Maintenance (Send for Repair)
                           </option>
                           <option value="QUARANTINE_DAMAGED">
-                            🚫 Quarantine / Damaged (Block from Sale)
+                            ðŸš« Quarantine / Damaged (Block from Sale)
                           </option>
                         </select>
                       </div>

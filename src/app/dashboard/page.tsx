@@ -1,35 +1,32 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
-import { DashboardMetrics, StockMovement, RentalDuesSummary, RentalDueItem } from '@/lib/types';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { DashboardMetrics, RentalDuesSummary, RentalDueItem } from '@/lib/types';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import {
-  Boxes,
-  CheckCircle2,
-  AlertTriangle,
-  GraduationCap,
-  Wrench,
-  Clock,
   TrendingUp,
-  Truck,
-  ShoppingCart,
-  FileCheck2,
-  RefreshCw,
-  PlusCircle,
-  Eye,
-  ArrowUpRight,
-  ShieldAlert,
-  Bell,
-  Mail,
-  SendHorizontal,
-  Send,
+  Music2,
   CreditCard,
+  Package,
+  AlertTriangle,
+  RefreshCw,
+  ArrowUpRight,
+  CheckCircle2,
+  Clock,
+  ShoppingCart,
+  Truck,
+  Wrench,
+  Send,
+  ChevronRight,
+  IndianRupee,
+  Shield,
+  BarChart2,
+  Users,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { Button } from '@/components/ui/Button';
 import {
   BarChart,
   Bar,
@@ -40,308 +37,345 @@ import {
   CartesianGrid,
 } from 'recharts';
 
+// ─── tiny helper ────────────────────────────────────────────────────────────
+function StatPill({
+  label,
+  value,
+  color = 'slate',
+}: {
+  label: string;
+  value: string | number;
+  color?: 'green' | 'red' | 'amber' | 'indigo' | 'slate';
+}) {
+  const map = {
+    green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    red: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
+    amber: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    indigo: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
+    slate: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${map[color]}`}>
+      {label}: <span className="font-extrabold">{value}</span>
+    </span>
+  );
+}
+
+// ─── main component ──────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [duesSummary, setDuesSummary] = useState<RentalDuesSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | '30days' | 'all'>('week');
-  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
-  const [reminderFeedback, setReminderFeedback] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentFeedback, setSentFeedback] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | '30days' | 'all'>('month');
 
   useEffect(() => {
-    fetchMetrics();
+    fetchAll();
   }, [dateRange]);
 
-  const fetchMetrics = async () => {
+  const fetchAll = async () => {
     setIsLoading(true);
     try {
       let startDate: string | undefined;
-
+      const now = new Date();
       if (dateRange === 'today') {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        startDate = d.toISOString();
+        const d = new Date(now); d.setHours(0, 0, 0, 0); startDate = d.toISOString();
       } else if (dateRange === 'week') {
-        const d = new Date();
-        const day = d.getDay();
-        const diff = (day + 6) % 7;
-        d.setDate(d.getDate() - diff);
-        d.setHours(0, 0, 0, 0);
-        startDate = d.toISOString();
+        const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); startDate = d.toISOString();
       } else if (dateRange === 'month') {
-        const d = new Date();
-        const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
-        startDate = startOfMonth.toISOString();
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       } else if (dateRange === '30days') {
-        const d = new Date();
-        d.setDate(d.getDate() - 30);
-        startDate = d.toISOString();
+        const d = new Date(now); d.setDate(d.getDate() - 30); startDate = d.toISOString();
       }
 
       const [metricsRes, duesRes] = await Promise.all([
-        api.get<DashboardMetrics>(
-          startDate ? `/reports/dashboard?startDate=${startDate}` : '/reports/dashboard'
-        ),
+        api.get<DashboardMetrics>(startDate ? `/reports/dashboard?startDate=${startDate}` : '/reports/dashboard'),
         api.get<{ data: RentalDuesSummary }>('/usage/dues-summary').catch(() => null),
       ]);
 
       setMetrics(metricsRes);
-      if (duesRes && duesRes.data) {
-        setDuesSummary(duesRes.data);
-      }
+      if (duesRes?.data) setDuesSummary(duesRes.data);
     } catch (err) {
-      console.error('Failed to load dashboard metrics:', err);
+      console.error('Dashboard fetch failed:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSendDashboardReminder = async (item: RentalDueItem) => {
-    if (!item.customerEmail) {
-      alert(`No customer email registered for ${item.assignedPerson}. Please update email in the Rentals register.`);
-      return;
-    }
-
-    setSendingReminderId(item.id);
-    setReminderFeedback(null);
-
+  const sendReminder = async (item: RentalDueItem) => {
+    if (!item.customerEmail) { alert(`No email on file for ${item.assignedPerson}.`); return; }
+    setSendingId(item.id);
     try {
-      const res = await api.post<{ success: boolean; sentTo: string; emailDispatched: boolean }>(
-        `/usage/${item.id}/send-reminder`,
-        { recipientEmail: item.customerEmail }
-      );
-
-      setReminderFeedback(`Payment reminder dispatched to ${res.sentTo} via Email!`);
-      setTimeout(() => setReminderFeedback(null), 4000);
-
-      // Refresh dues
-      const updated = await api.get<{ data: RentalDuesSummary }>('/usage/dues-summary');
-      if (updated && updated.data) {
-        setDuesSummary(updated.data);
-      }
+      const res = await api.post<{ sentTo: string }>(`/usage/${item.id}/send-reminder`, { recipientEmail: item.customerEmail });
+      setSentFeedback(`Reminder sent to ${res.sentTo}`);
+      setTimeout(() => setSentFeedback(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Failed to dispatch reminder email.');
+      alert(err.message || 'Failed to send reminder.');
     } finally {
-      setSendingReminderId(null);
+      setSendingId(null);
     }
   };
 
+  const k = metrics?.kpis;
+
+  // derived helpers
+  const stockHealthPct = k
+    ? Math.round(((k.totalAvailableForSale ?? 0) / Math.max(1, k.totalUnitsOnHand ?? 1)) * 100)
+    : 0;
+
+  const collectionCoverage = duesSummary
+    ? duesSummary.summary.totalPendingAmount > 0
+      ? Math.round(
+          ((duesSummary.summary.totalPendingAmount - duesSummary.summary.totalOverdueAmount) /
+            Math.max(1, duesSummary.summary.totalPendingAmount)) *
+            100
+        )
+      : 100
+    : null;
+
+  const now = new Date();
+  const dateLabel = {
+    today: 'Today',
+    week: 'This Week',
+    month: 'This Month',
+    '30days': 'Last 30 Days',
+    all: 'All Time',
+  }[dateRange];
+
   if (isLoading && !metrics) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <RefreshCw className="h-8 w-8 animate-spin text-amber-500" />
+      <div className="flex h-96 items-center justify-center gap-3 text-slate-500">
+        <RefreshCw className="h-6 w-6 animate-spin text-amber-500" />
+        <span className="text-sm font-medium">Loading your business overview…</span>
       </div>
     );
   }
 
-  const kpis = metrics?.kpis;
-
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-7">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Operational Dashboard
+              Business Overview
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Real-time inventory levels, customer instrument rentals, and retail sales tracking.
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Stereobliss · {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
         </div>
 
-        {/* Date Filter Controls & Refresh */}
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range pills */}
+          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1 gap-0.5">
             {(['today', 'week', 'month', '30days', 'all'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setDateRange(r)}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                  dateRange === r
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                }`}
-              >
-                {r === 'today'
-                  ? 'Today'
-                  : r === 'week'
-                  ? 'This Week'
-                  : r === 'month'
-                  ? 'This Month'
-                  : r === '30days'
-                  ? 'Last 30 Days'
-                  : 'All Time'}
+              <button key={r} onClick={() => setDateRange(r)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  dateRange === r ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}>
+                {r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : r === '30days' ? '30d' : 'All'}
               </button>
             ))}
           </div>
-
-          <Button variant="outline" size="sm" onClick={fetchMetrics} title="Refresh">
-            <RefreshCw className="h-3.5 w-3.5" />
+          <Button variant="outline" size="sm" onClick={fetchAll} title="Refresh data">
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
           </Button>
         </div>
       </div>
 
-      {/* Critical Action Banner if approvals or overdue loans exist */}
-      {((kpis?.pendingApprovalsCount ?? 0) > 0 || (kpis?.overdueUsageCount ?? 0) > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-300">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="h-6 w-6 text-amber-500 shrink-0" />
-            <div className="text-sm">
-              <span className="font-bold">Attention Required:</span>{' '}
-              {kpis?.pendingApprovalsCount ? (
-                <span>{kpis.pendingApprovalsCount} stock adjustment(s) awaiting Superadmin approval. </span>
-              ) : null}
-              {kpis?.overdueUsageCount ? (
-                <span>{kpis.overdueUsageCount} instrument loan(s) currently overdue.</span>
-              ) : null}
-            </div>
+      {/* ── Attention banner ── */}
+      {((k?.pendingApprovalsCount ?? 0) > 0 || (k?.overdueUsageCount ?? 0) > 0 || (duesSummary?.summary.overdueCount ?? 0) > 0) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0" />
+          <div className="flex-1 min-w-0 text-sm text-rose-800 dark:text-rose-300 font-medium">
+            <strong>Action needed — </strong>
+            {(k?.pendingApprovalsCount ?? 0) > 0 && <span>{k!.pendingApprovalsCount} stock adjustment{k!.pendingApprovalsCount > 1 ? 's' : ''} waiting your approval. </span>}
+            {(k?.overdueUsageCount ?? 0) > 0 && <span>{k!.overdueUsageCount} rental instrument{k!.overdueUsageCount > 1 ? 's' : ''} overdue for return. </span>}
+            {(duesSummary?.summary.overdueCount ?? 0) > 0 && <span>{duesSummary!.summary.overdueCount} customer payment{duesSummary!.summary.overdueCount > 1 ? 's' : ''} are overdue ({formatCurrency(duesSummary!.summary.totalOverdueAmount)}). </span>}
           </div>
-          <div className="flex gap-2">
-            {(kpis?.pendingApprovalsCount ?? 0) > 0 && (
-              <a href="/returns-maintenance">
-                <Button size="sm" variant="default" className="text-xs">
-                  Review Adjustments
-                </Button>
-              </a>
-            )}
-            {(kpis?.overdueUsageCount ?? 0) > 0 && (
-              <a href="/usage?status=OVERDUE">
-                <Button size="sm" variant="outline" className="text-xs">
-                  View Overdue Loans
-                </Button>
-              </a>
-            )}
+          <div className="flex gap-2 shrink-0">
+            {(k?.overdueUsageCount ?? 0) > 0 && <Link href="/usage?status=OVERDUE"><Button size="sm" variant="default" className="text-xs gap-1 bg-rose-600 hover:bg-rose-700 text-white"><span>View Overdue</span></Button></Link>}
+            {(k?.pendingApprovalsCount ?? 0) > 0 && <Link href="/returns-maintenance"><Button size="sm" variant="outline" className="text-xs border-rose-300 text-rose-700"><span>Review Approvals</span></Button></Link>}
           </div>
         </div>
       )}
 
-      {/* Rental & EMI Dues Notification & Reminder Center */}
-      {duesSummary && duesSummary.summary.totalRentalsWithDues > 0 && (
-        <div className="rounded-2xl border border-amber-200/80 bg-linear-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 backdrop-blur-xs dark:border-amber-900/50 dark:from-amber-950/30 dark:via-slate-900/40">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                <Bell className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Rental &amp; EMI Dues Notification Center
-                  </h3>
-                  <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-extrabold text-amber-700 dark:text-amber-300">
-                    {duesSummary.summary.totalRentalsWithDues} Active Accounts Due
-                  </span>
-                  {duesSummary.summary.overdueCount > 0 && (
-                    <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold text-white animate-pulse">
-                      {duesSummary.summary.overdueCount} Overdue
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  Total outstanding receivables:{' '}
-                  <strong className="text-slate-900 dark:text-slate-200 font-bold">
-                    {formatCurrency(duesSummary.summary.totalPendingAmount)}
-                  </strong>
-                  {duesSummary.summary.totalOverdueAmount > 0 && (
-                    <span>
-                      {' '}
-                      (Overdue:{' '}
-                      <strong className="text-rose-600 dark:text-rose-400">
-                        {formatCurrency(duesSummary.summary.totalOverdueAmount)}
-                      </strong>
-                      )
-                    </span>
-                  )}
-                  . Send direct payment reminder emails to customers with 1-click.
-                </p>
-              </div>
-            </div>
+      {/* ══════════════════════════════════════════════════
+          ROW 1 — The 4 Big Numbers
+      ══════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-            <div className="flex items-center gap-2">
-              <a href="/usage?status=OVERDUE">
-                <Button size="sm" variant="outline" className="text-xs font-semibold gap-1.5">
-                  <Eye className="h-3.5 w-3.5" />
-                  <span>Rentals</span>
-                </Button>
-              </a>
-              <a href="/sales">
-                <Button size="sm" variant="default" className="text-xs font-semibold gap-1.5 shadow-xs">
-                  <CreditCard className="h-3.5 w-3.5" />
-                  <span>Sales &amp; EMI Ledger</span>
-                </Button>
-              </a>
+        {/* 1. Money Made */}
+        <Link href="/reports/sales" className="group">
+          <div className="relative h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition-all">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <IndianRupee className="h-5 w-5" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-700 group-hover:text-emerald-500 transition-colors" />
+            </div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Revenue — {dateLabel}
+            </p>
+            <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">
+              {formatCurrency(k?.periodSalesRevenue ?? 0)}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              From <strong className="text-slate-700 dark:text-slate-300">{k?.periodSalesCount ?? 0}</strong> sale{(k?.periodSalesCount ?? 0) !== 1 ? 's' : ''}
+              {(k?.periodSalesCount ?? 0) > 0 && k?.periodSalesRevenue ? (
+                <span className="ml-1">· avg {formatCurrency(Math.round((k.periodSalesRevenue) / k.periodSalesCount))}/sale</span>
+              ) : null}
+            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-500 group-hover:text-emerald-500">
+              <span>See full sales report</span>
+              <ChevronRight className="h-3.5 w-3.5" />
             </div>
           </div>
+        </Link>
 
-          {/* Feedback message */}
-          {reminderFeedback && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-fadeIn">
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <span>{reminderFeedback}</span>
+        {/* 2. Money Still Coming In (EMI) */}
+        <Link href="/reports/emi" className="group">
+          <div className="relative h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <CreditCard className="h-5 w-5" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-700 group-hover:text-amber-500 transition-colors" />
             </div>
-          )}
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              EMI Still Owed to Us
+            </p>
+            <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 leading-none">
+              {formatCurrency(k?.totalEmiReceivables ?? 0)}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Across <strong className="text-slate-700 dark:text-slate-300">{k?.activeEmiSalesCount ?? 0}</strong> customer instalment plan{(k?.activeEmiSalesCount ?? 0) !== 1 ? 's' : ''}
+            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-500 group-hover:text-amber-500">
+              <span>View all EMI accounts</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        </Link>
 
-          {/* Top Dues preview */}
-          <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {duesSummary.items.slice(0, 3).map((item) => {
+        {/* 3. Rental Instruments */}
+        <Link href="/reports/rentals" className="group">
+          <div className="relative h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Music2 className="h-5 w-5" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-700 group-hover:text-indigo-500 transition-colors" />
+            </div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Instruments Out on Rent
+            </p>
+            <p className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">
+              {k?.serializedInUseCount ?? 0}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              {(k?.overdueUsageCount ?? 0) > 0
+                ? <span className="text-rose-500 font-bold">{k!.overdueUsageCount} overdue return{k!.overdueUsageCount > 1 ? 's' : ''}</span>
+                : <span className="text-emerald-600 font-semibold">All returns on schedule ✓</span>}
+              {duesSummary && duesSummary.summary.totalPendingAmount > 0 && (
+                <span className="block mt-0.5">Rent outstanding: <strong>{formatCurrency(duesSummary.summary.totalPendingAmount)}</strong></span>
+              )}
+            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-500 group-hover:text-indigo-500">
+              <span>See rental details</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        </Link>
+
+        {/* 4. Stock Health */}
+        <Link href="/reports/inventory" className="group">
+          <div className="relative h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md hover:border-slate-400 dark:hover:border-slate-500 transition-all">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                <Package className="h-5 w-5" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-700 group-hover:text-slate-500 transition-colors" />
+            </div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Stock Available to Sell
+            </p>
+            <p className="text-3xl font-extrabold text-slate-900 dark:text-white leading-none">
+              {k?.totalAvailableForSale ?? 0}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              of {k?.totalUnitsOnHand ?? 0} total units &nbsp;·&nbsp; {stockHealthPct}% ready
+              {(k?.lowStockCount ?? 0) > 0 && (
+                <span className="block mt-0.5 text-rose-500 font-bold">{k!.lowStockCount} product{k!.lowStockCount > 1 ? 's' : ''} running low</span>
+              )}
+            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+              <span>View stock report</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* ══════════════════════════════════════════════════
+          ROW 2 — Money owed to us + Dues list
+      ══════════════════════════════════════════════════ */}
+      {duesSummary && duesSummary.items.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/10 p-5 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                Customers Who Owe Us Money
+                {duesSummary.summary.overdueCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse">
+                    {duesSummary.summary.overdueCount} overdue
+                  </span>
+                )}
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                Total outstanding: <strong className="text-slate-900 dark:text-white">{formatCurrency(duesSummary.summary.totalPendingAmount)}</strong>
+                {duesSummary.summary.totalOverdueAmount > 0 && (
+                  <span> · Overdue: <strong className="text-rose-600">{formatCurrency(duesSummary.summary.totalOverdueAmount)}</strong></span>
+                )}
+                {sentFeedback && <span className="ml-3 text-emerald-600 font-semibold">✓ {sentFeedback}</span>}
+              </p>
+            </div>
+            <Link href="/reports/emi">
+              <Button size="sm" variant="outline" className="text-xs gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50">
+                <BarChart2 className="h-3.5 w-3.5" />
+                Full Dues Report
+              </Button>
+            </Link>
+          </div>
+
+          {/* Top 5 overdue/due items */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {duesSummary.items.slice(0, 6).map((item) => {
               const isOverdue = item.status === 'OVERDUE';
-              const isSending = sendingReminderId === item.id;
-              const isEmi = item.loanType === 'EMI';
-
+              const sending = sendingId === item.id;
               return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900/80"
-                >
-                  <div className="min-w-0 flex-1 pr-2">
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-xs">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
-                        {item.assignedPerson}
+                      <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{item.assignedPerson}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${isOverdue ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}`}>
+                        {isOverdue ? `${item.daysOverdue}d late` : 'due soon'}
                       </span>
-                      <span
-                        className={`rounded-sm px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
-                          isEmi
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                            : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
-                        }`}
-                      >
-                        {isEmi ? 'EMI Sale' : 'Rental'}
-                      </span>
-                      <span
-                        className={`rounded-sm px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
-                          isOverdue
-                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                        }`}
-                      >
-                        {isOverdue ? `${item.daysOverdue}d overdue` : 'due soon'}
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${item.loanType === 'EMI' ? 'bg-amber-500/15 text-amber-600' : 'bg-indigo-500/15 text-indigo-600'}`}>
+                        {item.loanType === 'EMI' ? 'EMI' : 'Rental'}
                       </span>
                     </div>
-                    <div className="truncate text-[11px] text-slate-500 mt-0.5">
-                      {item.productName} ({isEmi ? (item.invoiceNumber || item.issueReference) : item.issueReference})
-                    </div>
-                    <div className="mt-1 font-extrabold text-xs text-amber-600 dark:text-amber-400">
-                      {formatCurrency(item.totalRentDue)}
-                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">{item.productName}</p>
+                    <p className="font-extrabold text-xs text-amber-600 dark:text-amber-400 mt-0.5">{formatCurrency(item.totalRentDue)}</p>
                   </div>
-
-                  <Button
-                    size="sm"
-                    variant={isOverdue ? 'default' : 'outline'}
-                    disabled={isSending}
-                    onClick={() => handleSendDashboardReminder(item)}
-                    className="h-7 text-[10px] font-bold shrink-0 gap-1 px-2"
-                    title={
-                      item.customerEmail
-                        ? `Send reminder email to ${item.customerEmail}`
-                        : 'No email registered'
-                    }
-                  >
-                    <SendHorizontal className={`h-3 w-3 ${isSending ? 'animate-spin' : ''}`} />
-                    <span>{isSending ? 'Sending...' : 'Remind'}</span>
+                  <Button size="sm" variant={isOverdue ? 'default' : 'outline'} disabled={sending} onClick={() => sendReminder(item)}
+                    className={`h-7 text-[10px] font-bold shrink-0 gap-1 px-2.5 ${isOverdue ? 'bg-rose-600 hover:bg-rose-700 text-white' : ''}`}>
+                    <Send className={`h-3 w-3 ${sending ? 'animate-spin' : ''}`} />
+                    {sending ? '…' : 'Remind'}
                   </Button>
                 </div>
               );
@@ -350,340 +384,117 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Primary KPI Grid — Explicitly separated counts and valuation per spec */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* On Hand */}
-        <Card className="border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Units On Hand
-            </span>
-            <Boxes className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {kpis?.totalUnitsOnHand ?? 0}
+      {/* ══════════════════════════════════════════════════
+          ROW 3 — Chart + Secondary Stats
+      ══════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* Sales chart */}
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Daily Sales — Last 7 Days</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Revenue earned each day</p>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Across {kpis?.distinctProductCount ?? 0} distinct products
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Available for Sale */}
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Available For Sale
-            </span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {kpis?.totalAvailableForSale ?? 0}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Excludes internally issued & reserved</p>
-          </CardContent>
-        </Card>
-
-        {/* Active Rentals & Loans */}
-        <Card className="border-l-4 border-l-indigo-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Active Rentals & Loans
-            </span>
-            <GraduationCap className="h-4 w-4 text-indigo-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {kpis?.serializedInUseCount ?? 0}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Customer rented instruments & internal loans
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Low Stock Items */}
-        <Card className="border-l-4 border-l-rose-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Low Stock Alerts
-            </span>
-            <AlertTriangle className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {kpis?.lowStockCount ?? 0}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Below minimum reorder threshold</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Secondary Metrics: Sales Revenue, EMI Receivables, Valuation, Maintenance */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {/* Sales Revenue */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Period Sales Revenue
-            </span>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(kpis?.periodSalesRevenue ?? 0)}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {kpis?.periodSalesCount ?? 0} confirmed customer sale(s)
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* EMI Receivables */}
-        <Card className="border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              EMI Receivables
-            </span>
-            <CreditCard className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">
-              {formatCurrency(kpis?.totalEmiReceivables ?? 0)}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {kpis?.activeEmiSalesCount ?? 0} active installment plan(s)
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Inventory Cost Valuation */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Inventory Valuation (At Cost)
-            </span>
-            <Boxes className="h-4 w-4 text-slate-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {formatCurrency(kpis?.totalInventoryValuationAtCost ?? 0)}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Retail value: {formatCurrency(kpis?.totalPotentialRetailValuation ?? 0)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Instruments Under Maintenance */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Under Repair / Setup
-            </span>
-            <Wrench className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {kpis?.instrumentsUnderMaintenanceCount ?? 0}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Excluded from retail sale availability</p>
-          </CardContent>
-        </Card>
-
-        {/* Overdue Loans */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Overdue Returns
-            </span>
-            <Clock className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-extrabold text-rose-600 dark:text-rose-400">
-              {kpis?.overdueUsageCount ?? 0}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Of {kpis?.activeUsageCount ?? 0} active loans
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Chart and Recent Ledger Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales Performance Chart */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center justify-between">
-              <span>Sales Revenue Trend</span>
-              <span className="text-xs font-normal text-slate-500">Last 7 Days</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72 w-full">
-              {metrics?.salesTrend && metrics.salesTrend.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={metrics.salesTrend}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                    <XAxis dataKey="_id" tick={{ fontSize: 11 }} />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
-                    />
-                    <Tooltip
-                      formatter={(value: any) => [formatCurrency(Number(value)), 'Sales Revenue']}
-                    />
-                    <Bar dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                  No sales recorded in this period yet.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions Panel */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Operational Shortcuts</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <a href="/sales" className="block">
-              <Button variant="default" className="w-full justify-between font-bold">
-                <span className="flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  <span>Record Customer Sale</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </a>
-
-            <a href="/intake" className="block">
-              <Button variant="outline" className="w-full justify-between">
-                <span className="flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-amber-500" />
-                  <span>Receive Stock Intake</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </a>
-
-            <a href="/usage" className="block">
-              <Button variant="outline" className="w-full justify-between">
-                <span className="flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4 text-indigo-500" />
-                  <span>Rent Instrument / Issue Loan</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </a>
-
-            <a href="/inventory" className="block">
-              <Button variant="outline" className="w-full justify-between">
-                <span className="flex items-center gap-2">
-                  <Boxes className="h-4 w-4 text-emerald-500" />
-                  <span>Browse Product Catalogue</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </a>
-
-            <a href="/reports" className="block">
-              <Button variant="secondary" className="w-full justify-between">
-                <span className="flex items-center gap-2">
-                  <FileCheck2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                  <span>Audit & Reconciliation</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </a>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Stock Movement Ledger Audit Trail */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Recent Stock Movements</CardTitle>
-          <a href="/movements" className="text-xs font-semibold text-amber-500 hover:underline">
-            View Complete Ledger →
-          </a>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                  <th className="py-2.5 px-3">Timestamp</th>
-                  <th className="py-2.5 px-3">Reference</th>
-                  <th className="py-2.5 px-3">Type</th>
-                  <th className="py-2.5 px-3">Product</th>
-                  <th className="py-2.5 px-3">Asset ID</th>
-                  <th className="py-2.5 px-3">Delta</th>
-                  <th className="py-2.5 px-3">Reason</th>
-                  <th className="py-2.5 px-3">User</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {metrics?.recentMovements && metrics.recentMovements.length > 0 ? (
-                  metrics.recentMovements.map((m) => (
-                    <tr key={m._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
-                        {formatDateTime(m.createdAt)}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-amber-500 whitespace-nowrap">
-                        {m.transactionRef}
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <Badge variant="outline" className="text-[10px]">
-                          {m.movementType.replace('_', ' ')}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 px-3 max-w-[200px] truncate text-slate-900 dark:text-slate-100">
-                        {m.product?.name || 'N/A'}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {m.serializedItem?.assetId || '—'}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold whitespace-nowrap">
-                        <span
-                          className={
-                            m.quantityDelta > 0
-                              ? 'text-emerald-500'
-                              : m.quantityDelta < 0
-                              ? 'text-rose-500'
-                              : 'text-slate-400'
-                          }
-                        >
-                          {m.quantityDelta > 0 ? `+${m.quantityDelta}` : m.quantityDelta}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 max-w-[220px] truncate">
-                        {m.reason}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {m.performedBy?.name || 'System'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-500">
-                      No stock movements recorded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            <Link href="/reports/sales" className="text-xs font-semibold text-amber-500 hover:underline flex items-center gap-1">
+              Full report <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+          <div className="h-56">
+            {metrics?.salesTrend && metrics.salesTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.salesTrend} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                  <XAxis dataKey="_id" tick={{ fontSize: 11 }} tickFormatter={(v) => {
+                    const d = new Date(v);
+                    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                  }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} width={52} />
+                  <Tooltip
+                    formatter={(val: any) => [formatCurrency(Number(val)), 'Revenue']}
+                    labelFormatter={(label) => new Date(label).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+                    contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  />
+                  <Bar dataKey="revenue" fill="#f59e0b" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                No sales in the last 7 days
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Secondary stats column */}
+        <div className="space-y-4">
+
+          {/* Inventory value */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Stock Value</span>
+              <Shield className="h-4 w-4 text-slate-400" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-white">{formatCurrency(k?.totalInventoryValuationAtCost ?? 0)}</p>
+            <p className="text-xs text-slate-500 mt-1">What we paid for it (cost price)</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+              Worth {formatCurrency(k?.totalPotentialRetailValuation ?? 0)} at retail
+            </p>
+            <div className="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-1.5 rounded-full bg-emerald-400" style={{ width: `${Math.min(100, stockHealthPct)}%` }} />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">{stockHealthPct}% of stock is ready to sell</p>
+          </div>
+
+          {/* Repairs / Maintenance */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Being Repaired</span>
+              <Wrench className="h-4 w-4 text-amber-400" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-white">{k?.instrumentsUnderMaintenanceCount ?? 0} <span className="text-sm font-semibold text-slate-500">instruments</span></p>
+            <p className="text-xs text-slate-500 mt-1">In the workshop right now — not available for sale or rent</p>
+            <Link href="/returns-maintenance" className="mt-2 text-xs font-semibold text-amber-500 hover:underline flex items-center gap-1">
+              View maintenance list <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {/* Stock received this period */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Stock Received</span>
+              <Truck className="h-4 w-4 text-indigo-400" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-white">{k?.todayReceiptsCount ?? 0} <span className="text-sm font-semibold text-slate-500">deliveries</span></p>
+            <p className="text-xs text-slate-500 mt-1">Stock intake received in selected period</p>
+            <Link href="/intake" className="mt-2 text-xs font-semibold text-indigo-500 hover:underline flex items-center gap-1">
+              Go to stock intake <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════
+          ROW 4 — Quick Actions
+      ══════════════════════════════════════════════════ */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { href: '/sales', icon: <ShoppingCart className="h-5 w-5" />, label: 'Record a Sale', color: 'text-emerald-500 bg-emerald-500/10' },
+            { href: '/usage', icon: <Music2 className="h-5 w-5" />, label: 'Rent an Instrument', color: 'text-indigo-500 bg-indigo-500/10' },
+            { href: '/intake', icon: <Truck className="h-5 w-5" />, label: 'Receive Stock', color: 'text-amber-500 bg-amber-500/10' },
+            { href: '/inventory', icon: <Package className="h-5 w-5" />, label: 'View Inventory', color: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
+          ].map(({ href, icon, label, color }) => (
+            <Link key={href} href={href}
+              className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700 transition-all group">
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}>{icon}</div>
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white">{label}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
