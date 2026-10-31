@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
-import { InternalUsage, Product, SerializedItem, StockLocation, RentalMonthlyPayment } from '@/lib/types';
+import { InternalUsage, RentalMonthlyPayment } from '@/lib/types';
 import { formatDate, formatDateTime, formatCurrency } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -43,58 +44,15 @@ import {
   Zap,
 } from 'lucide-react';
 
-const COMMON_ACCESSORIES = [
-  'Heavy-Duty Stand',
-  'Power Adapter & Cable',
-  'Padded Gig Bag / Hardcase',
-  'Sustain Pedal',
-  'Studio Monitor Headphones',
-  'Instrument Cable (6.35mm TS)',
-];
-
 export default function UsagePage() {
   const { canIssueUsage } = useAuth();
   const [usages, setUsages] = useState<InternalUsage[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [availableSerials, setAvailableSerials] = useState<SerializedItem[]>([]);
-  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'OVERDUE' | 'RETURNED'>('ALL');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Issue / Rent Equipment Modal State
-  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
-  // Issue modal tab state
-  const [issueTab, setIssueTab] = useState<'customer' | 'terms' | 'instrument'>('customer');
   // Ledger modal tab state
   const [ledgerTab, setLedgerTab] = useState<'schedule' | 'payment'>('schedule');
-  const [purpose, setPurpose] = useState<
-    'CLASS' | 'PRACTICE' | 'REHEARSAL' | 'DEMONSTRATION' | 'EVENT' | 'REPAIR' | 'OTHER'
-  >('CLASS');
-  const [isRental, setIsRental] = useState(true);
-  const [assignedPerson, setAssignedPerson] = useState('');
-  const [assignedPersonContact, setAssignedPersonContact] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [lockInPeriodMonths, setLockInPeriodMonths] = useState(3);
-  const [securityDeposit, setSecurityDeposit] = useState<number>(5000);
-  const [depositTransactionRef, setDepositTransactionRef] = useState('');
-  const [depositMode, setDepositMode] = useState(false);
-  const [depositPaymentMethod, setDepositPaymentMethod] = useState<'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER'>('CASH');
-  const [monthlyRent, setMonthlyRent] = useState<number>(1500);
-  const [expectedReturnDate, setExpectedReturnDate] = useState('');
-  const [includedAccessories, setIncludedAccessories] = useState<string[]>([
-    'Heavy-Duty Stand',
-    'Power Adapter & Cable',
-  ]);
-  const [customAccessoryInput, setCustomAccessoryInput] = useState('');
-
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedSerialId, setSelectedSerialId] = useState('');
-  const [issueQuantity, setIssueQuantity] = useState(1);
-  const [issueCondition, setIssueCondition] = useState('GOOD');
-  const [notes, setNotes] = useState('');
-  const [issueError, setIssueError] = useState('');
-  const [isIssuing, setIsIssuing] = useState(false);
 
   // Monthly Rental Ledger & Payment Tracking Modal
   const [selectedRentalForLedger, setSelectedRentalForLedger] = useState<InternalUsage | null>(null);
@@ -159,16 +117,7 @@ export default function UsagePage() {
 
   useEffect(() => {
     fetchUsages();
-    fetchInventory();
   }, [statusFilter, search]);
-
-  // Pre-calculate expected return date on 1st of month whenever lockInPeriodMonths changes
-  const applyLockInMonths = (months: number) => {
-    setLockInPeriodMonths(months);
-    const base = new Date();
-    const date = new Date(base.getFullYear(), base.getMonth() + months, 1);
-    setExpectedReturnDate(date.toISOString().slice(0, 16));
-  };
 
   const fetchUsages = async () => {
     setIsLoading(true);
@@ -183,111 +132,6 @@ export default function UsagePage() {
       console.error('Failed to load internal usages:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchInventory = async () => {
-    try {
-      const [prodRes, serialsRes, locRes] = await Promise.all([
-        api.get<{ items: Product[] }>('/products?limit=100'),
-        api.get<{ items: SerializedItem[] }>('/products/serialized-items?status=AVAILABLE&limit=100'),
-        api.get<{ locations: StockLocation[] }>('/meta/locations'),
-      ]);
-      setProducts(prodRes.items || []);
-      setAvailableSerials(serialsRes.items || []);
-      setLocations(locRes.locations || []);
-    } catch (err) {
-      console.error('Failed to load inventory for usage:', err);
-    }
-  };
-
-  const toggleAccessory = (acc: string) => {
-    if (includedAccessories.includes(acc)) {
-      setIncludedAccessories(includedAccessories.filter((a) => a !== acc));
-    } else {
-      setIncludedAccessories([...includedAccessories, acc]);
-    }
-  };
-
-  const addCustomAccessory = () => {
-    const trimmed = customAccessoryInput.trim();
-    if (trimmed && !includedAccessories.includes(trimmed)) {
-      setIncludedAccessories((prev) => [...prev, trimmed]);
-      setCustomAccessoryInput('');
-    }
-  };
-
-  const handleAddCustomAccessory = (e: React.KeyboardEvent | React.MouseEvent) => {
-    if ('key' in e) {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    addCustomAccessory();
-  };
-
-  const openIssueModal = () => {
-    setIsIssueModalOpen(true);
-    setIssueTab('customer');
-    setIsRental(true);
-    applyLockInMonths(3);
-    setSecurityDeposit(5000);
-    setDepositTransactionRef('');
-    setDepositMode(false);
-    setDepositPaymentMethod('CASH');
-    setMonthlyRent(1500);
-    setIncludedAccessories(['Heavy-Duty Stand', 'Power Adapter & Cable']);
-    setIssueError('');
-  };
-
-  const selectedProduct = products.find((p) => p._id === selectedProductId);
-
-  const handleIssueSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIssueError('');
-    setIsIssuing(true);
-
-    try {
-      if (!selectedProduct) throw new Error('Please select an instrument or product.');
-
-      await api.post('/usage', {
-        purpose,
-        assignedPerson: assignedPerson.trim(),
-        assignedPersonContact: assignedPersonContact.trim() || undefined,
-        customerEmail: customerEmail.trim() || undefined,
-        location: locations[0]?._id,
-        expectedReturnDate,
-        isRental,
-        lockInPeriodMonths,
-        securityDeposit,
-        depositTransactionRef: depositTransactionRef.trim() || undefined,
-        depositMode,
-        depositPaymentMethod,
-        monthlyRent,
-        includedAccessories,
-        notes: notes.trim() || undefined,
-        items: [
-          {
-            product: selectedProduct._id,
-            quantityIssued: issueQuantity,
-            issueCondition,
-          },
-        ],
-      });
-
-      setIsIssueModalOpen(false);
-      setAssignedPerson('');
-      setAssignedPersonContact('');
-      setCustomerEmail('');
-      setSelectedProductId('');
-      setSelectedSerialId('');
-      setNotes('');
-      fetchUsages();
-      fetchInventory();
-    } catch (err: any) {
-      setIssueError(err.message || 'Failed to create instrument rental agreement.');
-    } finally {
-      setIsIssuing(false);
     }
   };
 
@@ -580,7 +424,6 @@ export default function UsagePage() {
 
       setReturnModalUsage(null);
       fetchUsages();
-      fetchInventory();
     } catch (err: any) {
       setReturnError(err.message || 'Failed to process return inspection.');
     } finally {
@@ -789,15 +632,16 @@ export default function UsagePage() {
         </div>
 
         {canIssueUsage() && (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={openIssueModal}
-            className="gap-1.5 text-xs font-bold shadow-md"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Rent Instrument / Issue Loan</span>
-          </Button>
+          <Link href="/usage/new">
+            <Button
+              size="sm"
+              variant="default"
+              className="gap-1.5 text-xs font-bold shadow-md cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Rent Instrument / Issue Loan</span>
+            </Button>
+          </Link>
         )}
       </div>
 
@@ -1150,231 +994,7 @@ export default function UsagePage() {
         </CardContent>
       </Card>
 
-      {/* Rent Instrument / Loan Agreement Modal */}
-      <Modal
-        isOpen={isIssueModalOpen}
-        onClose={() => setIsIssueModalOpen(false)}
-        title="Rent Instrument & Create Agreement"
-        description="Customer details, rental terms, deposit, instrument selection and accessories."
-        maxWidth="4xl"
-        footer={
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {issueTab !== 'customer' && (
-                <button type="button" onClick={() => setIssueTab(issueTab === 'instrument' ? 'terms' : 'customer')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                  ← Back
-                </button>
-              )}
-              <div className="flex items-center gap-1 ml-1">
-                {(['customer','terms','instrument'] as const).map((t) => (
-                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${issueTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsIssueModalOpen(false)}>Cancel</Button>
-              {issueTab !== 'instrument' ? (
-                <Button type="button" size="sm" variant="default" className="font-bold gap-1.5"
-                  onClick={() => setIssueTab(issueTab === 'customer' ? 'terms' : 'instrument')}>
-                  Next →
-                </Button>
-              ) : (
-                <Button type="submit" form="issue-rental-form" size="sm" variant="default" isLoading={isIssuing} className="font-bold">
-                  Confirm & Issue Agreement
-                </Button>
-              )}
-            </div>
-          </div>
-        }
-      >
-        <form id="issue-rental-form" onSubmit={handleIssueSubmit}>
-          {issueError && (
-            <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
-              {issueError}
-            </div>
-          )}
 
-          {/* ── Tab Bar ── */}
-          <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-            {([
-              { key: 'customer',   label: 'Customer',            icon: <User className="h-3.5 w-3.5" /> },
-              { key: 'terms',      label: 'Rental Terms',        icon: <Shield className="h-3.5 w-3.5" /> },
-              { key: 'instrument', label: 'Instrument & Accessories', icon: <Music2 className="h-3.5 w-3.5" /> },
-            ] as const).map((tab) => (
-              <button key={tab.key} type="button" onClick={() => setIssueTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                  issueTab === tab.key ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-                }`}>
-                {tab.icon}{tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* •• TAB 1 — Customer •• */}
-          <div className={issueTab === 'customer' ? 'space-y-4' : 'hidden'}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input label="Renter / Customer Name *" required placeholder="e.g. Rohan Deshmukh"
-                value={assignedPerson} onChange={(e) => setAssignedPerson(e.target.value)} />
-              <Input label="Phone Number" placeholder="+91 98765 43210"
-                value={assignedPersonContact} onChange={(e) => setAssignedPersonContact(e.target.value)} />
-              <Input label="Email (for reminders) *" type="email" required placeholder="rohan@example.com"
-                value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
-            </div>
-            <Input label="Agreement Remarks / Special Terms"
-              placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by Stereobliss."
-              value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-
-          {/* •• TAB 2 — Rental Terms & Deposit •• */}
-          <div className={issueTab === 'terms' ? 'space-y-4' : 'hidden'}>
-            {/* Lock-in + rent + deposit */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Rental Plan & Lock-In Period</span>
-                <span className="text-[11px] text-slate-500">Standard: 3 months</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Lock-In Duration</label>
-                  <div className="flex gap-1">
-                    {[1, 3, 6, 12].map((m) => (
-                      <button type="button" key={m} onClick={() => applyLockInMonths(m)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${lockInPeriodMonths === m ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 hover:border-amber-400'}`}>
-                        {m}M
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Monthly Rent (₹) *</label>
-                  <input type="number" min="0" required value={monthlyRent}
-                    onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Security Deposit (₹)</label>
-                  <input type="number" min="0" value={securityDeposit}
-                    onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right" />
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
-                <span>Agreement end date:</span>
-                <strong className="text-slate-800 dark:text-slate-200">
-                  {expectedReturnDate ? new Date(expectedReturnDate).toLocaleDateString('en-IN') : 'N/A'} ({lockInPeriodMonths}M tenure)
-                </strong>
-              </div>
-            </div>
-
-            {/* Deposit details (only when deposit > 0) */}
-            {securityDeposit > 0 && (
-              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" />Security Deposit Details (Mandatory)
-                  </span>
-                  <span className="text-[11px] text-indigo-500">Transaction ref required</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Deposit Collected Via *</label>
-                    <select value={depositPaymentMethod} onChange={(e) => setDepositPaymentMethod(e.target.value as any)}
-                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500">
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI (GPay / PhonePe)</option>
-                      <option value="CARD">Card</option>
-                      <option value="BANK_TRANSFER">Bank Transfer / IMPS</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Transaction / Receipt No. *</label>
-                    <input type="text" required={securityDeposit > 0} placeholder="e.g. CASH-RCPT-001 / UPI-8837261"
-                      value={depositTransactionRef} onChange={(e) => setDepositTransactionRef(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono" />
-                  </div>
-                </div>
-                {/* Deposit-as-Rent toggle */}
-                <div onClick={() => setDepositMode(!depositMode)}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${depositMode ? 'border-indigo-500 bg-indigo-100/70 dark:bg-indigo-950/40' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'}`}>
-                  <div className={`mt-0.5 h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center ${depositMode ? 'border-indigo-500 bg-indigo-500' : 'border-slate-400 bg-white dark:bg-slate-800'}`}>
-                    {depositMode && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white">Deposit-as-Rent Mode</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Monthly rent is auto-deducted from this deposit. No separate monthly payment needed during lock-in. When exhausted, continuation rent tracking begins.
-                    </div>
-                    {depositMode && monthlyRent > 0 && (
-                      <div className="mt-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                        {formatCurrency(securityDeposit)} &divide; {formatCurrency(monthlyRent)}/mo = {Math.floor(securityDeposit / monthlyRent)} months covered
-                        {securityDeposit % monthlyRent > 0 && ` (${formatCurrency(securityDeposit % monthlyRent)} remaining)`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* •• TAB 3 — Instrument & Accessories •• */}
-          <div className={issueTab === 'instrument' ? 'space-y-4' : 'hidden'}>
-            {/* Instrument select */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Select Instrument *</label>
-              <select required value={selectedProductId}
-                onChange={(e) => { setSelectedProductId(e.target.value); setSelectedSerialId(''); }}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium">
-                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Choose an instrument…</option>
-                {products.filter((p) => p.availableForSale > 0).map((p) => (
-                  <option key={p._id} value={p._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                    {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.availableForSale} available
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Accessories checklist */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Bundled Accessories & Checklist</span>
-                <span className="text-[11px] text-slate-500">{includedAccessories.length} selected</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {COMMON_ACCESSORIES.map((acc) => {
-                  const isChecked = includedAccessories.includes(acc);
-                  return (
-                    <div key={acc} onClick={() => toggleAccessory(acc)}
-                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-colors ${isChecked ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 hover:border-slate-400'}`}>
-                      {isChecked ? <CheckSquare className="h-4 w-4 shrink-0 text-amber-500" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
-                      <span>{acc}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Custom item add */}
-              <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
-                <input type="text" placeholder="Add custom item (e.g. Sheet Music Stand)…"
-                  value={customAccessoryInput} onChange={(e) => setCustomAccessoryInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addCustomAccessory(); } }}
-                  className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
-                <Button type="button" variant="outline" size="sm" onClick={addCustomAccessory} className="h-8 text-xs font-bold">+ Add</Button>
-              </div>
-              {/* Show custom items */}
-              {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).map((acc, i) => (
-                    <span key={i} onClick={() => toggleAccessory(acc)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors" title="Click to remove">
-                      {acc} −
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </form>
-      </Modal>
 
       {/* Monthly Rent Payment Tracker & Ledger Modal */}
       <Modal
