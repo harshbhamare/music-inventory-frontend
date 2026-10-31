@@ -337,22 +337,25 @@ export default function UsagePage() {
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
-      setRentalTransactionRef('');
-      setRentalPaymentNotes('');
-      setReminderFeedback(
-        `Payment of ${formatCurrency(paymentAmount)} recorded successfully! An official payment receipt email has been dispatched to ${selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPerson} for accountability.`
-      );
-      // Pre-fill next unpaid month if available
-      const nextDue = res.usage.monthlyPayments?.find((p) => p.status !== 'PAID');
-      if (nextDue) {
-        setSelectedBillingMonth(nextDue.billingMonth);
-        setPaymentAmount(nextDue.amountDue);
-      } else {
-        setSelectedBillingMonth('');
-        setPaymentAmount(0);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+        setRentalTransactionRef('');
+        setRentalPaymentNotes('');
+        setReminderFeedback(
+          `Payment of ${formatCurrency(paymentAmount)} recorded successfully! An official payment receipt email has been dispatched to ${selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPerson} for accountability.`
+        );
+        // Pre-fill next unpaid month if available
+        const nextDue = updatedUsage.monthlyPayments?.find((p) => p.status !== 'PAID');
+        if (nextDue) {
+          setSelectedBillingMonth(nextDue.billingMonth);
+          setPaymentAmount(nextDue.amountDue);
+        } else {
+          setSelectedBillingMonth('');
+          setPaymentAmount(0);
+        }
+        fetchUsages();
       }
-      fetchUsages();
     } catch (err: any) {
       setPaymentError(err.message || 'Failed to record rent payment.');
     } finally {
@@ -377,7 +380,7 @@ export default function UsagePage() {
         `/usage/${selectedRentalForLedger._id}/deposit-deductions`,
         { monthIndex: deductionMonthIndex, billingMonth: deductionBillingMonth, notes: deductionNotes.trim() || undefined }
       );
-      const updated = res.data?.usage || selectedRentalForLedger;
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
       setSelectedRentalForLedger(updated);
       setDeductionNotes('');
       // auto-advance to next unpaid month
@@ -432,7 +435,10 @@ export default function UsagePage() {
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+      }
       setEditingPayment(null);
       fetchUsages();
     } catch (err: any) {
@@ -466,7 +472,10 @@ export default function UsagePage() {
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+      }
       setAdjustingMonth(null);
       fetchUsages();
     } catch (err: any) {
@@ -664,8 +673,8 @@ export default function UsagePage() {
         }
       );
 
-      const updated = res.data?.usage;
-      if (updated) {
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
         setUsages((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
         if (selectedRentalForLedger && selectedRentalForLedger._id === updated._id) {
           setSelectedRentalForLedger(updated);

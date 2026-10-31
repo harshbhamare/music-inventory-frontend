@@ -417,12 +417,16 @@ export default function SalesPage() {
     setPosTab(targetTab);
   };
 
-  const handleCreateSale = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateSale = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSaleError('');
 
-    // CRITICAL GUARD: Only allow sale completion and invoice generation when on the final step
+    // CRITICAL GUARD: Only allow sale completion and invoice generation when on the final step (Dispatch & Delivery)
     if (posTab !== 'dispatch') {
+      return;
+    }
+
+    if (isSubmittingSale) {
       return;
     }
 
@@ -487,8 +491,10 @@ export default function SalesPage() {
       setEmiTenureMonths(6);
       setPosTab('items');
       fetchSales();
-      fetchInventoryForSale();
-      setActiveInvoice(res.sale);
+      const created = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
+      if (created && created._id) {
+        setActiveInvoice(created);
+      }
     } catch (err: any) {
       setSaleError(err.message || 'Failed to record customer sale.');
     } finally {
@@ -668,9 +674,12 @@ export default function SalesPage() {
       }
 
       // Update active sales state immediately so changes reflect everywhere (table, ledger, invoice)
-      setSales((prev) => prev.map((s) => (s._id === res.data.sale._id ? res.data.sale : s)));
-      if (selectedSaleForLedger && selectedSaleForLedger._id === res.data.sale._id) {
-        setSelectedSaleForLedger(res.data.sale);
+      const updatedSale: Sale | undefined = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
+      if (updatedSale && updatedSale._id) {
+        setSales((prev) => prev.map((s) => (s._id === updatedSale._id ? updatedSale : s)));
+        if (selectedSaleForLedger && selectedSaleForLedger._id === updatedSale._id) {
+          setSelectedSaleForLedger(updatedSale);
+        }
       }
 
       fetchSales();
@@ -701,8 +710,9 @@ export default function SalesPage() {
 
       setEmiReminderFeedback(`EMI reminder dispatched to ${res.sentTo}!`);
       fetchSales();
-      if (selectedSaleForLedger && selectedSaleForLedger._id === sale._id) {
-        setSelectedSaleForLedger(res.sale);
+      const updatedSale = (res as any)?.sale || (res as any)?.data?.sale;
+      if (updatedSale && selectedSaleForLedger && selectedSaleForLedger._id === sale._id) {
+        setSelectedSaleForLedger(updatedSale);
       }
       setTimeout(() => setEmiReminderFeedback(''), 5000);
     } catch (err: any) {
@@ -1087,6 +1097,7 @@ export default function SalesPage() {
               </Button>
               {posTab !== 'dispatch' ? (
                 <Button
+                  key="pos-next-footer-btn"
                   type="button"
                   size="sm"
                   variant="default"
@@ -1097,11 +1108,12 @@ export default function SalesPage() {
                 </Button>
               ) : (
                 <Button
-                  type="submit"
-                  form="pos-sale-form"
+                  key="pos-generate-footer-btn"
+                  type="button"
                   size="sm"
                   variant="default"
                   isLoading={isSubmittingSale}
+                  onClick={handleCreateSale}
                   className="font-bold gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md px-4"
                 >
                   <Receipt className="h-4 w-4" />
@@ -1114,10 +1126,12 @@ export default function SalesPage() {
       >
         <form
           id="pos-sale-form"
-          onSubmit={handleCreateSale}
+          onSubmit={(e) => {
+            e.preventDefault();
+          }}
           onKeyDown={(e) => {
-            // Prevent accidental early submission when pressing Enter in input fields
-            if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+            // Prevent accidental early submission when pressing Enter anywhere in form
+            if (e.key === 'Enter') {
               e.preventDefault();
               if (posTab !== 'dispatch') {
                 handleNextTab();
@@ -1306,6 +1320,18 @@ export default function SalesPage() {
                 </div>
               </div>
             </div>
+
+            {/* In-tab step progression button */}
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="default"
+                className="font-bold gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs text-xs"
+                onClick={handleNextTab}
+              >
+                <span>{saleType === 'DIRECT' ? 'Proceed to Step 2: Dispatch & Delivery →' : 'Proceed to Step 2: EMI Financing Plan →'}</span>
+              </Button>
+            </div>
           </div>
 
           {/* ••••••••••••••••••••••••••••••••••••••••••
@@ -1376,6 +1402,27 @@ export default function SalesPage() {
                     </div>
                   </div>
                 )}
+
+                {/* In-tab step navigation */}
+                <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBackTab}
+                  >
+                    ← Back to Items &amp; Customer
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="font-bold gap-1.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
+                    onClick={handleNextTab}
+                  >
+                    <span>Proceed to Step 3: Dispatch &amp; Delivery →</span>
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1460,6 +1507,28 @@ export default function SalesPage() {
                   <span className="font-extrabold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
+            </div>
+
+            {/* In-tab final submission action bar */}
+            <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBackTab}
+              >
+                ← Back to {saleType === 'DIRECT' ? 'Items & Customer' : 'EMI Financing Plan'}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                isLoading={isSubmittingSale}
+                onClick={handleCreateSale}
+                className="font-bold gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md text-xs sm:text-sm"
+              >
+                <Receipt className="h-4 w-4" />
+                <span>{saleType === 'EMI' ? 'Generate Invoice & Setup EMI Plan' : 'Generate Invoice & Complete Sale'}</span>
+              </Button>
             </div>
           </div>
         </form>

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -88,9 +88,10 @@ export function NotificationBell() {
   const fetchDuesSummary = async () => {
     setIsLoading(true);
     try {
-      const res = await api.get<{ data: RentalDuesSummary }>('/usage/dues-summary');
-      if (res && res.data) {
-        setDuesData(res.data);
+      const res = await api.get<any>('/usage/dues-summary');
+      const data = res?.data || res;
+      if (data && (data.items || data.summary)) {
+        setDuesData(data);
       }
     } catch (err) {
       console.error('Failed to load rental dues summary:', err);
@@ -195,8 +196,9 @@ export function NotificationBell() {
         usageIds: overdueWithEmail.map((i) => i.id),
       });
 
+      const sentCount = (res as any)?.data?.sentCount ?? (res as any)?.sentCount ?? 0;
       setBulkFeedback(
-        `Successfully dispatched ${res.data.sentCount} reminder emails!`
+        `Successfully dispatched ${sentCount} reminder emails!`
       );
       fetchDuesSummary();
       setTimeout(() => setBulkFeedback(''), 5000);
