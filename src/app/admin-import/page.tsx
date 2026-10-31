@@ -164,6 +164,8 @@ export default function AdminImportPage() {
   const [errorSheetFilter, setErrorSheetFilter] = useState('ALL');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+
   // ── Access guard ────────────────────────────────────────────────────────────
   if (!isSuperAdmin()) {
     return (
@@ -190,16 +192,38 @@ export default function AdminImportPage() {
   };
 
   // ── Download template ───────────────────────────────────────────────────────
-  const downloadTemplate = () => {
-    const token = getToken();
-    const url   = getApiUrl('/import/template');
-    const a     = document.createElement('a');
-    // Pass token as query param since this is a direct download link
-    a.href      = token ? `${url}?token=${encodeURIComponent(token)}` : url;
-    a.download  = 'stereobliss-historical-import-template.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const downloadTemplate = async () => {
+    setIsDownloadingTemplate(true);
+    try {
+      const token = getToken();
+      const url   = getApiUrl('/import/template');
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',   // also sends the session cookie as fallback
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setErrorMsg((json as any)?.error?.message || `Download failed (HTTP ${res.status})`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'stereobliss-historical-import-template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Template download failed.');
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
   };
 
   // ── File selection ──────────────────────────────────────────────────────────
@@ -369,9 +393,14 @@ export default function AdminImportPage() {
                 variant="default"
                 className="w-full gap-2 font-bold bg-amber-500 hover:bg-amber-600 text-slate-950"
                 onClick={downloadTemplate}
+                isLoading={isDownloadingTemplate}
+                disabled={isDownloadingTemplate}
               >
-                <Download className="h-4 w-4" />
-                Download Excel Template
+                {isDownloadingTemplate ? (
+                  <><RefreshCw className="h-4 w-4 animate-spin" /> Preparing template…</>
+                ) : (
+                  <><Download className="h-4 w-4" /> Download Excel Template</>
+                )}
               </Button>
             </div>
 
