@@ -18,6 +18,7 @@ import {
   Settings,
   Music2,
   LogOut,
+  DatabaseZap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -83,6 +84,13 @@ export function Sidebar() {
       href: '/users',
       icon: ShieldCheck,
       visible: hasRole('SUPER_ADMIN'),
+    },
+    {
+      title: 'Data Import',
+      href: '/admin-import',
+      icon: DatabaseZap,
+      visible: hasRole('SUPER_ADMIN'),
+      badge: 'Import',
     },
     {
       title: 'Settings',
