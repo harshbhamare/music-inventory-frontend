@@ -179,6 +179,24 @@ export default function UsagePage() {
     }
   };
 
+  // Automatically open ledger modal if redirected from Notification Bell with ?ledger=REF
+  useEffect(() => {
+    if (typeof window !== 'undefined' && usages.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ledgerRef = urlParams.get('ledger') || urlParams.get('ref');
+      if (ledgerRef) {
+        const found = usages.find(
+          (u) =>
+            u.issueReference?.toLowerCase() === ledgerRef.toLowerCase() ||
+            u._id === ledgerRef
+        );
+        if (found) {
+          openLedgerModal(found);
+        }
+      }
+    }
+  }, [usages]);
+
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRentalForLedger || isRecordingPayment || isSubmittingPaymentRef.current) return;

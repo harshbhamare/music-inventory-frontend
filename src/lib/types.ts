@@ -183,7 +183,7 @@ export interface EmiReminder {
 
 export interface SalePaymentLog {
   _id?: string;
-  paymentType: 'DOWN_PAYMENT' | 'EMI_INSTALLMENT' | 'FULL_PAYMENT';
+  paymentType: 'DOWN_PAYMENT' | 'EMI_INSTALLMENT' | 'FULL_PAYMENT' | 'EMI_EARLY_SETTLEMENT';
   amount: number;
   paymentMethod: string;
   transactionRef: string;
