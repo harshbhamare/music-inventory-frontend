@@ -121,9 +121,19 @@ export default function UsagePage() {
   const [refundPaymentMethod, setRefundPaymentMethod] = useState<'UPI' | 'BANK_TRANSFER' | 'CASH' | 'CARD'>('UPI');
   const [refundTransactionRef, setRefundTransactionRef] = useState<string>('');
   const [refundNotes, setRefundNotes] = useState<string>('');
+  const [refundCustomerEmail, setRefundCustomerEmail] = useState<string>('');
+  const [sendRefundReceiptEmail, setSendRefundReceiptEmail] = useState<boolean>(true);
   const [isRefundingDeposit, setIsRefundingDeposit] = useState<boolean>(false);
   const [refundError, setRefundError] = useState<string>('');
   const [refundFeedback, setRefundFeedback] = useState<string>('');
+
+  // Return & Inspection Modal Email automation
+  const [returnCustomerEmail, setReturnCustomerEmail] = useState<string>('');
+  const [sendReturnReceiptEmail, setSendReturnReceiptEmail] = useState<boolean>(true);
+
+  // Rental Payment Form Email automation
+  const [rentalCustomerEmail, setRentalCustomerEmail] = useState<string>('');
+  const [sendRentalPaymentEmail, setSendRentalPaymentEmail] = useState<boolean>(true);
 
   // Extend Date Modal
   const [extendModalUsage, setExtendModalUsage] = useState<InternalUsage | null>(null);
@@ -162,6 +172,8 @@ export default function UsagePage() {
   // Open Monthly Payment Tracker & Ledger Modal
   const openLedgerModal = (usage: InternalUsage) => {
     setSelectedRentalForLedger(usage);
+    setRentalCustomerEmail(usage.customerEmail || '');
+    setSendRentalPaymentEmail(true);
     setLedgerTab('schedule');
     const firstDue = usage.monthlyPayments?.find((p) => p.status !== 'PAID');
     setPaymentAmount(firstDue?.amountDue || usage.monthlyRent || 1500);
@@ -223,7 +235,7 @@ export default function UsagePage() {
         throw new Error('Payment amount must be greater than 0.');
       }
 
-      const res = await api.post<{ usage: InternalUsage }>(
+      const res = await api.post<{ usage: InternalUsage; emailSent?: boolean; recipient?: string }>(
         `/usage/${selectedRentalForLedger._id}/payments`,
         {
           amount: paymentAmount,
@@ -231,17 +243,32 @@ export default function UsagePage() {
           paymentMethod: rentalPaymentMethod,
           transactionRef: rentalTransactionRef.trim() || undefined,
           notes: rentalPaymentNotes.trim() || undefined,
+          customerEmail: rentalCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendRentalPaymentEmail,
         }
       );
 
       const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || rentalCustomerEmail || selectedRentalForLedger.customerEmail;
+
       if (updatedUsage && updatedUsage._id) {
         setSelectedRentalForLedger(updatedUsage);
         setRentalTransactionRef('');
         setRentalPaymentNotes('');
-        setReminderFeedback(
-          `Payment of ${formatCurrency(paymentAmount)} recorded successfully! An official payment receipt email has been dispatched to ${selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPerson} for accountability.`
-        );
+        if (emailSent && recipient) {
+          setReminderFeedback(
+            `✅ Payment of ${formatCurrency(paymentAmount)} recorded successfully! Official payment receipt email dispatched to ${recipient}.`
+          );
+        } else if (!sendRentalPaymentEmail) {
+          setReminderFeedback(
+            `Payment of ${formatCurrency(paymentAmount)} recorded successfully (receipt email skipped as unchecked).`
+          );
+        } else {
+          setReminderFeedback(
+            `Payment of ${formatCurrency(paymentAmount)} recorded successfully!`
+          );
+        }
         // Pre-fill next unpaid month if available
         const nextDue = updatedUsage.monthlyPayments?.find((p) => p.status !== 'PAID');
         if (nextDue) {
@@ -523,11 +550,27 @@ export default function UsagePage() {
 
   const handleResendReturnConfirmation = async (usage: InternalUsage) => {
     try {
-      const res = await api.post<{ success: boolean; message: string; recipient: string }>(
+      let targetEmail = (usage.customerEmail || '').trim();
+      if (!targetEmail || !targetEmail.includes('@')) {
+        const input = window.prompt(
+          `Enter customer email address to send equipment return confirmation for ${usage.assignedPerson}:`,
+          usage.customerEmail || ''
+        );
+        if (!input || !input.trim().includes('@')) {
+          alert('A valid email address is required to dispatch the equipment return confirmation.');
+          return;
+        }
+        targetEmail = input.trim();
+      }
+
+      const res = await api.post<{ success: boolean; message: string; recipient: string; provider?: string }>(
         `/usage/${usage._id}/send-return-confirmation`,
-        {}
+        { recipientEmail: targetEmail }
       );
-      alert(res.message || `Equipment return confirmation email dispatched to ${res.recipient}!`);
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || targetEmail;
+      const message = (res as any)?.message || (res as any)?.data?.message || `Equipment return confirmation email dispatched to ${recipient}!`;
+      alert(`✅ ${message}`);
+      await fetchUsages();
     } catch (err: any) {
       alert(err.message || 'Failed to dispatch return confirmation email.');
     }
@@ -535,11 +578,27 @@ export default function UsagePage() {
 
   const handleResendRefundReceipt = async (usage: InternalUsage) => {
     try {
-      const res = await api.post<{ success: boolean; message: string; recipient: string }>(
+      let targetEmail = (usage.customerEmail || '').trim();
+      if (!targetEmail || !targetEmail.includes('@')) {
+        const input = window.prompt(
+          `Enter customer email address to send deposit refund receipt for ${usage.assignedPerson}:`,
+          usage.customerEmail || ''
+        );
+        if (!input || !input.trim().includes('@')) {
+          alert('A valid email address is required to dispatch the deposit refund receipt.');
+          return;
+        }
+        targetEmail = input.trim();
+      }
+
+      const res = await api.post<{ success: boolean; message: string; recipient: string; provider?: string }>(
         `/usage/${usage._id}/send-refund-receipt`,
-        {}
+        { recipientEmail: targetEmail }
       );
-      alert(res.message || `Deposit refund receipt email dispatched to ${res.recipient}!`);
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || targetEmail;
+      const message = (res as any)?.message || (res as any)?.data?.message || `Deposit refund receipt email dispatched to ${recipient}!`;
+      alert(`✅ ${message}`);
+      await fetchUsages();
     } catch (err: any) {
       alert(err.message || 'Failed to dispatch deposit refund receipt email.');
     }
@@ -547,6 +606,8 @@ export default function UsagePage() {
 
   const openReturnModal = (usage: InternalUsage) => {
     setReturnModalUsage(usage);
+    setReturnCustomerEmail(usage.customerEmail || '');
+    setSendReturnReceiptEmail(true);
     const initialOutcomes: any = {};
     usage.items.forEach((item, idx) => {
       initialOutcomes[idx] = {
@@ -585,18 +646,26 @@ export default function UsagePage() {
         };
       });
 
-      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage } }>(
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage; emailSent?: boolean; recipient?: string } }>(
         `/usage/${returnModalUsage._id}/return`,
         {
           items: itemsPayload,
           notes: 'Equipment inspected & returned to active inventory pool',
+          customerEmail: returnCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendReturnReceiptEmail,
         }
       );
 
       const returnedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || returnCustomerEmail;
 
       setReturnModalUsage(null);
       await fetchUsages();
+
+      if (emailSent && recipient) {
+        setReminderFeedback(`✅ Equipment returned and confirmation email dispatched to ${recipient}!`);
+      }
 
       // If user selected to also refund deposit immediately, trigger refund modal
       if (openRefundDirectlyAfter) {
@@ -612,6 +681,8 @@ export default function UsagePage() {
 
   const openRefundModal = (usage: InternalUsage) => {
     setRefundModalUsage(usage);
+    setRefundCustomerEmail(usage.customerEmail || '');
+    setSendRefundReceiptEmail(true);
     setRefundDeductionAmount(0);
     setRefundDeductionReason('');
     setRefundPaymentMethod('UPI');
@@ -639,7 +710,7 @@ export default function UsagePage() {
         throw new Error('Transaction / UPI reference number is required for non-cash security deposit refund disbursement.');
       }
 
-      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage } }>(
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage; emailSent?: boolean; recipient?: string; provider?: string } }>(
         `/usage/${refundModalUsage._id}/refund-deposit`,
         {
           refundAmount: netRefundAmount,
@@ -648,20 +719,33 @@ export default function UsagePage() {
           paymentMethod: refundPaymentMethod,
           transactionRef: refundTransactionRef.trim() || undefined,
           notes: refundNotes.trim() || undefined,
+          customerEmail: refundCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendRefundReceiptEmail,
         }
       );
+
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || refundCustomerEmail;
+      const provider = (res as any)?.provider || (res as any)?.data?.provider;
 
       const updatedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
       if (updatedDoc && selectedRentalForLedger && selectedRentalForLedger._id === updatedDoc._id) {
         setSelectedRentalForLedger(updatedDoc);
       }
 
-      setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed & recorded successfully!`);
+      if (emailSent && recipient) {
+        setRefundFeedback(`✅ Security deposit refund of ${formatCurrency(netRefundAmount)} processed & official receipt email dispatched to ${recipient}${provider ? ` (via ${provider})` : ''}!`);
+      } else if (!sendRefundReceiptEmail) {
+        setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed successfully (email receipt skipped as unchecked).`);
+      } else {
+        setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed & recorded successfully!`);
+      }
+
       await fetchUsages();
       setTimeout(() => {
         setRefundModalUsage(null);
         setRefundFeedback('');
-      }, 1200);
+      }, 2000);
     } catch (err: any) {
       setRefundError(err.message || 'Failed to process security deposit refund.');
     } finally {
@@ -2224,6 +2308,35 @@ export default function UsagePage() {
                         </div>
                       </div>
 
+                      {/* Customer Email & Receipt Dispatch Toggle */}
+                      <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <Mail className="h-3 w-3 text-amber-500" />
+                            <span>Customer Email for Receipt</span>
+                          </label>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Auto-dispatch ready</span>
+                        </div>
+                        <input
+                          type="email"
+                          value={rentalCustomerEmail}
+                          onChange={(e) => setRentalCustomerEmail(e.target.value)}
+                          placeholder="customer@example.com (Required for sending payment receipt)"
+                          className="w-full h-8 px-3 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                        />
+                        <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                          <input
+                            type="checkbox"
+                            checked={sendRentalPaymentEmail}
+                            onChange={(e) => setSendRentalPaymentEmail(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                          />
+                          <span className="text-[11px] text-slate-700 dark:text-slate-300 select-none">
+                            Send official rent payment receipt email to customer immediately upon recording
+                          </span>
+                        </label>
+                      </div>
+
                       <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-2">
                           <Button
@@ -2692,14 +2805,45 @@ export default function UsagePage() {
               </div>
             </div>
 
-            {returnModalUsage.customerEmail && (
-              <div className="p-2.5 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-800 dark:text-teal-200 text-xs flex items-center gap-2">
-                <Mail className="h-4 w-4 shrink-0 text-teal-500" />
-                <span>
-                  An executive return &amp; restocking receipt will be automatically emailed to <strong>{returnModalUsage.customerEmail}</strong> upon submission.
+            {/* Customer Return Confirmation Email Card */}
+            <div className="p-3.5 rounded-xl border border-teal-200 dark:border-teal-900/50 bg-gradient-to-r from-teal-50/60 to-emerald-50/40 dark:from-teal-950/20 dark:to-emerald-950/10 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-teal-900 dark:text-teal-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-teal-500" />
+                  <span>Customer Equipment Return Receipt Email</span>
+                </label>
+                <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-full border border-teal-500/20">
+                  Automatic Dispatch
                 </span>
               </div>
-            )}
+
+              <div>
+                <input
+                  type="email"
+                  value={returnCustomerEmail}
+                  onChange={(e) => setReturnCustomerEmail(e.target.value)}
+                  placeholder="customer@example.com (Required for sending return receipt)"
+                  className="w-full h-8 px-3 rounded-lg border border-teal-200 dark:border-teal-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendReturnReceiptEmail}
+                  onChange={(e) => setSendReturnReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch equipment return &amp; restocking confirmation email to customer
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes condition check result, remaining deposit balance status, and return reference.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             <div className="space-y-4">
               {returnModalUsage.items.map((item, idx) => {
@@ -2890,14 +3034,45 @@ export default function UsagePage() {
               </div>
             </div>
 
-            {refundModalUsage.customerEmail && (
-              <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2">
-                <Mail className="h-4 w-4 shrink-0 text-emerald-500" />
-                <span>
-                  An executive security deposit refund disbursement receipt will be automatically emailed to <strong>{refundModalUsage.customerEmail}</strong>.
+            {/* Customer Receipt Email Automation Section */}
+            <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 dark:from-indigo-950/20 dark:to-purple-950/10 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Customer Refund Receipt Email (Automatic)</span>
+                </label>
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Resend + Nodemailer Active
                 </span>
               </div>
-            )}
+
+              <div>
+                <input
+                  type="email"
+                  value={refundCustomerEmail}
+                  onChange={(e) => setRefundCustomerEmail(e.target.value)}
+                  placeholder="customer@example.com (Required for sending refund receipt)"
+                  className="w-full h-8 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendRefundReceiptEmail}
+                  onChange={(e) => setSendRefundReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch official refund receipt email to customer upon submission
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes initial deposit, itemized deductions breakdown, net disbursed amount, and payment mode.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             {/* Deductions Section */}
             {(() => {

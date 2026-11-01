@@ -89,6 +89,7 @@ export default function SalesPage() {
 
   const [saleError, setSaleError] = useState('');
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+  const [sendSaleReceiptEmail, setSendSaleReceiptEmail] = useState(true);
 
   // Printable Invoice Modal
   const [activeInvoice, setActiveInvoice] = useState<Sale | null>(null);
@@ -105,6 +106,8 @@ export default function SalesPage() {
   const [emiLedgerError, setEmiLedgerError] = useState('');
   const [isSendingEmiReminder, setIsSendingEmiReminder] = useState(false);
   const [emiReminderFeedback, setEmiReminderFeedback] = useState('');
+  const [emiCustomerEmail, setEmiCustomerEmail] = useState('');
+  const [sendEmiPaymentReceiptEmail, setSendEmiPaymentReceiptEmail] = useState(true);
 
   // Early payoff / bulk settlement state
   const [settleAllRemaining, setSettleAllRemaining] = useState(false);
@@ -499,6 +502,7 @@ export default function SalesPage() {
         notes: notes.trim() || undefined,
         remarks: remarks.trim() || undefined,
         idempotencyKey: `sale-${Date.now()}`,
+        sendReceiptEmail: sendSaleReceiptEmail,
         lineItems: cartItems.map((i) => ({
           product: i.product._id,
           hsnCode: i.hsnCode || (i.product as any).hsnCode || '9202',
@@ -540,6 +544,8 @@ export default function SalesPage() {
     // Look up freshest record in case sale state was updated via Edit
     const freshSale = sales.find((s) => s._id === sale._id) || sale;
     setSelectedSaleForLedger(freshSale);
+    setEmiCustomerEmail(freshSale.customerEmail || '');
+    setSendEmiPaymentReceiptEmail(true);
     setEmiLedgerError('');
     setEmiReminderFeedback('');
     setEmiTransactionRef('');
@@ -594,7 +600,7 @@ export default function SalesPage() {
     setIsRecordingEmiPayment(true);
 
     try {
-      const res = await api.post<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
+      const res = await api.post<{ success: boolean; data?: { sale: Sale; emailSent?: boolean; recipient?: string }; sale?: Sale; emailSent?: boolean; recipient?: string }>(
         `/sales/${selectedSaleForLedger._id}/emi-payments`,
         {
           amount: Math.round(emiPaymentAmount),
@@ -604,16 +610,32 @@ export default function SalesPage() {
           notes: emiPaymentNotes.trim() || undefined,
           earlySettlementDiscount: earlySettlementDiscount > 0 ? Math.round(earlySettlementDiscount) : undefined,
           settleAllRemaining: settleAllRemaining || undefined,
+          customerEmail: emiCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendEmiPaymentReceiptEmail,
         }
       );
 
       const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || emiCustomerEmail || selectedSaleForLedger.customerEmail;
+
       setSelectedSaleForLedger(updated);
       setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
       setEmiTransactionRef('');
       setEmiPaymentNotes('');
       setSettleAllRemaining(false);
       setEarlySettlementDiscount(0);
+      if (emailSent && recipient) {
+        setEmiReminderFeedback(
+          `✅ EMI payment of ${formatCurrency(emiPaymentAmount)} recorded & official receipt email dispatched to ${recipient}!`
+        );
+      } else if (!sendEmiPaymentReceiptEmail) {
+        setEmiReminderFeedback(
+          `EMI payment of ${formatCurrency(emiPaymentAmount)} recorded successfully (receipt email skipped as unchecked).`
+        );
+      } else {
+        setEmiReminderFeedback(`EMI payment of ${formatCurrency(emiPaymentAmount)} recorded successfully.`);
+      }
       fetchSales();
 
       // Recalculate next due installment
@@ -1681,6 +1703,35 @@ export default function SalesPage() {
               </div>
             </div>
 
+            {/* Automatic Invoice Email Dispatch Toggle */}
+            <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 dark:from-indigo-950/20 dark:to-purple-950/10 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Tax Invoice &amp; Receipt Email (Automatic)</span>
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Resend + Nodemailer Active
+                </span>
+              </div>
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendSaleReceiptEmail}
+                  onChange={(e) => setSendSaleReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch official Tax Invoice PDF &amp; payment receipt to customer
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Will be emailed immediately to <strong>{customerEmail || 'the entered customer email address'}</strong> upon checkout.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             {/* In-tab final submission action bar */}
             <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-800">
               <Button
@@ -2158,6 +2209,35 @@ export default function SalesPage() {
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
                     />
                   </div>
+                </div>
+
+                {/* Customer Email & Receipt Dispatch Toggle */}
+                <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Mail className="h-3 w-3 text-amber-500" />
+                      <span>Customer Email for Receipt</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Auto-dispatch ready</span>
+                  </div>
+                  <input
+                    type="email"
+                    value={emiCustomerEmail}
+                    onChange={(e) => setEmiCustomerEmail(e.target.value)}
+                    placeholder="customer@example.com (Required for sending payment receipt)"
+                    className="w-full h-8 px-3 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                  <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={sendEmiPaymentReceiptEmail}
+                      onChange={(e) => setSendEmiPaymentReceiptEmail(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    />
+                    <span className="text-[11px] text-slate-700 dark:text-slate-300 select-none">
+                      Automatically dispatch official EMI installment payment receipt email to customer upon recording
+                    </span>
+                  </label>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
