@@ -45,6 +45,8 @@ import {
   ArrowUpRight,
   ExternalLink,
   Eye,
+  Coins,
+  PackagePlus,
 } from 'lucide-react';
 
 export default function UsagePage() {
@@ -103,13 +105,24 @@ export default function UsagePage() {
   // Submitting ref lock to strictly prevent multi-clicks
   const isSubmittingPaymentRef = React.useRef(false);
 
-  // Return & Inspection Modal
+  // Return & Inspection Modal (Add Again to Inventory)
   const [returnModalUsage, setReturnModalUsage] = useState<InternalUsage | null>(null);
   const [inspectionOutcomes, setInspectionOutcomes] = useState<
     Record<string, { condition: string; outcome: 'OK_TO_STOCK' | 'NEEDS_MAINTENANCE' | 'QUARANTINE_DAMAGED'; notes: string }>
   >({});
   const [returnError, setReturnError] = useState('');
   const [isReturning, setIsReturning] = useState(false);
+
+  // Dedicated Refund Security Deposit Modal
+  const [refundModalUsage, setRefundModalUsage] = useState<InternalUsage | null>(null);
+  const [refundDeductionAmount, setRefundDeductionAmount] = useState<number>(0);
+  const [refundDeductionReason, setRefundDeductionReason] = useState<string>('');
+  const [refundPaymentMethod, setRefundPaymentMethod] = useState<'UPI' | 'BANK_TRANSFER' | 'CASH' | 'CARD'>('UPI');
+  const [refundTransactionRef, setRefundTransactionRef] = useState<string>('');
+  const [refundNotes, setRefundNotes] = useState<string>('');
+  const [isRefundingDeposit, setIsRefundingDeposit] = useState<boolean>(false);
+  const [refundError, setRefundError] = useState<string>('');
+  const [refundFeedback, setRefundFeedback] = useState<string>('');
 
   // Extend Date Modal
   const [extendModalUsage, setExtendModalUsage] = useState<InternalUsage | null>(null);
@@ -521,13 +534,14 @@ export default function UsagePage() {
     setReturnError('');
   };
 
-  const handleReturnSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleReturnSubmit = async (e?: React.FormEvent, openRefundDirectlyAfter: boolean = false) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!returnModalUsage) return;
     setReturnError('');
     setIsReturning(true);
 
     try {
+      const currentUsageToRefund = returnModalUsage;
       const itemsPayload = returnModalUsage.items.map((item, idx) => {
         const insp = inspectionOutcomes[idx] || {
           condition: 'GOOD',
@@ -546,17 +560,87 @@ export default function UsagePage() {
         };
       });
 
-      await api.post(`/usage/${returnModalUsage._id}/return`, {
-        items: itemsPayload,
-        notes: 'Rental inspection processed & equipment returned',
-      });
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage } }>(
+        `/usage/${returnModalUsage._id}/return`,
+        {
+          items: itemsPayload,
+          notes: 'Equipment inspected & returned to active inventory pool',
+        }
+      );
+
+      const returnedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
 
       setReturnModalUsage(null);
-      fetchUsages();
+      await fetchUsages();
+
+      // If user selected to also refund deposit immediately, trigger refund modal
+      if (openRefundDirectlyAfter) {
+        const docForRefund = returnedDoc || currentUsageToRefund;
+        openRefundModal(docForRefund);
+      }
     } catch (err: any) {
-      setReturnError(err.message || 'Failed to process return inspection.');
+      setReturnError(err.message || 'Failed to process return inspection and stock intake.');
     } finally {
       setIsReturning(false);
+    }
+  };
+
+  const openRefundModal = (usage: InternalUsage) => {
+    setRefundModalUsage(usage);
+    setRefundDeductionAmount(0);
+    setRefundDeductionReason('');
+    setRefundPaymentMethod('UPI');
+    setRefundTransactionRef('');
+    setRefundNotes('');
+    setRefundError('');
+    setRefundFeedback('');
+  };
+
+  const handleRefundSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refundModalUsage) return;
+    setRefundError('');
+    setRefundFeedback('');
+    setIsRefundingDeposit(true);
+
+    try {
+      const depositBal = typeof refundModalUsage.depositBalance === 'number'
+        ? refundModalUsage.depositBalance
+        : (refundModalUsage.securityDeposit || 0);
+
+      const netRefundAmount = Math.max(0, depositBal - (refundDeductionAmount || 0));
+
+      if (netRefundAmount > 0 && !refundTransactionRef.trim() && refundPaymentMethod !== 'CASH') {
+        throw new Error('Transaction / UPI reference number is required for non-cash security deposit refund disbursement.');
+      }
+
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage } }>(
+        `/usage/${refundModalUsage._id}/refund-deposit`,
+        {
+          refundAmount: netRefundAmount,
+          deductionAmount: refundDeductionAmount || 0,
+          deductionReason: refundDeductionReason.trim() || undefined,
+          paymentMethod: refundPaymentMethod,
+          transactionRef: refundTransactionRef.trim() || undefined,
+          notes: refundNotes.trim() || undefined,
+        }
+      );
+
+      const updatedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
+      if (updatedDoc && selectedRentalForLedger && selectedRentalForLedger._id === updatedDoc._id) {
+        setSelectedRentalForLedger(updatedDoc);
+      }
+
+      setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed & recorded successfully!`);
+      await fetchUsages();
+      setTimeout(() => {
+        setRefundModalUsage(null);
+        setRefundFeedback('');
+      }, 1200);
+    } catch (err: any) {
+      setRefundError(err.message || 'Failed to process security deposit refund.');
+    } finally {
+      setIsRefundingDeposit(false);
     }
   };
 
@@ -757,21 +841,27 @@ export default function UsagePage() {
 
   // Financial KPIs for Rentals
   const activeRentals = usages.filter((u) => u.status !== 'RETURNED');
-  const totalDepositsHeld = activeRentals.reduce((sum, u) => sum + (u.securityDeposit || 0), 0);
+  const totalDepositsHeld = usages
+    .filter((u) => u.depositRefundStatus !== 'REFUNDED' && (typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0)) > 0)
+    .reduce((sum, u) => sum + (typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0)), 0);
   const totalRentCollected = usages.reduce((sum, u) => sum + (u.totalRentPaid || 0), 0);
   const totalRentPending = activeRentals.reduce((sum, u) => sum + (u.totalRentDue || 0), 0);
 
   // ── Outward Money / Deposit Refunds Calculation ──
-  // Example scenario: Customer deposited ₹5,000; total rent paid/deducted is ₹3,000; remaining deposit balance is ₹2,000 outward refund!
+  // Includes both active rentals with refundable deposits AND returned equipment with refund pending
   const outwardRefundList = React.useMemo(() => {
     return usages
-      .filter((u) => (u.securityDeposit || 0) > 0 && u.status !== 'RETURNED')
+      .filter((u) => u.depositRefundStatus !== 'REFUNDED' && ((u.securityDeposit || 0) > 0 || (u.depositBalance || 0) > 0))
       .map((u) => {
         const deposit = u.securityDeposit || 0;
         let rentPaidOrDeducted = 0;
         let outwardRefundDue = 0;
 
-        if (u.depositMode) {
+        if (u.status === 'RETURNED' || u.depositRefundStatus === 'REFUND_PENDING') {
+          // Physical instrument already back in inventory; deposit held awaiting refund disbursement
+          outwardRefundDue = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+          rentPaidOrDeducted = Math.max(0, deposit - outwardRefundDue);
+        } else if (u.depositMode) {
           // Deposit deduction mode: rent is deducted from the deposit
           const balance =
             typeof u.depositBalance === 'number'
@@ -784,7 +874,8 @@ export default function UsagePage() {
           // If any rent installments are unpaid (totalRentDue), that is offset against deposit upon return.
           rentPaidOrDeducted = u.totalRentPaid || 0;
           const rentDue = u.totalRentDue || 0;
-          outwardRefundDue = Math.max(0, deposit - rentDue);
+          const balance = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+          outwardRefundDue = Math.max(0, balance - rentDue);
         }
 
         const firstItem = u.items && u.items[0];
@@ -1028,14 +1119,19 @@ export default function UsagePage() {
 
                     const deposit = u.securityDeposit || 0;
                     let outwardRefund = 0;
-                    if (u.depositMode) {
+                    if (u.depositRefundStatus === 'REFUNDED') {
+                      outwardRefund = 0;
+                    } else if (u.status === 'RETURNED' || u.depositRefundStatus === 'REFUND_PENDING') {
+                      outwardRefund = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+                    } else if (u.depositMode) {
                       const balance =
                         typeof u.depositBalance === 'number'
                           ? u.depositBalance
                           : Math.max(0, deposit - paid);
                       outwardRefund = Math.max(0, balance);
                     } else {
-                      outwardRefund = Math.max(0, deposit - due);
+                      const balance = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+                      outwardRefund = Math.max(0, balance - due);
                     }
 
                     const daysRemaining = Math.ceil(
@@ -1151,6 +1247,15 @@ export default function UsagePage() {
                             </div>
                             <div className="text-[11px] flex items-center justify-between gap-1 text-teal-600 dark:text-teal-400 font-medium">
                               <span>Refund: <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong></span>
+                              {u.depositRefundStatus === 'REFUNDED' ? (
+                                <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                                  Refunded
+                                </span>
+                              ) : isReturned && (u.depositBalance ?? 0) > 0 ? (
+                                <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.2 rounded animate-pulse">
+                                  Pending
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </td>
@@ -1182,12 +1287,31 @@ export default function UsagePage() {
 
                         {/* 7. Status */}
                         <td className="py-2 px-3 whitespace-nowrap align-middle">
-                          <Badge
-                            variant={isReturned ? 'success' : isOverdue ? 'danger' : 'info'}
-                            className="text-[10px] px-2 py-0.5"
-                          >
-                            {isReturned ? 'RETURNED' : isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
-                          </Badge>
+                          {isReturned ? (
+                            (u.depositBalance ?? 0) > 0 && u.depositRefundStatus !== 'REFUNDED' ? (
+                              <div className="space-y-1">
+                                <Badge variant="warning" className="text-[10px] px-2 py-0.5 flex items-center gap-1 w-fit bg-amber-500/15 text-amber-500 border border-amber-500/30 font-bold">
+                                  <PackagePlus className="h-3 w-3" />
+                                  <span>IN STOCK (REFUND PENDING)</span>
+                                </Badge>
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <Coins className="h-3 w-3" />
+                                  <span>Pending: {formatCurrency(u.depositBalance || 0)}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <Badge variant="success" className="text-[10px] px-2 py-0.5">
+                                RETURNED & SETTLED
+                              </Badge>
+                            )
+                          ) : (
+                            <Badge
+                              variant={isOverdue ? 'danger' : 'info'}
+                              className="text-[10px] px-2 py-0.5"
+                            >
+                              {isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
+                            </Badge>
+                          )}
                           {u.depositMode && u.depositExhausted && (
                             <div className="mt-0.5">
                               <span
@@ -1201,28 +1325,62 @@ export default function UsagePage() {
                           )}
                         </td>
 
-                        {/* 8. Compact Actions Bar */}
+                        {/* 8. Actions Bar — Two Separate Return & Refund Operations */}
                         <td className="py-2 px-3 text-right whitespace-nowrap align-middle">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Button 1: Add Again to Inventory (Return Inspection) */}
+                            {!isReturned && canIssueUsage() && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openReturnModal(u)}
+                                className="h-7 px-2 text-[11px] font-bold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/40 hover:bg-teal-500/10 hover:border-teal-500 shadow-xs cursor-pointer"
+                                title="1. Inspect equipment condition & add again to active inventory"
+                              >
+                                <PackagePlus className="h-3.5 w-3.5" />
+                                <span>Add to Stock</span>
+                              </Button>
+                            )}
+
+                            {/* Button 2: Refund Deposit (Separate Accounting Process) */}
+                            {((u.depositBalance ?? 0) > 0 || (u.securityDeposit ?? 0) > 0) &&
+                              u.depositRefundStatus !== 'REFUNDED' &&
+                              canIssueUsage() && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openRefundModal(u)}
+                                  className={`h-7 px-2 text-[11px] font-bold gap-1 shadow-xs cursor-pointer ${
+                                    isReturned
+                                      ? 'bg-amber-500/15 text-amber-500 border-amber-500/50 hover:bg-amber-500/25'
+                                      : 'text-indigo-400 border-indigo-500/40 hover:bg-indigo-500/10 hover:border-indigo-500'
+                                  }`}
+                                  title={`2. Refund security deposit (${formatCurrency(typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0))} available)`}
+                                >
+                                  <Coins className="h-3.5 w-3.5" />
+                                  <span>Refund Deposit</span>
+                                </Button>
+                              )}
+
                             {/* Track Rent & Monthly Ledger button */}
                             <Button
                               size="sm"
                               variant="default"
                               onClick={() => openLedgerModal(u)}
-                              className="h-7 px-2.5 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm"
+                              className="h-7 px-2.5 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm cursor-pointer"
                               title="Track Monthly Rent Payments & Ledger"
                             >
                               <CreditCard className="h-3 w-3" />
-                              <span>Track Rent</span>
+                              <span>Ledger</span>
                             </Button>
 
-                            {/* Secondary Actions as sleek, compact icon buttons with clear tooltips */}
+                            {/* Secondary Actions as compact icon buttons with clear tooltips */}
                             {!isReturned && canIssueUsage() && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => openEditAgreementModal(u)}
-                                className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                                 title="Edit Rental Agreement Terms & Tenure"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
@@ -1234,7 +1392,7 @@ export default function UsagePage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleSendReminder(u)}
-                                className="h-7 w-7 p-0 text-indigo-400 hover:text-indigo-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                className="h-7 w-7 p-0 text-indigo-400 hover:text-indigo-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                                 title="Send Email Due Reminder"
                               >
                                 <Mail className="h-3.5 w-3.5" />
@@ -1242,27 +1400,15 @@ export default function UsagePage() {
                             )}
 
                             {!isReturned && canIssueUsage() && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openReturnModal(u)}
-                                  className="h-7 w-7 p-0 text-teal-400 hover:text-teal-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                  title="Inspect & Process Instrument Return"
-                                >
-                                  <RotateCcw className="h-3.5 w-3.5" />
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openExtendModal(u)}
-                                  className="h-7 w-7 p-0 text-slate-400 hover:text-white border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                  title="Extend Duration / Renewal Deadline"
-                                >
-                                  <CalendarPlus className="h-3.5 w-3.5" />
-                                </Button>
-                              </>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openExtendModal(u)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-white border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                title="Extend Duration / Renewal Deadline"
+                              >
+                                <CalendarPlus className="h-3.5 w-3.5" />
+                              </Button>
                             )}
                           </div>
                         </td>
@@ -1345,7 +1491,44 @@ export default function UsagePage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {selectedRentalForLedger.status !== 'RETURNED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const agreement = selectedRentalForLedger;
+                          setSelectedRentalForLedger(null);
+                          openReturnModal(agreement);
+                        }}
+                        className="h-8 text-xs font-bold gap-1.5 border-teal-500/40 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 cursor-pointer"
+                        title="Add equipment back to active inventory"
+                      >
+                        <PackagePlus className="h-3.5 w-3.5" />
+                        <span>Add to Stock</span>
+                      </Button>
+                    )}
+
+                    {((selectedRentalForLedger.depositBalance ?? 0) > 0 || (selectedRentalForLedger.securityDeposit ?? 0) > 0) &&
+                      selectedRentalForLedger.depositRefundStatus !== 'REFUNDED' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const agreement = selectedRentalForLedger;
+                            setSelectedRentalForLedger(null);
+                            openRefundModal(agreement);
+                          }}
+                          className="h-8 text-xs font-bold gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 cursor-pointer"
+                          title="Refund customer security deposit"
+                        >
+                          <Coins className="h-3.5 w-3.5" />
+                          <span>Refund Deposit</span>
+                        </Button>
+                      )}
+
                     <Button
                       type="button"
                       size="sm"
@@ -1355,7 +1538,7 @@ export default function UsagePage() {
                         setSelectedRentalForLedger(null);
                         openEditAgreementModal(agreement);
                       }}
-                      className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                     >
                       <Pencil className="h-3.5 w-3.5 text-indigo-400" />
                       <span>Edit Agreement</span>
@@ -1388,6 +1571,8 @@ export default function UsagePage() {
                         ? '⚠️ Exhausted — continuation mode'
                         : (selectedRentalForLedger.depositBalance || 0) < (selectedRentalForLedger.monthlyRent || 1500)
                         ? '⚠️ Low balance — continuation needed'
+                        : selectedRentalForLedger.depositRefundStatus === 'REFUNDED'
+                        ? 'Refund disbursed & closed'
                         : 'Available for deductions'}
                     </span>
                   </div>
@@ -1419,7 +1604,13 @@ export default function UsagePage() {
                     <span className="font-bold text-indigo-400 text-sm">
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Disbursed upon return</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      {selectedRentalForLedger.depositRefundStatus === 'REFUNDED'
+                        ? `✅ Refunded ${formatCurrency(selectedRentalForLedger.depositRefundedAmount || 0)}`
+                        : (selectedRentalForLedger.depositBalance ?? selectedRentalForLedger.securityDeposit ?? 0) > 0
+                        ? `Refundable: ${formatCurrency(selectedRentalForLedger.depositBalance ?? selectedRentalForLedger.securityDeposit ?? 0)}`
+                        : 'Settled to ₹0'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-500 block">Agreed Monthly Rent</span>
@@ -2108,20 +2299,58 @@ export default function UsagePage() {
               </div>
             )}
 
-            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  openExtendModal(selectedRentalForLedger);
-                }}
-                className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold"
-              >
-                <CalendarPlus className="h-3.5 w-3.5" />
-                <span>Extend Return Deadline</span>
-              </Button>
-              <Button variant="outline" onClick={() => setSelectedRentalForLedger(null)}>
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    openExtendModal(selectedRentalForLedger);
+                  }}
+                  className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold cursor-pointer text-xs"
+                >
+                  <CalendarPlus className="h-3.5 w-3.5" />
+                  <span>Extend Return Deadline</span>
+                </Button>
+
+                {selectedRentalForLedger.status !== 'RETURNED' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const agreement = selectedRentalForLedger;
+                      setSelectedRentalForLedger(null);
+                      openReturnModal(agreement);
+                    }}
+                    className="gap-1.5 text-teal-600 dark:text-teal-400 border-teal-500/30 font-bold hover:bg-teal-500/10 cursor-pointer text-xs"
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    <span>Add to Stock</span>
+                  </Button>
+                )}
+
+                {((selectedRentalForLedger.depositBalance ?? 0) > 0 || (selectedRentalForLedger.securityDeposit ?? 0) > 0) &&
+                  selectedRentalForLedger.depositRefundStatus !== 'REFUNDED' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const agreement = selectedRentalForLedger;
+                        setSelectedRentalForLedger(null);
+                        openRefundModal(agreement);
+                      }}
+                      className="gap-1.5 text-amber-500 border-amber-500/40 font-bold hover:bg-amber-500/10 cursor-pointer text-xs"
+                    >
+                      <Coins className="h-3.5 w-3.5" />
+                      <span>Refund Deposit</span>
+                    </Button>
+                  )}
+              </div>
+
+              <Button variant="outline" size="sm" onClick={() => setSelectedRentalForLedger(null)}>
                 Close Ledger
               </Button>
             </div>
@@ -2352,31 +2581,64 @@ export default function UsagePage() {
         )}
       </Modal>
 
-      {/* Return & Inspection Modal */}
+      {/* 1. Return Inspection Modal — Add Equipment to Inventory */}
       <Modal
         isOpen={!!returnModalUsage}
         onClose={() => setReturnModalUsage(null)}
-        title={`Return Inspection — ${returnModalUsage?.issueReference}`}
-        description="Inspect physical condition of returned equipment, bundled accessories, and process deposit release."
+        title={`Return Equipment — Add to Inventory (${returnModalUsage?.issueReference || ''})`}
+        description="Inspect physical equipment condition, verify bundled accessories, and immediately restore stock to active inventory. Security deposit refund can be disbursed separately."
         maxWidth="2xl"
       >
         {returnModalUsage && (
-          <form onSubmit={handleReturnSubmit} className="space-y-5">
+          <form onSubmit={(e) => handleReturnSubmit(e, false)} className="space-y-5">
             {returnError && (
               <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
                 {returnError}
               </div>
             )}
 
-            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs">
-              <span className="text-slate-500">Rented to:</span>{' '}
-              <strong className="text-slate-900 dark:text-white">
-                {returnModalUsage.assignedPerson}
-              </strong>{' '}
-              | Deposit to reconcile:{' '}
-              <strong className="text-indigo-400">
-                {formatCurrency(returnModalUsage.securityDeposit || 0)}
-              </strong>
+            {/* Explanatory Dual-Process Banner */}
+            <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-xs flex items-start gap-2.5">
+              <PackagePlus className="h-5 w-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-teal-900 dark:text-teal-200">
+                  Step 1: Physical Equipment Intake &amp; Inventory Restoration
+                </div>
+                <p className="text-teal-900/80 dark:text-teal-200/80 leading-relaxed text-[11px]">
+                  All inspected items below will be restored to your active inventory pool (Available / Maintenance / Quarantine).
+                  The customer&apos;s security deposit of{' '}
+                  <strong className="font-mono text-indigo-500 dark:text-indigo-400">
+                    {formatCurrency(
+                      typeof returnModalUsage.depositBalance === 'number'
+                        ? returnModalUsage.depositBalance
+                        : returnModalUsage.securityDeposit || 0
+                    )}
+                  </strong>{' '}
+                  will be placed in <strong className="text-amber-500">Refund Pending</strong> status, allowing you to refund it whenever your internal finance processes are ready.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs flex flex-wrap justify-between items-center gap-2">
+              <div>
+                <span className="text-slate-500">Renter:</span>{' '}
+                <strong className="text-slate-900 dark:text-white">
+                  {returnModalUsage.assignedPerson}
+                </strong>
+                {returnModalUsage.assignedPersonContact && (
+                  <span className="text-slate-400 ml-1">({returnModalUsage.assignedPersonContact})</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-500">Pending Security Deposit:</span>{' '}
+                <strong className="text-indigo-400 font-mono font-bold">
+                  {formatCurrency(
+                    typeof returnModalUsage.depositBalance === 'number'
+                      ? returnModalUsage.depositBalance
+                      : returnModalUsage.securityDeposit || 0
+                  )}
+                </strong>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -2464,12 +2726,235 @@ export default function UsagePage() {
               })}
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="outline" onClick={() => setReturnModalUsage(null)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="default" isLoading={isReturning} className="font-bold">
-                Confirm Return & Reconcile Deposit
+              <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={(e) => handleReturnSubmit(e, true)}
+                  isLoading={isReturning}
+                  className="font-semibold gap-1.5 text-amber-500 border-amber-500/40 hover:bg-amber-500/10 cursor-pointer text-xs"
+                  title="Add to inventory and open Refund Deposit modal immediately"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  <span>Add &amp; Refund Deposit Now</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={(e) => handleReturnSubmit(e, false)}
+                  isLoading={isReturning}
+                  className="font-bold gap-1.5 bg-teal-600 hover:bg-teal-700 text-white cursor-pointer shadow-sm text-xs"
+                  title="Add items to inventory and leave deposit pending for later disbursement"
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  <span>Add Again to Inventory (Refund Later)</span>
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* 2. Dedicated Refund Security Deposit Modal */}
+      <Modal
+        isOpen={!!refundModalUsage}
+        onClose={() => setRefundModalUsage(null)}
+        title={`Refund Security Deposit — ${refundModalUsage?.issueReference || ''}`}
+        description="Process customer security deposit disbursement separately from physical inventory intake."
+        maxWidth="lg"
+      >
+        {refundModalUsage && (
+          <form onSubmit={handleRefundSubmit} className="space-y-4 text-xs">
+            {refundError && (
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{refundError}</span>
+              </div>
+            )}
+            {refundFeedback && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs font-semibold text-emerald-600 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{refundFeedback}</span>
+              </div>
+            )}
+
+            {/* Customer & Agreement Context */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white text-sm">
+                    {refundModalUsage.assignedPerson}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {refundModalUsage.assignedPersonContact && `Phone: ${refundModalUsage.assignedPersonContact} • `}
+                    Agreement: <span className="font-mono font-bold text-amber-500">{refundModalUsage.issueReference}</span>
+                  </div>
+                </div>
+                <Badge
+                  variant={refundModalUsage.status === 'RETURNED' ? 'success' : 'warning'}
+                  className="text-[10px] px-2 py-0.5 shrink-0"
+                >
+                  {refundModalUsage.status === 'RETURNED' ? '✅ Equipment in Stock' : '⚠️ Equipment With Customer'}
+                </Badge>
+              </div>
+
+              {/* Financial Snapshot */}
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-center">
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Deposit</span>
+                  <span className="font-mono font-bold text-indigo-400 text-xs">
+                    {formatCurrency(refundModalUsage.securityDeposit || 0)}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Available Deposit</span>
+                  <span className="font-mono font-bold text-amber-500 text-xs">
+                    {formatCurrency(
+                      typeof refundModalUsage.depositBalance === 'number'
+                        ? refundModalUsage.depositBalance
+                        : refundModalUsage.securityDeposit || 0
+                    )}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Unpaid Rent Due</span>
+                  <span className={`font-mono font-bold text-xs ${(refundModalUsage.totalRentDue || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                    {formatCurrency(refundModalUsage.totalRentDue || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Deductions Section */}
+            {(() => {
+              const depositBal =
+                typeof refundModalUsage.depositBalance === 'number'
+                  ? refundModalUsage.depositBalance
+                  : refundModalUsage.securityDeposit || 0;
+              const netDisbursement = Math.max(0, depositBal - (refundDeductionAmount || 0));
+
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Deduction from Deposit (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={depositBal}
+                        value={refundDeductionAmount}
+                        onChange={(e) =>
+                          setRefundDeductionAmount(
+                            Math.min(depositBal, Math.max(0, parseFloat(e.target.value) || 0))
+                          )
+                        }
+                        placeholder="0"
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-right font-mono font-bold text-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Deduction Reason (if any)
+                      </label>
+                      <input
+                        type="text"
+                        value={refundDeductionReason}
+                        onChange={(e) => setRefundDeductionReason(e.target.value)}
+                        placeholder="e.g. Scratch repair, missing strap, late fee"
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Net Disbursed Highlight */}
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs block">
+                        Net Refund Disbursed to Customer
+                      </span>
+                      <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                        Remaining security deposit will be settled to ₹0.00
+                      </span>
+                    </div>
+                    <span className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(netDisbursement)}
+                    </span>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Disbursement Payment Mode *
+                      </label>
+                      <select
+                        value={refundPaymentMethod}
+                        onChange={(e) => setRefundPaymentMethod(e.target.value as any)}
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                      >
+                        <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
+                        <option value="BANK_TRANSFER">Bank Transfer (NEFT / IMPS / RTGS)</option>
+                        <option value="CASH">Cash</option>
+                        <option value="CARD">Card Reversal</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Transaction / UPI Reference No. {refundPaymentMethod !== 'CASH' && '*'}
+                      </label>
+                      <input
+                        type="text"
+                        value={refundTransactionRef}
+                        onChange={(e) => setRefundTransactionRef(e.target.value)}
+                        placeholder={
+                          refundPaymentMethod === 'CASH'
+                            ? 'Optional (e.g. Cash Voucher #)'
+                            : 'e.g. UPI Ref / UTR / Cheque No.'
+                        }
+                        required={refundPaymentMethod !== 'CASH' && netDisbursement > 0}
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                      Internal Refund Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={refundNotes}
+                      onChange={(e) => setRefundNotes(e.target.value)}
+                      placeholder="e.g. Returned in good condition, security deposit released via Google Pay"
+                      className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setRefundModalUsage(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                isLoading={isRefundingDeposit}
+                className="font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer"
+              >
+                <Coins className="h-4 w-4" />
+                <span>Confirm &amp; Disburse Refund</span>
               </Button>
             </div>
           </form>
@@ -3152,7 +3637,7 @@ export default function UsagePage() {
                       Rented on {formatDate(item.issueDate)}
                     </span>
 
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         type="button"
                         size="sm"
@@ -3167,18 +3652,34 @@ export default function UsagePage() {
                         <span>View Ledger</span>
                       </Button>
 
+                      {item.usage.status !== 'RETURNED' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsOutwardModalOpen(false);
+                            openReturnModal(item.usage);
+                          }}
+                          className="h-7 text-xs font-bold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/40 hover:bg-teal-500/10"
+                        >
+                          <PackagePlus className="h-3.5 w-3.5" />
+                          <span>1. Add to Inventory</span>
+                        </Button>
+                      )}
+
                       <Button
                         type="button"
                         size="sm"
                         variant="default"
                         onClick={() => {
                           setIsOutwardModalOpen(false);
-                          openReturnModal(item.usage);
+                          openRefundModal(item.usage);
                         }}
-                        className="h-7 text-xs font-bold gap-1 bg-teal-600 hover:bg-teal-700 text-white"
+                        className="h-7 text-xs font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer shadow-xs"
                       >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        <span>Process Return &amp; Refund</span>
+                        <Coins className="h-3.5 w-3.5" />
+                        <span>2. Refund Deposit</span>
                       </Button>
                     </div>
                   </div>

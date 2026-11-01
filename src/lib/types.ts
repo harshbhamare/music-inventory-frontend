@@ -270,7 +270,7 @@ export interface RentalReminder {
 
 export interface RentalPaymentLog {
   _id?: string;
-  paymentType: 'SECURITY_DEPOSIT' | 'RENTAL_PAYMENT' | 'DEPOSIT_DEDUCTION';
+  paymentType: 'SECURITY_DEPOSIT' | 'RENTAL_PAYMENT' | 'DEPOSIT_DEDUCTION' | 'DEPOSIT_REFUND' | 'MONTHLY_RENT' | 'BUYOUT';
   amount: number;
   paymentMethod: string;
   transactionRef: string;
@@ -320,6 +320,15 @@ export interface InternalUsage {
   depositBalance?: number;
   depositExhausted?: boolean;
   depositDeductions?: DepositDeduction[];
+  depositRefundStatus?: 'HELD' | 'REFUND_PENDING' | 'REFUNDED';
+  depositRefundedAmount?: number;
+  depositRefundedAt?: string;
+  depositRefundMethod?: string;
+  depositRefundTxnRef?: string;
+  depositRefundNotes?: string;
+  depositRefundDeductionAmount?: number;
+  depositRefundDeductionReason?: string;
+  depositRefundProcessedBy?: User | string;
   continuationStartedAt?: string;
   monthlyRent?: number;
   includedAccessories?: string[];
