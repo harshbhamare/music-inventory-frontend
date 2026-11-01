@@ -28,7 +28,29 @@ import {
   AlertCircle,
   FileText,
   BadgeCheck,
+  Zap,
+  Server,
 } from 'lucide-react';
+
+interface EmailEngineStatus {
+  activeEngine: 'RESEND' | 'NODEMAILER' | 'SIMULATED';
+  resend: {
+    configured: boolean;
+    apiKeyMasked: string | null;
+    dailyQuota: number;
+    usedToday: number;
+    remainingToday: number;
+    quotaExhausted: boolean;
+    exhaustedReason?: string;
+    lastFailoverAt?: string;
+  };
+  nodemailer: {
+    configured: boolean;
+    transportType: string;
+    host: string;
+    userMasked: string | null;
+  };
+}
 
 interface SystemInfo {
   counts: {
@@ -56,6 +78,7 @@ export default function SettingsPage() {
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [emailStatus, setEmailStatus] = useState<EmailEngineStatus | null>(null);
 
   // Form states - Organization & Store Details
   const [companyName, setCompanyName] = useState('');
@@ -79,11 +102,13 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const [setRes, sysRes] = await Promise.all([
+      const [setRes, sysRes, emailRes] = await Promise.all([
         api.get<{ setting: any; defaultLocation?: any }>('/meta/settings'),
         api.get<SystemInfo>('/meta/system-info').catch(() => null),
+        api.get<EmailEngineStatus>('/reports/email-status').catch(() => null),
       ]);
 
+      if (emailRes) setEmailStatus(emailRes);
       const s = setRes?.setting;
       const loc = setRes?.defaultLocation;
 
@@ -167,19 +192,30 @@ export default function SettingsPage() {
     setIsSendingTestEmail(true);
     setTestEmailResult(null);
     try {
-      const res = await api.post<{ success: boolean; message?: string }>('/reports/send-email-report', {
+      const res = await api.post<{ success: boolean; message?: string; data?: any }>('/reports/email-test', {
         recipientEmail: testEmailRecipient.trim(),
-        reportType: 'DAILY_STOCK_SUMMARY',
-        notes: 'Verification test email sent from System Settings to validate executive HTML email formatting and delivery.',
       });
+      const provider = res?.data?.provider || 'RESEND';
+      const failoverFrom = res?.data?.failoverFrom;
+      const engineNote = failoverFrom
+        ? `Delivered via Nodemailer SMTP (Auto-Failover from Resend: ${res?.data?.failoverReason || 'Quota reached'})`
+        : provider === 'RESEND'
+        ? `Delivered via Resend API (Primary Engine)`
+        : provider === 'NODEMAILER'
+        ? `Delivered via Nodemailer SMTP`
+        : `Delivered via Simulated Engine`;
+
       setTestEmailResult({
         success: true,
-        message: `✅ Executive test notification successfully dispatched to ${testEmailRecipient.trim()}! Please check your inbox.`,
+        message: `✅ Test email successfully dispatched to ${testEmailRecipient.trim()}! [${engineNote}]`,
       });
+
+      // Refresh live email status
+      api.get<EmailEngineStatus>('/reports/email-status').then((s) => s && setEmailStatus(s)).catch(() => {});
     } catch (err: any) {
       setTestEmailResult({
         success: false,
-        message: `❌ Delivery failed: ${err.message || 'Please verify SMTP credentials in backend environment.'}`,
+        message: `❌ Delivery failed: ${err.message || 'Please verify email configuration in backend environment.'}`,
       });
     } finally {
       setIsSendingTestEmail(false);
@@ -253,6 +289,92 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="pt-5 space-y-6">
+          {/* Dual-Engine Architecture Status Bar */}
+          <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+                <span className="font-extrabold text-xs uppercase tracking-wider text-slate-900 dark:text-white">
+                  Dual-Engine Email Router Architecture
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  Primary: Resend API
+                </span>
+                <span className="text-slate-400 text-xs">→</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  Auto-Failover: Nodemailer SMTP
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {/* Resend Engine Status Card */}
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Resend API (Primary)</span>
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    emailStatus?.resend.quotaExhausted
+                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                      : emailStatus?.resend.configured
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                  }`}>
+                    {emailStatus?.resend.quotaExhausted
+                      ? 'Daily Limit Reached'
+                      : emailStatus?.resend.configured
+                      ? 'Active & Fast'
+                      : 'Ready for API Key'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Daily Free Quota: <strong>{emailStatus?.resend.usedToday ?? 0} / {emailStatus?.resend.dailyQuota ?? 100}</strong> emails used today
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      (emailStatus?.resend.usedToday ?? 0) >= (emailStatus?.resend.dailyQuota ?? 100)
+                        ? 'bg-rose-500'
+                        : 'bg-emerald-500'
+                    }`}
+                    style={{
+                      width: `${Math.min(100, (((emailStatus?.resend.usedToday ?? 0) / (emailStatus?.resend.dailyQuota ?? 100)) * 100))}%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Nodemailer Failover Card */}
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Server className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Nodemailer SMTP (Failover)</span>
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    emailStatus?.activeEngine === 'NODEMAILER'
+                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                      : emailStatus?.nodemailer.configured
+                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                  }`}>
+                    {emailStatus?.activeEngine === 'NODEMAILER'
+                      ? 'Active Engine'
+                      : emailStatus?.nodemailer.configured
+                      ? 'Standby Ready'
+                      : 'Configured via SMTP'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Auto-switch guarantee: Activates automatically when the 100 free Resend daily emails are exhausted or rate limited.
+                </div>
+              </div>
+            </div>
+          </div>
           {/* Notification Channels Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
             {/* 1. Purchase Tax Invoice */}
