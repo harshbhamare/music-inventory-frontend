@@ -47,6 +47,7 @@ import {
   Eye,
   Coins,
   PackagePlus,
+  Receipt,
 } from 'lucide-react';
 
 export default function UsagePage() {
@@ -517,6 +518,30 @@ export default function UsagePage() {
       alert(err.message || 'Failed to send reminder.');
     } finally {
       setIsSendingReminder(false);
+    }
+  };
+
+  const handleResendReturnConfirmation = async (usage: InternalUsage) => {
+    try {
+      const res = await api.post<{ success: boolean; message: string; recipient: string }>(
+        `/usage/${usage._id}/send-return-confirmation`,
+        {}
+      );
+      alert(res.message || `Equipment return confirmation email dispatched to ${res.recipient}!`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to dispatch return confirmation email.');
+    }
+  };
+
+  const handleResendRefundReceipt = async (usage: InternalUsage) => {
+    try {
+      const res = await api.post<{ success: boolean; message: string; recipient: string }>(
+        `/usage/${usage._id}/send-refund-receipt`,
+        {}
+      );
+      alert(res.message || `Deposit refund receipt email dispatched to ${res.recipient}!`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to dispatch deposit refund receipt email.');
     }
   };
 
@@ -1408,6 +1433,32 @@ export default function UsagePage() {
                                 title="Extend Duration / Renewal Deadline"
                               >
                                 <CalendarPlus className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
+                            {isReturned && u.customerEmail && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResendReturnConfirmation(u)}
+                                className="h-7 px-2 text-[11px] font-semibold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/30 hover:bg-teal-500/10 cursor-pointer"
+                                title={`Resend Equipment Return & Restocking Receipt to ${u.customerEmail}`}
+                              >
+                                <Mail className="h-3 w-3" />
+                                <span>Return Mail</span>
+                              </Button>
+                            )}
+
+                            {u.depositRefundStatus === 'REFUNDED' && u.customerEmail && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResendRefundReceipt(u)}
+                                className="h-7 px-2 text-[11px] font-semibold gap-1 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
+                                title={`Resend Security Deposit Refund Receipt to ${u.customerEmail}`}
+                              >
+                                <Receipt className="h-3 w-3" />
+                                <span>Refund Mail</span>
                               </Button>
                             )}
                           </div>
@@ -2641,6 +2692,15 @@ export default function UsagePage() {
               </div>
             </div>
 
+            {returnModalUsage.customerEmail && (
+              <div className="p-2.5 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-800 dark:text-teal-200 text-xs flex items-center gap-2">
+                <Mail className="h-4 w-4 shrink-0 text-teal-500" />
+                <span>
+                  An executive return &amp; restocking receipt will be automatically emailed to <strong>{returnModalUsage.customerEmail}</strong> upon submission.
+                </span>
+              </div>
+            )}
+
             <div className="space-y-4">
               {returnModalUsage.items.map((item, idx) => {
                 const insp = inspectionOutcomes[idx] || {
@@ -2829,6 +2889,15 @@ export default function UsagePage() {
                 </div>
               </div>
             </div>
+
+            {refundModalUsage.customerEmail && (
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2">
+                <Mail className="h-4 w-4 shrink-0 text-emerald-500" />
+                <span>
+                  An executive security deposit refund disbursement receipt will be automatically emailed to <strong>{refundModalUsage.customerEmail}</strong>.
+                </span>
+              </div>
+            )}
 
             {/* Deductions Section */}
             {(() => {

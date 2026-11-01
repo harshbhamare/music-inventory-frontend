@@ -18,6 +18,16 @@ import {
   Building2,
   Receipt,
   FileSpreadsheet,
+  Mail,
+  CheckCircle2,
+  Send,
+  Sparkles,
+  ShieldCheck,
+  ArrowRight,
+  RefreshCw,
+  AlertCircle,
+  FileText,
+  BadgeCheck,
 } from 'lucide-react';
 
 interface SystemInfo {
@@ -41,6 +51,11 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Customer Email Notification Test State
+  const [testEmailRecipient, setTestEmailRecipient] = useState('');
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Form states - Organization & Store Details
   const [companyName, setCompanyName] = useState('');
@@ -143,6 +158,34 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSendTestEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+      setTestEmailResult({ success: false, message: 'Please enter a valid recipient email address (e.g. yourname@domain.com).' });
+      return;
+    }
+    setIsSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await api.post<{ success: boolean; message?: string }>('/reports/send-email-report', {
+        recipientEmail: testEmailRecipient.trim(),
+        reportType: 'DAILY_STOCK_SUMMARY',
+        notes: 'Verification test email sent from System Settings to validate executive HTML email formatting and delivery.',
+      });
+      setTestEmailResult({
+        success: true,
+        message: `✅ Executive test notification successfully dispatched to ${testEmailRecipient.trim()}! Please check your inbox.`,
+      });
+    } catch (err: any) {
+      setTestEmailResult({
+        success: false,
+        message: `❌ Delivery failed: ${err.message || 'Please verify SMTP credentials in backend environment.'}`,
+      });
+    } finally {
+      setIsSendingTestEmail(false);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
       <div>
@@ -187,6 +230,206 @@ export default function SettingsPage() {
 
       {/* Bulk Product Catalog Excel Importer (Available to BOTH Superadmin & Manager) */}
       <ProductExcelImporter />
+
+      {/* Customer Automated Email Notifications & System Dispatch (Available to BOTH Superadmin & Manager) */}
+      <Card className="shadow-sm border-slate-200 dark:border-slate-800 overflow-hidden">
+        <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80 bg-gradient-to-r from-slate-50 via-amber-500/5 to-slate-50 dark:from-slate-900 dark:via-amber-500/10 dark:to-slate-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2.5 text-slate-900 dark:text-white">
+              <div className="h-8 w-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                <Mail className="h-4 w-4" />
+              </div>
+              <div>
+                <span className="font-bold">Customer Automated Email Communication Suite</span>
+                <div className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
+                  Executive, branded customer emails dispatched automatically across all sales, rentals, returns, and payment milestones.
+                </div>
+              </div>
+            </CardTitle>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 self-start sm:self-auto">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>All 8 Channels Active</span>
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5 space-y-6">
+          {/* Notification Channels Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+            {/* 1. Purchase Tax Invoice */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Receipt className="h-4 w-4 text-amber-500" />
+                  <span>Product Purchase Receipt &amp; Tax Invoice</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  Instant POS
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Dispatched immediately upon completed sale. Features official GST invoice table, serialized item IDs, congratulatory note, and attached PDF tax invoice.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated on POS checkout or manual resend</span>
+              </div>
+            </div>
+
+            {/* 2. Monthly EMI Payment Receipt */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-emerald-500" />
+                  <span>Monthly EMI Payment Receipt</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Congratulatory
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Warm congratulatory receipt upon EMI payment with principal/interest breakdown, updated ledger balance, and celebratory payoff badge when loan is 100% paid off.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated on EMI installment settlement</span>
+              </div>
+            </div>
+
+            {/* 3. Stopped Rent & Equipment Return */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-teal-500" />
+                  <span>Stopped Rent &amp; Equipment Return Receipt</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                  Restocking
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Official intake confirmation when customer returns rented gear. Shows inspection condition rating (MINT/GOOD/FAIR), safe return acknowledgment, and deposit balance status.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated on return inspection &amp; inventory intake</span>
+              </div>
+            </div>
+
+            {/* 4. Security Deposit Refund Receipt */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span>Security Deposit Refund Disbursement</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Accounting Receipt
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Transparent financial receipt detailing initial deposit, itemized deductions (if any), net refunded amount, payout mode (UPI/Bank/Cash), and reference transaction number.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated on separate deposit refund disbursement</span>
+              </div>
+            </div>
+
+            {/* 5. Rent Auto-Deduction Notice */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-indigo-500" />
+                  <span>Rent Auto-Deduction Notice (from Deposit)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  Auto-Deduct
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Polite automated notification whenever monthly rent is deducted from the customer's retained security deposit balance, showing the deducted amount and remaining reserve.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated when rent is deducted from deposit</span>
+              </div>
+            </div>
+
+            {/* 6. Rental Agreement Welcome Pack */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-amber-500/40 transition-colors space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <span>Rental Agreement Activation &amp; Welcome</span>
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                  Welcome Pack
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Warm welcome email welcoming the customer to the StereoBliss family, confirming equipment handoff, serialized identifiers, and monthly billing schedule.
+              </p>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Trigger: Automated on new rental contract activation</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Live Email Dispatch Verification Tool */}
+          <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <span className="font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                <Send className="h-4 w-4 text-amber-500" />
+                <span>Send Live Verification Test Email</span>
+              </span>
+              <span className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                Test SMTP connection and inspect executive formatting in your inbox
+              </span>
+            </div>
+
+            <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex-1">
+                <Input
+                  type="email"
+                  placeholder="Enter your email to receive a live test (e.g. admin@stereobliss.com)"
+                  value={testEmailRecipient}
+                  onChange={(e) => setTestEmailRecipient(e.target.value)}
+                  className="bg-white dark:bg-slate-950 text-xs h-10"
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isSendingTestEmail}
+                className="font-bold text-xs gap-1.5 h-10 px-4 shrink-0 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm cursor-pointer"
+              >
+                <Send className="h-3.5 w-3.5" />
+                <span>Send Verification Email</span>
+              </Button>
+            </form>
+
+            {testEmailResult && (
+              <div
+                className={`p-3 rounded-lg text-xs font-semibold flex items-center justify-between border ${
+                  testEmailResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                <span>{testEmailResult.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setTestEmailResult(null)}
+                  className="text-[11px] underline opacity-70 hover:opacity-100 ml-3"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Visual Workspace Appearance */}
       <Card className="shadow-sm border-slate-200 dark:border-slate-800">
