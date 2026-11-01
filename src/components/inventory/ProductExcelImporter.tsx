@@ -32,6 +32,7 @@ interface ImportedProductItem {
   hsnCode?: string;
   unitOfMeasure: string;
   minStockThreshold: number;
+  initialStock?: number;
 }
 
 interface ImportResultData {
@@ -39,6 +40,7 @@ interface ImportResultData {
   totalRows: number;
   importedCount: number;
   skippedCount: number;
+  initialStockCreated?: number;
   products: ImportedProductItem[];
   errors: Array<{ row: number; field: string; message: string }>;
 }
@@ -227,6 +229,9 @@ export function ProductExcelImporter({ onSuccess, className = '' }: ProductExcel
               { name: 'Purchase Cost (₹)', required: false, desc: 'Optional' },
               { name: 'Selling Price (₹)', required: false, desc: 'Optional' },
               { name: 'Tracking Mode', required: false, desc: 'SERIALIZED or QUANTITY' },
+              { name: 'Opening Stock', required: false, desc: 'Initial count directly on-hand' },
+              { name: 'Serial Numbers (if Serialized)', required: false, desc: 'Comma-separated serials' },
+              { name: 'Location Code', required: false, desc: 'Outlet code (Default: CENTRAL)' },
             ].map((col, idx) => (
               <span
                 key={idx}
@@ -376,9 +381,11 @@ export function ProductExcelImporter({ onSuccess, className = '' }: ProductExcel
                 <div>
                   <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 block">
                     {importResult.importedCount} Product{importResult.importedCount === 1 ? '' : 's'} Added Directly to Catalog!
+                    {importResult.initialStockCreated ? ` (${importResult.initialStockCreated} stock units placed on-hand)` : ''}
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Total rows processed: {importResult.totalRows} • Skipped empty: {importResult.skippedCount}
+                    {importResult.initialStockCreated ? ` • ${importResult.initialStockCreated} opening balance movements recorded` : ''}
                   </span>
                 </div>
               </div>
@@ -430,9 +437,16 @@ export function ProductExcelImporter({ onSuccess, className = '' }: ProductExcel
                           Brand: <strong>{p.brand}</strong> • Category: <strong>{p.categoryName}</strong> • HSN: {p.hsnCode} • Low Stock: {p.minStockThreshold} {p.unitOfMeasure}
                         </div>
                       </div>
-                      <span className="font-mono font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded text-[11px] border border-amber-500/20">
-                        {p.sku}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {p.initialStock !== undefined && p.initialStock > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                            {p.initialStock} in stock
+                          </span>
+                        )}
+                        <span className="font-mono font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded text-[11px] border border-amber-500/20">
+                          {p.sku}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
