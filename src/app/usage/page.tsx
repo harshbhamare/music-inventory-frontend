@@ -70,6 +70,8 @@ export default function UsagePage() {
   const [reminderFeedback, setReminderFeedback] = useState('');
 
   // Deposit deduction state (deposit-mode rentals)
+  const [ledgerPaymentTab, setLedgerPaymentTab] = useState<'DEDUCT' | 'DIRECT'>('DEDUCT');
+  const [isActivatingContinuation, setIsActivatingContinuation] = useState(false);
   const [isRecordingDeduction, setIsRecordingDeduction] = useState(false);
   const [deductionMonthIndex, setDeductionMonthIndex] = useState<number>(0);
   const [deductionBillingMonth, setDeductionBillingMonth] = useState('');
@@ -160,11 +162,20 @@ export default function UsagePage() {
     setAdjustingMonth(null);
     // Pre-fill next undeducted month for deposit mode
     if (usage.depositMode) {
+      const depositBal = usage.depositBalance ?? 0;
+      const isInsufficient = !usage.depositExhausted && depositBal < (firstDue?.amountDue || usage.monthlyRent || 1500);
+      if (usage.depositExhausted || isInsufficient) {
+        setLedgerPaymentTab('DIRECT');
+      } else {
+        setLedgerPaymentTab('DEDUCT');
+      }
       const nextUndeducted = (usage.monthlyPayments || []).find((p) => p.status !== 'PAID');
       if (nextUndeducted) {
         setDeductionMonthIndex(nextUndeducted.monthIndex);
         setDeductionBillingMonth(nextUndeducted.billingMonth);
       }
+    } else {
+      setLedgerPaymentTab('DIRECT');
     }
   };
 
@@ -232,7 +243,12 @@ export default function UsagePage() {
     try {
       const res = await api.post<{ data: { usage: InternalUsage } }>(
         `/usage/${selectedRentalForLedger._id}/deposit-deductions`,
-        { monthIndex: deductionMonthIndex, billingMonth: deductionBillingMonth, notes: deductionNotes.trim() || undefined }
+        {
+          monthIndex: deductionMonthIndex,
+          billingMonth: deductionBillingMonth,
+          allowPartial: true,
+          notes: deductionNotes.trim() || undefined,
+        }
       );
       const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
       setSelectedRentalForLedger(updated);
@@ -242,18 +258,101 @@ export default function UsagePage() {
       if (nextDue) {
         setDeductionMonthIndex(nextDue.monthIndex);
         setDeductionBillingMonth(nextDue.billingMonth);
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
       } else {
         setDeductionMonthIndex(0);
         setDeductionBillingMonth('');
+        setSelectedBillingMonth('');
+        setPaymentAmount(0);
       }
-      setDeductionFeedback(
-        `${formatCurrency(selectedRentalForLedger.monthlyRent ?? 0)} deducted from deposit for ${deductionBillingMonth}. Remaining balance: ${formatCurrency(updated.depositBalance ?? 0)}. Manager will receive a bell notification to send the customer notice email.`
-      );
+
+      if (updated.depositExhausted || (updated.depositBalance ?? 0) <= 0) {
+        setLedgerPaymentTab('DIRECT');
+        setDeductionFeedback(
+          `Deposit balance reached ₹0! Continuation Mode is now active. All subsequent or remaining rent can be recorded directly via UPI/Cash.`
+        );
+      } else {
+        setDeductionFeedback(
+          `Deduction recorded for ${deductionBillingMonth}. Remaining deposit balance: ${formatCurrency(updated.depositBalance ?? 0)}. Manager will receive a bell notification to send the customer notice email.`
+        );
+      }
       fetchUsages();
     } catch (err: any) {
       setDeductionError(err.message || 'Failed to record deposit deduction.');
     } finally {
       setIsRecordingDeduction(false);
+    }
+  };
+
+  // 1-Click Partial Deduct Remaining Deposit and Switch to Continuation Mode
+  const handleDeductRemainingAndSwitch = async (mIndex?: number, bMonth?: string) => {
+    if (!selectedRentalForLedger) return;
+    setDeductionError('');
+    setDeductionFeedback('');
+    const targetIndex = mIndex || deductionMonthIndex;
+    const targetMonth = bMonth || deductionBillingMonth;
+    if (!targetIndex || !targetMonth) {
+      setDeductionError('Please select the billing month to apply remaining deposit.');
+      return;
+    }
+    setIsRecordingDeduction(true);
+    try {
+      const res = await api.post<{ data: { usage: InternalUsage } }>(
+        `/usage/${selectedRentalForLedger._id}/deposit-deductions`,
+        {
+          monthIndex: targetIndex,
+          billingMonth: targetMonth,
+          allowPartial: true,
+          notes: deductionNotes.trim() || 'Remaining deposit exhausted — switched to continuation mode',
+        }
+      );
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
+      setSelectedRentalForLedger(updated);
+      setDeductionNotes('');
+      setLedgerPaymentTab('DIRECT');
+      const nextDue = (updated.monthlyPayments || []).find((p) => p.status !== 'PAID');
+      if (nextDue) {
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+      }
+      setDeductionFeedback(
+        `Remaining deposit balance was applied to ${targetMonth}! Deposit is now exhausted and Continuation Mode is active. You can now record remaining rent dues directly below.`
+      );
+      fetchUsages();
+    } catch (err: any) {
+      setDeductionError(err.message || 'Failed to deduct from deposit.');
+    } finally {
+      setIsRecordingDeduction(false);
+    }
+  };
+
+  // 1-Click Switch Directly to Continuation Mode (Keep Remaining Deposit Safe in Custody)
+  const handleActivateContinuationDirectly = async () => {
+    if (!selectedRentalForLedger) return;
+    setPaymentError('');
+    setIsActivatingContinuation(true);
+    try {
+      const res = await api.post<{ data: { usage: InternalUsage } }>(
+        `/usage/${selectedRentalForLedger._id}/activate-continuation`,
+        { notes: 'Continuation mode activated directly by manager' }
+      );
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
+      setSelectedRentalForLedger(updated);
+      setLedgerPaymentTab('DIRECT');
+      const nextDue = (updated.monthlyPayments || []).find((p) => p.status !== 'PAID');
+      if (nextDue) {
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+      }
+      setReminderFeedback(
+        'Continuation mode activated! Customer can now pay upcoming rent directly via UPI, Cash, or Card.'
+      );
+      fetchUsages();
+    } catch (err: any) {
+      setPaymentError(err.message || 'Failed to activate continuation mode.');
+    } finally {
+      setIsActivatingContinuation(false);
     }
   };
 
@@ -1267,7 +1366,11 @@ export default function UsagePage() {
                       {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      {selectedRentalForLedger.depositExhausted ? '⚠️ Exhausted — continuation mode' : 'Available for deductions'}
+                      {selectedRentalForLedger.depositExhausted
+                        ? '⚠️ Exhausted — continuation mode'
+                        : (selectedRentalForLedger.depositBalance || 0) < (selectedRentalForLedger.monthlyRent || 1500)
+                        ? '⚠️ Low balance — continuation needed'
+                        : 'Available for deductions'}
                     </span>
                   </div>
                   <div>
@@ -1480,329 +1583,490 @@ export default function UsagePage() {
               </div>
             </div>
 
-            {/* Deposit Deduction Form (deposit-mode rentals) */}
-            {selectedRentalForLedger.depositMode && !selectedRentalForLedger.depositExhausted && (
-              <form
-                onSubmit={handleRecordDeduction}
-                className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" />
-                    Deduct This Month's Rent from Deposit
-                  </span>
-                  <span className="text-[11px] text-indigo-500">
-                    Balance: {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
-                  </span>
-                </div>
+            {/* Deposit Deduction & Continuation Payment Controls with Complete Flexibility */}
+            {(() => {
+              const depositBal = selectedRentalForLedger.depositBalance ?? 0;
+              const isDepositMode = Boolean(selectedRentalForLedger.depositMode);
+              const isExhausted = Boolean(selectedRentalForLedger.depositExhausted) || (isDepositMode && depositBal <= 0);
+              const unpaidMonths = (selectedRentalForLedger.monthlyPayments || []).filter((p) => p.status !== 'PAID');
+              const currentDeductMonth =
+                unpaidMonths.find((p) => p.monthIndex === deductionMonthIndex) || unpaidMonths[0];
+              const targetDue = currentDeductMonth
+                ? Math.max(0, currentDeductMonth.amountDue - (currentDeductMonth.amountPaid || 0))
+                : (selectedRentalForLedger.monthlyRent || 1500);
+              const isInsufficient = isDepositMode && !isExhausted && depositBal < targetDue;
+              const actualDeductAmount = Math.min(depositBal, targetDue);
 
-                {deductionError && (
-                  <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
-                    {deductionError}
-                  </div>
-                )}
-                {deductionFeedback && (
-                  <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs font-semibold text-emerald-600 flex gap-2 items-start">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>{deductionFeedback}</span>
-                  </div>
-                )}
+              return (
+                <div className="space-y-3.5">
+                  {/* 1. Low / Insufficient Deposit Balance Notification & Continuation Guidance */}
+                  {isInsufficient && (
+                    <div className="p-3.5 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 space-y-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                            ⚠️ Low Deposit Balance ({formatCurrency(depositBal)}) — Continuation Option Available for {currentDeductMonth?.billingMonth || 'Next Rent'}
+                          </span>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                            The deposit balance of <strong>{formatCurrency(depositBal)}</strong> cannot cover the full monthly rent of <strong>{formatCurrency(targetDue)}</strong>.
+                            You have <strong>complete flexibility</strong>: deduct the remaining {formatCurrency(depositBal)} from deposit (leaves {formatCurrency(targetDue - depositBal)} due to be paid directly), or keep the deposit intact and collect rent directly.
+                          </p>
+                        </div>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Billing Month *
-                    </label>
-                    <select
-                      required
-                      value={deductionBillingMonth}
-                      onChange={(e) => {
-                        const p = (selectedRentalForLedger.monthlyPayments || []).find(
-                          (x) => x.billingMonth === e.target.value
-                        );
-                        setDeductionBillingMonth(e.target.value);
-                        setDeductionMonthIndex(p?.monthIndex || 0);
-                      }}
-                      className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
-                    >
-                      <option value="">Select month…</option>
-                      {(selectedRentalForLedger.monthlyPayments || [])
-                        .filter((p) => p.status !== 'PAID')
-                        .map((p) => (
-                          <option key={p.monthIndex} value={p.billingMonth}>
-                            {p.billingMonth} — {formatCurrency(p.amountDue)}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
+                      {/* 1-Click Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-300/50 dark:border-amber-700/40">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          isLoading={isRecordingDeduction}
+                          disabled={isRecordingDeduction || isActivatingContinuation}
+                          onClick={() => handleDeductRemainingAndSwitch(currentDeductMonth?.monthIndex, currentDeductMonth?.billingMonth)}
+                          className="h-7 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm"
+                          title="Deduct remaining deposit balance and switch month to continuation"
+                        >
+                          <Shield className="h-3.5 w-3.5" />
+                          <span>Deduct Remaining {formatCurrency(depositBal)} &amp; Switch to Continuation</span>
+                        </Button>
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Deduct
-                    </label>
-                    <div className="h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 flex items-center font-bold text-indigo-500 text-sm">
-                      {deductionMonthIndex
-                        ? formatCurrency(
-                            (selectedRentalForLedger.monthlyPayments || []).find(
-                              (p) => p.monthIndex === deductionMonthIndex
-                            )?.amountDue || 0
-                          )
-                        : '—'}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          isLoading={isActivatingContinuation}
+                          disabled={isRecordingDeduction || isActivatingContinuation}
+                          onClick={() => {
+                            setLedgerPaymentTab('DIRECT');
+                            handleActivateContinuationDirectly();
+                          }}
+                          className="h-7 text-xs font-bold text-slate-800 dark:text-slate-200 border-amber-400/50 hover:bg-amber-500/10 gap-1.5"
+                          title="Keep deposit safe in custody and pay rent directly via UPI/Cash/Card"
+                        >
+                          <Zap className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Keep Deposit &amp; Switch to Direct Payment</span>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Internal Note (optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Deducted on 1st of month"
-                      value={deductionNotes}
-                      onChange={(e) => setDeductionNotes(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t border-indigo-200 dark:border-indigo-800/40">
-                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400">
-                    After deduction, the bell icon will show a pending notice. Manager must click "Send Notice Email" to inform the customer.
-                  </p>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="default"
-                    isLoading={isRecordingDeduction}
-                    disabled={!deductionBillingMonth || isRecordingDeduction}
-                    className="shrink-0 gap-1.5 font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
-                  >
-                    <Shield className="h-3.5 w-3.5" />
-                    <span>Deduct from Deposit</span>
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            {/* Deposit exhausted indicator */}
-            {selectedRentalForLedger.depositMode && selectedRentalForLedger.depositExhausted && (
-              <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-rose-300 dark:border-rose-900/40 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 text-xs font-semibold">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                  <span>Deposit Exhausted</span>
-                  <span className="font-normal text-slate-500 dark:text-slate-400 hidden sm:inline">
-                    — Continuation Mode Active
-                  </span>
-                </div>
-                {selectedRentalForLedger.continuationStartedAt && (
-                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Deposit Deduction History */}
-            {selectedRentalForLedger.depositMode && (selectedRentalForLedger.depositDeductions || []).length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                  Deposit Deduction History ({(selectedRentalForLedger.depositDeductions || []).length} entries)
-                </h4>
-                <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
-                        <th className="py-2 px-3">Billing Month</th>
-                        <th className="py-2 px-3 text-right">Deducted</th>
-                        <th className="py-2 px-3 text-right">Balance After</th>
-                        <th className="py-2 px-3 text-center">Notice Sent</th>
-                        <th className="py-2 px-3">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {(selectedRentalForLedger.depositDeductions || []).map((d, i) => (
-                        <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${!d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
-                          <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">{d.billingMonth}</td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
-                            − {formatCurrency(d.deductedAmount)}
-                          </td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {formatCurrency(d.depositBalanceAfter)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {d.noticeSent ? (
-                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Sent
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[10px] animate-pulse">
-                                <Bell className="h-3 w-3" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-slate-500">{formatDate(d.deductedAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Record Monthly Payment Form — shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
-            {(!selectedRentalForLedger.depositMode || selectedRentalForLedger.depositExhausted) && (
-            <form
-              onSubmit={handleRecordPayment}
-              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-3"
-            >
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
-                  {selectedRentalForLedger.depositExhausted ? 'Record Continuation Rent Payment' : 'Record Monthly Rent Payment'}
-                </span>
-                <span className="text-[11px] text-slate-500">Instant ledger update + receipt email</span>
-              </div>
-
-              {/* Settle All Remaining Rent Directly at Once (Buyout) Quick Banner */}
-              {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
-                <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-                      <Zap className="h-4 w-4" />
+                  {/* 2. Deposit Exhausted Banner */}
+                  {isDepositMode && isExhausted && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-rose-300 dark:border-rose-900/40 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 text-xs font-semibold">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span>Deposit Exhausted (₹0 Balance)</span>
+                        <span className="font-normal text-slate-500 dark:text-slate-400 hidden sm:inline">
+                          — Continuation Mode Active (Rent Paid Directly via UPI / Cash)
+                        </span>
+                      </div>
+                      {selectedRentalForLedger.continuationStartedAt && (
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          Started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                        Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)
-                      </span>
-                      <span className="text-[11px] text-slate-600 dark:text-slate-400">
-                        Remaining balance across all upcoming months: <strong className="text-amber-600 dark:text-amber-400 font-bold">{formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}</strong>
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
-                      setSelectedBillingMonth('');
-                      setRentalPaymentNotes('Full rental buyout/settlement in one payment');
-                      if (!rentalTransactionRef) {
-                        setRentalTransactionRef(`SETTLE-${selectedRentalForLedger.issueReference}`);
-                      }
-                    }}
-                    className="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm transition-colors flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Fill Buyout ({formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)})</span>
-                  </button>
-                </div>
-              )}
+                  )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[10px] font-semibold uppercase text-slate-500">
-                      Amount to Pay (₹) *
-                    </label>
-                    {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                  {/* 3. Flexibility Mode Switcher / Tabs for Deposit Mode */}
+                  {isDepositMode && (
+                    <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                       <button
                         type="button"
-                        onClick={() => {
-                          setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
-                          setSelectedBillingMonth('');
-                        }}
-                        className="text-[10px] font-bold text-amber-500 hover:underline"
+                        onClick={() => setLedgerPaymentTab('DEDUCT')}
+                        disabled={isExhausted || depositBal <= 0}
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          ledgerPaymentTab === 'DEDUCT'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                        }`}
                       >
-                        Pay All Due (₹{selectedRentalForLedger.totalRentDue ?? 0})
+                        <Shield className="h-3.5 w-3.5" />
+                        <span>Deduct from Deposit</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500">
+                          {formatCurrency(depositBal)} left
+                        </span>
                       </button>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
-                  />
+
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPaymentTab('DIRECT')}
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          ledgerPaymentTab === 'DIRECT'
+                            ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        <span>Record Direct / Continuation Rent (UPI / Cash / Card)</span>
+                        {isExhausted && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500">
+                            Active
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 4. Deposit Deduction Form */}
+                  {isDepositMode && !isExhausted && ledgerPaymentTab === 'DEDUCT' && (
+                    <form
+                      onSubmit={handleRecordDeduction}
+                      className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <Shield className="h-3.5 w-3.5" />
+                          Deduct Rent from Security Deposit
+                        </span>
+                        <span className="text-[11px] text-indigo-500 font-semibold">
+                          Available Balance: {formatCurrency(depositBal)}
+                        </span>
+                      </div>
+
+                      {deductionError && (
+                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
+                          {deductionError}
+                        </div>
+                      )}
+                      {deductionFeedback && (
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs font-semibold text-emerald-600 flex gap-2 items-start">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>{deductionFeedback}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Billing Month *
+                          </label>
+                          <select
+                            required
+                            value={deductionBillingMonth}
+                            onChange={(e) => {
+                              const p = (selectedRentalForLedger.monthlyPayments || []).find(
+                                (x) => x.billingMonth === e.target.value
+                              );
+                              setDeductionBillingMonth(e.target.value);
+                              setDeductionMonthIndex(p?.monthIndex || 0);
+                            }}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
+                          >
+                            <option value="">Select month…</option>
+                            {(selectedRentalForLedger.monthlyPayments || [])
+                              .filter((p) => p.status !== 'PAID')
+                              .map((p) => {
+                                const unpaid = Math.max(0, p.amountDue - (p.amountPaid || 0));
+                                return (
+                                  <option key={p.monthIndex} value={p.billingMonth}>
+                                    {p.billingMonth} — {formatCurrency(unpaid)} due
+                                  </option>
+                                );
+                              })}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Amount to Deduct
+                          </label>
+                          <div className="h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 flex items-center font-bold text-indigo-500 text-sm">
+                            {deductionMonthIndex ? formatCurrency(actualDeductAmount) : '—'}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Internal Note (optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Deducted on 1st of month"
+                            value={deductionNotes}
+                            onChange={(e) => setDeductionNotes(e.target.value)}
+                            className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                          />
+                        </div>
+                      </div>
+
+                      {targetDue > depositBal && (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          <span>
+                            Notice: Month rent due is <strong>{formatCurrency(targetDue)}</strong>, but deposit is <strong>{formatCurrency(depositBal)}</strong>. Deducting will apply remaining {formatCurrency(depositBal)}, leave <strong>{formatCurrency(targetDue - depositBal)}</strong> due, and automatically switch to continuation mode.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 border-t border-indigo-200 dark:border-indigo-800/40">
+                        <p className="text-[11px] text-indigo-600 dark:text-indigo-400">
+                          After deduction, manager can click the bell notice icon to dispatch the deduction receipt email.
+                        </p>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="default"
+                          isLoading={isRecordingDeduction}
+                          disabled={!deductionBillingMonth || isRecordingDeduction || depositBal <= 0}
+                          className="shrink-0 gap-1.5 font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
+                        >
+                          <Shield className="h-3.5 w-3.5" />
+                          <span>
+                            {targetDue > depositBal
+                              ? `Deduct Remaining ${formatCurrency(actualDeductAmount)} & Switch to Continuation`
+                              : `Deduct ${formatCurrency(actualDeductAmount)} from Deposit`}
+                          </span>
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* 5. Direct / Continuation Rent Payment Form */}
+                  {(!isDepositMode || isExhausted || ledgerPaymentTab === 'DIRECT') && (
+                    <form
+                      onSubmit={handleRecordPayment}
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-3"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-amber-500" />
+                          {isDepositMode
+                            ? isExhausted
+                              ? 'Record Continuation Rent Payment'
+                              : 'Record Direct Rent Payment (Continuation Mode)'
+                            : 'Record Monthly Rent Payment'}
+                        </span>
+                        <span className="text-[11px] text-slate-500">Instant ledger update + receipt email</span>
+                      </div>
+
+                      {/* Settle All Remaining Rent Directly at Once (Buyout) Quick Banner */}
+                      {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                        <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                              <Zap className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                                Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)
+                              </span>
+                              <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                                Remaining balance across all upcoming months:{' '}
+                                <strong className="text-amber-600 dark:text-amber-400 font-bold">
+                                  {formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                              setSelectedBillingMonth('');
+                              setRentalPaymentNotes('Full rental buyout/settlement in one payment');
+                              if (!rentalTransactionRef) {
+                                setRentalTransactionRef(`SETTLE-${selectedRentalForLedger.issueReference}`);
+                              }
+                            }}
+                            className="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm transition-colors flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Fill Buyout ({formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)})</span>
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-semibold uppercase text-slate-500">
+                              Amount to Pay (₹) *
+                            </label>
+                            {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                                  setSelectedBillingMonth('');
+                                }}
+                                className="text-[10px] font-bold text-amber-500 hover:underline"
+                              >
+                                Pay All Due (₹{selectedRentalForLedger.totalRentDue ?? 0})
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="number"
+                            min="1"
+                            required
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Billing Month
+                          </label>
+                          <select
+                            value={selectedBillingMonth}
+                            onChange={(e) => {
+                              setSelectedBillingMonth(e.target.value);
+                              const p = (selectedRentalForLedger.monthlyPayments || []).find(
+                                (x) => x.billingMonth === e.target.value
+                              );
+                              if (p) {
+                                setPaymentAmount(Math.max(0, p.amountDue - (p.amountPaid || 0)));
+                              }
+                            }}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                          >
+                            <option value="">Next Due Month</option>
+                            {(selectedRentalForLedger.monthlyPayments || []).map((p, i) => (
+                              <option key={i} value={p.billingMonth}>
+                                {p.billingMonth} ({p.status} - Due: {formatCurrency(Math.max(0, p.amountDue - (p.amountPaid || 0)))})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Payment Method *
+                          </label>
+                          <select
+                            value={rentalPaymentMethod}
+                            onChange={(e) => setRentalPaymentMethod(e.target.value as any)}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500"
+                          >
+                            <option value="UPI">UPI (GPay / PhonePe)</option>
+                            <option value="CARD">Debit / Credit Card</option>
+                            <option value="CASH">Cash</option>
+                            <option value="BANK_TRANSFER">Bank IMPS</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            UPI / Txn Reference *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. UPI-998822"
+                            value={rentalTransactionRef}
+                            onChange={(e) => setRentalTransactionRef(e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSendReminder(selectedRentalForLedger)}
+                            isLoading={isSendingReminder}
+                            className="gap-1.5 text-indigo-400 border-indigo-500/30"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                            <span>Send Email Reminder</span>
+                          </Button>
+
+                          {isDepositMode && !isExhausted && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleActivateContinuationDirectly}
+                              isLoading={isActivatingContinuation}
+                              className="gap-1.5 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 text-xs"
+                              title="Switch agreement to continuation mode while retaining deposit"
+                            >
+                              <Zap className="h-3.5 w-3.5" />
+                              <span>Activate Continuation Mode</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        <Button
+                          type="submit"
+                          variant="default"
+                          size="sm"
+                          isLoading={isRecordingPayment}
+                          disabled={isRecordingPayment}
+                          className="gap-1.5 font-bold"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Confirm Rent Payment</span>
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* 6. Deposit Deduction History */}
+                  {isDepositMode && (selectedRentalForLedger.depositDeductions || []).length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                        Deposit Deduction History ({(selectedRentalForLedger.depositDeductions || []).length} entries)
+                      </h4>
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
+                              <th className="py-2 px-3">Billing Month</th>
+                              <th className="py-2 px-3 text-right">Deducted</th>
+                              <th className="py-2 px-3 text-right">Balance After</th>
+                              <th className="py-2 px-3 text-center">Notice Sent</th>
+                              <th className="py-2 px-3">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                            {(selectedRentalForLedger.depositDeductions || []).map((d, i) => (
+                              <tr
+                                key={i}
+                                className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${
+                                  !d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''
+                                }`}
+                              >
+                                <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
+                                  {d.billingMonth}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
+                                  − {formatCurrency(d.deductedAmount)}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrency(d.depositBalanceAfter)}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  {d.noticeSent ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Sent
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[10px] animate-pulse">
+                                      <Bell className="h-3 w-3" />
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-slate-500">{formatDate(d.deductedAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Billing Month
-                  </label>
-                  <select
-                    value={selectedBillingMonth}
-                    onChange={(e) => setSelectedBillingMonth(e.target.value)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
-                  >
-                    <option value="">Next Due Month</option>
-                    {(selectedRentalForLedger.monthlyPayments || []).map((p, i) => (
-                      <option key={i} value={p.billingMonth}>
-                        {p.billingMonth} ({p.status})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Payment Method *
-                  </label>
-                  <select
-                    value={rentalPaymentMethod}
-                    onChange={(e) => setRentalPaymentMethod(e.target.value as any)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500"
-                  >
-                    <option value="UPI">UPI (GPay / PhonePe)</option>
-                    <option value="CARD">Debit / Credit Card</option>
-                    <option value="CASH">Cash</option>
-                    <option value="BANK_TRANSFER">Bank IMPS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    UPI / Txn Reference *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. UPI-998822"
-                    value={rentalTransactionRef}
-                    onChange={(e) => setRentalTransactionRef(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSendReminder(selectedRentalForLedger)}
-                  isLoading={isSendingReminder}
-                  className="gap-1.5 text-indigo-400 border-indigo-500/30"
-                >
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>Send Email Reminder</span>
-                </Button>
-
-                <Button
-                  type="submit"
-                  variant="default"
-                  size="sm"
-                  isLoading={isRecordingPayment}
-                  disabled={isRecordingPayment}
-                  className="gap-1.5 font-bold"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Confirm Rent Payment</span>
-                </Button>
-              </div>
-            </form>
-            )}
+              );
+            })()}
 
             {/* Reminder History Log */}
             {selectedRentalForLedger.remindersSent && selectedRentalForLedger.remindersSent.length > 0 && (
