@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
+import { ProductExcelImporter } from '@/components/inventory/ProductExcelImporter';
 import {
   Settings,
   Save,
@@ -16,6 +17,7 @@ import {
   Database,
   Building2,
   Receipt,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface SystemInfo {
@@ -146,12 +148,12 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
           <Settings className="h-6 w-6 text-amber-500" />
-          <span>System Configuration & Store Management</span>
+          <span>System Configuration &amp; Product Intake Settings</span>
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           {isSuperAdmin()
-            ? 'Manage your organization identity, retail store details, GST tax identification, and billing information.'
-            : 'Personalize your workspace display appearance and preferences.'}
+            ? 'Manage your organization identity, retail store details, GST tax identification, and bulk product catalog Excel intake.'
+            : 'Manage bulk product catalog Excel intake and personalize workspace display appearance.'}
         </p>
       </div>
 
@@ -159,8 +161,8 @@ export default function SettingsPage() {
         <span>
           <strong>Operational Access:</strong>{' '}
           {isSuperAdmin()
-            ? 'Superadmins can configure store details, tax identification (GSTIN), and billing preferences.'
-            : 'Personal workspace display theme.'}
+            ? 'Superadmins can configure store details, tax identification (GSTIN), and bulk product catalog imports.'
+            : 'Managers can perform bulk product catalog Excel imports and customize workspace display theme.'}
         </span>
       </div>
 
@@ -182,6 +184,9 @@ export default function SettingsPage() {
           </button>
         </div>
       )}
+
+      {/* Bulk Product Catalog Excel Importer (Available to BOTH Superadmin & Manager) */}
+      <ProductExcelImporter />
 
       {/* Visual Workspace Appearance */}
       <Card className="shadow-sm border-slate-200 dark:border-slate-800">
