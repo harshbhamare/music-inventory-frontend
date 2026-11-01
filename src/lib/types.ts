@@ -394,7 +394,111 @@ export interface MaintenanceRecord {
   notes?: string;
 }
 
+export interface ExecutiveMetric {
+  value: number;
+  previousValue: number;
+  deltaPercent: number;
+  direction: 'up' | 'down' | 'neutral';
+  marginPercent?: number;
+  previousMarginPercent?: number;
+  emiReceivables?: number;
+  rentalReceivables?: number;
+  potentialRetailValue?: number;
+  potentialMargin?: number;
+  rentalRevenue?: number;
+  maintenanceExpenses?: number;
+  allTimeProfit?: number;
+  capexRecoveryPercent?: number;
+  definition: string;
+  isAvailable: boolean;
+  unavailableReason?: string;
+}
+
+export interface BusinessAlert {
+  id: string;
+  title: string;
+  message: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: 'FINANCIAL' | 'RENTAL' | 'INVENTORY' | 'OPERATIONAL';
+  affectedCount: number;
+  financialExposure: number;
+  deepLink: string;
+  actionText: string;
+}
+
 export interface DashboardMetrics {
+  reportingPeriod?: {
+    current: { startDate: string; endDate: string; label: string };
+    previous: { startDate: string; endDate: string; label: string };
+  };
+  executiveFinancials?: {
+    salesRevenue: ExecutiveMetric;
+    cashCollected: ExecutiveMetric;
+    grossProfit: ExecutiveMetric;
+    outstandingReceivables: ExecutiveMetric;
+    inventoryValuationAtCost: ExecutiveMetric;
+    netRentalProfit: ExecutiveMetric;
+  };
+  financialHealth?: {
+    cashInflows: number;
+    cashOutflows: number;
+    netCashMovement: number;
+    directSalesCash: number;
+    emiCollections: number;
+    rentalCollections: number;
+    inventoryPurchases: number;
+    maintenanceExpenses: number;
+    customerDepositsHeld: number;
+    refundsPayable: number;
+    outstandingEmiReceivables: number;
+    outstandingRentalReceivables: number;
+  };
+  inventoryHealth?: {
+    totalUnitsOwned: number;
+    totalAvailableForSale: number;
+    totalUnitsInRental: number;
+    totalUnitsInMaintenance: number;
+    totalUnitsReserved: number;
+    totalInventoryValuationAtCost: number;
+    totalPotentialRetailValuation: number;
+    potentialGrossMargin: number;
+    potentialMarginPercent: number;
+    lowStockCount: number;
+    outOfStockCount: number;
+    slowMovingCount: number;
+    lowStockItems: Array<{ name: string; sku: string; available: number; threshold: number }>;
+    slowMovingItems: Array<{ name: string; sku: string; onHand: number; costValue: number }>;
+  };
+  rentalPerformance?: {
+    activeAgreements: number;
+    instrumentsOnRent: number;
+    rentalIncomeCollected: number;
+    allTimeRentalCollected: number;
+    totalRentalDue: number;
+    totalRentalOverdue: number;
+    overdueAgreementsCount: number;
+    totalSecurityDepositsHeld: number;
+    depositsAvailableForDeduction: number;
+    pendingRefundsTotal: number;
+    pendingRefundsCount: number;
+    approachingDeadlinesCount: number;
+    totalFleetCapex: number;
+    allTimeNetRentalProfit: number;
+    fleetCapexRecoveryPercent: number;
+    unrecoveredCapexCount: number;
+  };
+  businessAlerts?: BusinessAlert[];
+  executiveTrends?: {
+    dailyTimeline: Array<{
+      date: string;
+      label: string;
+      salesRevenue: number;
+      cashCollected: number;
+      grossProfit: number;
+      rentalCollections: number;
+      rentalDue: number;
+    }>;
+  };
   kpis: {
     totalUnitsOnHand: number;
     totalAvailableForSale: number;
@@ -412,6 +516,12 @@ export interface DashboardMetrics {
     totalPotentialRetailValuation: number;
     activeEmiSalesCount?: number;
     totalEmiReceivables?: number;
+    currentCashCollected?: number;
+    currentGrossProfit?: number;
+    currentGrossMarginPct?: number;
+    currentNetRentalProfit?: number;
+    totalOutstandingReceivables?: number;
+    netCashMovement?: number;
   };
   recentMovements: StockMovement[];
   salesTrend: Array<{ _id: string; revenue: number; count: number }>;
