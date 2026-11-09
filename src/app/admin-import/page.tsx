@@ -214,7 +214,7 @@ export default function AdminImportPage() {
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = 'stereobliss-historical-import-template.xlsx';
+      a.download = 'muziclub-inventory-import-template.xlsx';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
