@@ -1,8 +1,9 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
-import { InternalUsage, Product, SerializedItem, StockLocation, RentalMonthlyPayment } from '@/lib/types';
+import { InternalUsage, RentalMonthlyPayment } from '@/lib/types';
 import { formatDate, formatDateTime, formatCurrency } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -40,61 +41,24 @@ import {
   PlusCircle,
   ClipboardList,
   Wallet,
+  Zap,
+  ArrowUpRight,
+  ExternalLink,
+  Eye,
+  Coins,
+  PackagePlus,
+  Receipt,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
-
-const COMMON_ACCESSORIES = [
-  'Heavy-Duty Stand',
-  'Power Adapter & Cable',
-  'Padded Gig Bag / Hardcase',
-  'Sustain Pedal',
-  'Studio Monitor Headphones',
-  'Instrument Cable (6.35mm TS)',
-];
 
 export default function UsagePage() {
   const { canIssueUsage } = useAuth();
   const [usages, setUsages] = useState<InternalUsage[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [availableSerials, setAvailableSerials] = useState<SerializedItem[]>([]);
-  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'OVERDUE' | 'RETURNED'>('ALL');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Issue / Rent Equipment Modal State
-  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
-  // Issue modal tab state
-  const [issueTab, setIssueTab] = useState<'customer' | 'terms' | 'instrument'>('customer');
   // Ledger modal tab state
   const [ledgerTab, setLedgerTab] = useState<'schedule' | 'payment'>('schedule');
-  const [purpose, setPurpose] = useState<
-    'CLASS' | 'PRACTICE' | 'REHEARSAL' | 'DEMONSTRATION' | 'EVENT' | 'REPAIR' | 'OTHER'
-  >('CLASS');
-  const [isRental, setIsRental] = useState(true);
-  const [assignedPerson, setAssignedPerson] = useState('');
-  const [assignedPersonContact, setAssignedPersonContact] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [lockInPeriodMonths, setLockInPeriodMonths] = useState(3);
-  const [securityDeposit, setSecurityDeposit] = useState<number>(5000);
-  const [depositTransactionRef, setDepositTransactionRef] = useState('');
-  const [depositMode, setDepositMode] = useState(false);
-  const [depositPaymentMethod, setDepositPaymentMethod] = useState<'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER'>('CASH');
-  const [monthlyRent, setMonthlyRent] = useState<number>(1500);
-  const [expectedReturnDate, setExpectedReturnDate] = useState('');
-  const [includedAccessories, setIncludedAccessories] = useState<string[]>([
-    'Heavy-Duty Stand',
-    'Power Adapter & Cable',
-  ]);
-  const [customAccessoryInput, setCustomAccessoryInput] = useState('');
-
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedSerialId, setSelectedSerialId] = useState('');
-  const [issueQuantity, setIssueQuantity] = useState(1);
-  const [issueCondition, setIssueCondition] = useState('GOOD');
-  const [notes, setNotes] = useState('');
-  const [issueError, setIssueError] = useState('');
-  const [isIssuing, setIsIssuing] = useState(false);
 
   // Monthly Rental Ledger & Payment Tracking Modal
   const [selectedRentalForLedger, setSelectedRentalForLedger] = useState<InternalUsage | null>(null);
@@ -109,6 +73,8 @@ export default function UsagePage() {
   const [reminderFeedback, setReminderFeedback] = useState('');
 
   // Deposit deduction state (deposit-mode rentals)
+  const [ledgerPaymentTab, setLedgerPaymentTab] = useState<'DEDUCT' | 'DIRECT'>('DEDUCT');
+  const [isActivatingContinuation, setIsActivatingContinuation] = useState(false);
   const [isRecordingDeduction, setIsRecordingDeduction] = useState(false);
   const [deductionMonthIndex, setDeductionMonthIndex] = useState<number>(0);
   const [deductionBillingMonth, setDeductionBillingMonth] = useState('');
@@ -140,7 +106,7 @@ export default function UsagePage() {
   // Submitting ref lock to strictly prevent multi-clicks
   const isSubmittingPaymentRef = React.useRef(false);
 
-  // Return & Inspection Modal
+  // Return & Inspection Modal (Add Again to Inventory)
   const [returnModalUsage, setReturnModalUsage] = useState<InternalUsage | null>(null);
   const [inspectionOutcomes, setInspectionOutcomes] = useState<
     Record<string, { condition: string; outcome: 'OK_TO_STOCK' | 'NEEDS_MAINTENANCE' | 'QUARANTINE_DAMAGED'; notes: string }>
@@ -148,25 +114,44 @@ export default function UsagePage() {
   const [returnError, setReturnError] = useState('');
   const [isReturning, setIsReturning] = useState(false);
 
+  // Dedicated Refund Security Deposit Modal
+  const [refundModalUsage, setRefundModalUsage] = useState<InternalUsage | null>(null);
+  const [refundDeductionAmount, setRefundDeductionAmount] = useState<number>(0);
+  const [refundDeductionReason, setRefundDeductionReason] = useState<string>('');
+  const [refundPaymentMethod, setRefundPaymentMethod] = useState<'UPI' | 'BANK_TRANSFER' | 'CASH' | 'CARD'>('UPI');
+  const [refundTransactionRef, setRefundTransactionRef] = useState<string>('');
+  const [refundNotes, setRefundNotes] = useState<string>('');
+  const [refundCustomerEmail, setRefundCustomerEmail] = useState<string>('');
+  const [sendRefundReceiptEmail, setSendRefundReceiptEmail] = useState<boolean>(true);
+  const [isRefundingDeposit, setIsRefundingDeposit] = useState<boolean>(false);
+  const [refundError, setRefundError] = useState<string>('');
+  const [refundFeedback, setRefundFeedback] = useState<string>('');
+
+  // Return & Inspection Modal Email automation
+  const [returnCustomerEmail, setReturnCustomerEmail] = useState<string>('');
+  const [sendReturnReceiptEmail, setSendReturnReceiptEmail] = useState<boolean>(true);
+
+  // Rental Payment Form Email automation
+  const [rentalCustomerEmail, setRentalCustomerEmail] = useState<string>('');
+  const [sendRentalPaymentEmail, setSendRentalPaymentEmail] = useState<boolean>(true);
+
   // Extend Date Modal
   const [extendModalUsage, setExtendModalUsage] = useState<InternalUsage | null>(null);
   const [newExtendedDate, setNewExtendedDate] = useState('');
   const [extensionReason, setExtensionReason] = useState('');
   const [extendError, setExtendError] = useState('');
+  const [extendFeedback, setExtendFeedback] = useState('');
+  const [addRentalMonthsOnExtend, setAddRentalMonthsOnExtend] = useState(true);
   const [isExtending, setIsExtending] = useState(false);
+
+  // Outward Money / Deposit Refunds Due Modal State
+  const [isOutwardModalOpen, setIsOutwardModalOpen] = useState(false);
+  const [outwardSearch, setOutwardSearch] = useState('');
+  const [outwardModeFilter, setOutwardModeFilter] = useState<'ALL' | 'DEPOSIT_MODE' | 'STANDARD'>('ALL');
 
   useEffect(() => {
     fetchUsages();
-    fetchInventory();
   }, [statusFilter, search]);
-
-  // Pre-calculate expected return date whenever lockInPeriodMonths changes
-  const applyLockInMonths = (months: number) => {
-    setLockInPeriodMonths(months);
-    const date = new Date();
-    date.setMonth(date.getMonth() + months);
-    setExpectedReturnDate(date.toISOString().slice(0, 16));
-  };
 
   const fetchUsages = async () => {
     setIsLoading(true);
@@ -184,114 +169,11 @@ export default function UsagePage() {
     }
   };
 
-  const fetchInventory = async () => {
-    try {
-      const [prodRes, serialsRes, locRes] = await Promise.all([
-        api.get<{ items: Product[] }>('/products?limit=100'),
-        api.get<{ items: SerializedItem[] }>('/products/serialized-items?status=AVAILABLE&limit=100'),
-        api.get<{ locations: StockLocation[] }>('/meta/locations'),
-      ]);
-      setProducts(prodRes.items || []);
-      setAvailableSerials(serialsRes.items || []);
-      setLocations(locRes.locations || []);
-    } catch (err) {
-      console.error('Failed to load inventory for usage:', err);
-    }
-  };
-
-  const toggleAccessory = (acc: string) => {
-    if (includedAccessories.includes(acc)) {
-      setIncludedAccessories(includedAccessories.filter((a) => a !== acc));
-    } else {
-      setIncludedAccessories([...includedAccessories, acc]);
-    }
-  };
-
-  const addCustomAccessory = () => {
-    const trimmed = customAccessoryInput.trim();
-    if (trimmed && !includedAccessories.includes(trimmed)) {
-      setIncludedAccessories((prev) => [...prev, trimmed]);
-      setCustomAccessoryInput('');
-    }
-  };
-
-  const handleAddCustomAccessory = (e: React.KeyboardEvent | React.MouseEvent) => {
-    if ('key' in e) {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    addCustomAccessory();
-  };
-
-  const openIssueModal = () => {
-    setIsIssueModalOpen(true);
-    setIssueTab('customer');
-    setIsRental(true);
-    applyLockInMonths(3);
-    setSecurityDeposit(5000);
-    setDepositTransactionRef('');
-    setDepositMode(false);
-    setDepositPaymentMethod('CASH');
-    setMonthlyRent(1500);
-    setIncludedAccessories(['Heavy-Duty Stand', 'Power Adapter & Cable']);
-    setIssueError('');
-  };
-
-  const selectedProduct = products.find((p) => p._id === selectedProductId);
-
-  const handleIssueSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIssueError('');
-    setIsIssuing(true);
-
-    try {
-      if (!selectedProduct) throw new Error('Please select an instrument or product.');
-
-      await api.post('/usage', {
-        purpose,
-        assignedPerson: assignedPerson.trim(),
-        assignedPersonContact: assignedPersonContact.trim() || undefined,
-        customerEmail: customerEmail.trim() || undefined,
-        location: locations[0]?._id,
-        expectedReturnDate,
-        isRental,
-        lockInPeriodMonths,
-        securityDeposit,
-        depositTransactionRef: depositTransactionRef.trim() || undefined,
-        depositMode,
-        depositPaymentMethod,
-        monthlyRent,
-        includedAccessories,
-        notes: notes.trim() || undefined,
-        items: [
-          {
-            product: selectedProduct._id,
-            quantityIssued: issueQuantity,
-            issueCondition,
-          },
-        ],
-      });
-
-      setIsIssueModalOpen(false);
-      setAssignedPerson('');
-      setAssignedPersonContact('');
-      setCustomerEmail('');
-      setSelectedProductId('');
-      setSelectedSerialId('');
-      setNotes('');
-      fetchUsages();
-      fetchInventory();
-    } catch (err: any) {
-      setIssueError(err.message || 'Failed to create instrument rental agreement.');
-    } finally {
-      setIsIssuing(false);
-    }
-  };
-
   // Open Monthly Payment Tracker & Ledger Modal
   const openLedgerModal = (usage: InternalUsage) => {
     setSelectedRentalForLedger(usage);
+    setRentalCustomerEmail(usage.customerEmail || '');
+    setSendRentalPaymentEmail(true);
     setLedgerTab('schedule');
     const firstDue = usage.monthlyPayments?.find((p) => p.status !== 'PAID');
     setPaymentAmount(firstDue?.amountDue || usage.monthlyRent || 1500);
@@ -306,13 +188,40 @@ export default function UsagePage() {
     setAdjustingMonth(null);
     // Pre-fill next undeducted month for deposit mode
     if (usage.depositMode) {
+      const depositBal = usage.depositBalance ?? 0;
+      const isInsufficient = !usage.depositExhausted && depositBal < (firstDue?.amountDue || usage.monthlyRent || 1500);
+      if (usage.depositExhausted || isInsufficient) {
+        setLedgerPaymentTab('DIRECT');
+      } else {
+        setLedgerPaymentTab('DEDUCT');
+      }
       const nextUndeducted = (usage.monthlyPayments || []).find((p) => p.status !== 'PAID');
       if (nextUndeducted) {
         setDeductionMonthIndex(nextUndeducted.monthIndex);
         setDeductionBillingMonth(nextUndeducted.billingMonth);
       }
+    } else {
+      setLedgerPaymentTab('DIRECT');
     }
   };
+
+  // Automatically open ledger modal if redirected from Notification Bell with ?ledger=REF
+  useEffect(() => {
+    if (typeof window !== 'undefined' && usages.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ledgerRef = urlParams.get('ledger') || urlParams.get('ref');
+      if (ledgerRef) {
+        const found = usages.find(
+          (u) =>
+            u.issueReference?.toLowerCase() === ledgerRef.toLowerCase() ||
+            u._id === ledgerRef
+        );
+        if (found) {
+          openLedgerModal(found);
+        }
+      }
+    }
+  }, [usages]);
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -326,7 +235,7 @@ export default function UsagePage() {
         throw new Error('Payment amount must be greater than 0.');
       }
 
-      const res = await api.post<{ usage: InternalUsage }>(
+      const res = await api.post<{ usage: InternalUsage; emailSent?: boolean; recipient?: string }>(
         `/usage/${selectedRentalForLedger._id}/payments`,
         {
           amount: paymentAmount,
@@ -334,25 +243,43 @@ export default function UsagePage() {
           paymentMethod: rentalPaymentMethod,
           transactionRef: rentalTransactionRef.trim() || undefined,
           notes: rentalPaymentNotes.trim() || undefined,
+          customerEmail: rentalCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendRentalPaymentEmail,
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
-      setRentalTransactionRef('');
-      setRentalPaymentNotes('');
-      setReminderFeedback(
-        `Payment of ${formatCurrency(paymentAmount)} recorded successfully! An official payment receipt email has been dispatched to ${selectedRentalForLedger.customerEmail || selectedRentalForLedger.assignedPerson} for accountability.`
-      );
-      // Pre-fill next unpaid month if available
-      const nextDue = res.usage.monthlyPayments?.find((p) => p.status !== 'PAID');
-      if (nextDue) {
-        setSelectedBillingMonth(nextDue.billingMonth);
-        setPaymentAmount(nextDue.amountDue);
-      } else {
-        setSelectedBillingMonth('');
-        setPaymentAmount(0);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || rentalCustomerEmail || selectedRentalForLedger.customerEmail;
+
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+        setRentalTransactionRef('');
+        setRentalPaymentNotes('');
+        if (emailSent && recipient) {
+          setReminderFeedback(
+            `✅ Payment of ${formatCurrency(paymentAmount)} recorded successfully! Official payment receipt email dispatched to ${recipient}.`
+          );
+        } else if (!sendRentalPaymentEmail) {
+          setReminderFeedback(
+            `Payment of ${formatCurrency(paymentAmount)} recorded successfully (receipt email skipped as unchecked).`
+          );
+        } else {
+          setReminderFeedback(
+            `Payment of ${formatCurrency(paymentAmount)} recorded successfully!`
+          );
+        }
+        // Pre-fill next unpaid month if available
+        const nextDue = updatedUsage.monthlyPayments?.find((p) => p.status !== 'PAID');
+        if (nextDue) {
+          setSelectedBillingMonth(nextDue.billingMonth);
+          setPaymentAmount(nextDue.amountDue);
+        } else {
+          setSelectedBillingMonth('');
+          setPaymentAmount(0);
+        }
+        fetchUsages();
       }
-      fetchUsages();
     } catch (err: any) {
       setPaymentError(err.message || 'Failed to record rent payment.');
     } finally {
@@ -375,9 +302,14 @@ export default function UsagePage() {
     try {
       const res = await api.post<{ data: { usage: InternalUsage } }>(
         `/usage/${selectedRentalForLedger._id}/deposit-deductions`,
-        { monthIndex: deductionMonthIndex, billingMonth: deductionBillingMonth, notes: deductionNotes.trim() || undefined }
+        {
+          monthIndex: deductionMonthIndex,
+          billingMonth: deductionBillingMonth,
+          allowPartial: true,
+          notes: deductionNotes.trim() || undefined,
+        }
       );
-      const updated = res.data?.usage || selectedRentalForLedger;
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
       setSelectedRentalForLedger(updated);
       setDeductionNotes('');
       // auto-advance to next unpaid month
@@ -385,18 +317,101 @@ export default function UsagePage() {
       if (nextDue) {
         setDeductionMonthIndex(nextDue.monthIndex);
         setDeductionBillingMonth(nextDue.billingMonth);
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
       } else {
         setDeductionMonthIndex(0);
         setDeductionBillingMonth('');
+        setSelectedBillingMonth('');
+        setPaymentAmount(0);
       }
-      setDeductionFeedback(
-        `${formatCurrency(selectedRentalForLedger.monthlyRent ?? 0)} deducted from deposit for ${deductionBillingMonth}. Remaining balance: ${formatCurrency(updated.depositBalance ?? 0)}. Manager will receive a bell notification to send the customer notice email.`
-      );
+
+      if (updated.depositExhausted || (updated.depositBalance ?? 0) <= 0) {
+        setLedgerPaymentTab('DIRECT');
+        setDeductionFeedback(
+          `Deposit balance reached ₹0! Continuation Mode is now active. All subsequent or remaining rent can be recorded directly via UPI/Cash.`
+        );
+      } else {
+        setDeductionFeedback(
+          `Deduction recorded for ${deductionBillingMonth}. Remaining deposit balance: ${formatCurrency(updated.depositBalance ?? 0)}. Manager will receive a bell notification to send the customer notice email.`
+        );
+      }
       fetchUsages();
     } catch (err: any) {
       setDeductionError(err.message || 'Failed to record deposit deduction.');
     } finally {
       setIsRecordingDeduction(false);
+    }
+  };
+
+  // 1-Click Partial Deduct Remaining Deposit and Switch to Continuation Mode
+  const handleDeductRemainingAndSwitch = async (mIndex?: number, bMonth?: string) => {
+    if (!selectedRentalForLedger) return;
+    setDeductionError('');
+    setDeductionFeedback('');
+    const targetIndex = mIndex || deductionMonthIndex;
+    const targetMonth = bMonth || deductionBillingMonth;
+    if (!targetIndex || !targetMonth) {
+      setDeductionError('Please select the billing month to apply remaining deposit.');
+      return;
+    }
+    setIsRecordingDeduction(true);
+    try {
+      const res = await api.post<{ data: { usage: InternalUsage } }>(
+        `/usage/${selectedRentalForLedger._id}/deposit-deductions`,
+        {
+          monthIndex: targetIndex,
+          billingMonth: targetMonth,
+          allowPartial: true,
+          notes: deductionNotes.trim() || 'Remaining deposit exhausted — switched to continuation mode',
+        }
+      );
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
+      setSelectedRentalForLedger(updated);
+      setDeductionNotes('');
+      setLedgerPaymentTab('DIRECT');
+      const nextDue = (updated.monthlyPayments || []).find((p) => p.status !== 'PAID');
+      if (nextDue) {
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+      }
+      setDeductionFeedback(
+        `Remaining deposit balance was applied to ${targetMonth}! Deposit is now exhausted and Continuation Mode is active. You can now record remaining rent dues directly below.`
+      );
+      fetchUsages();
+    } catch (err: any) {
+      setDeductionError(err.message || 'Failed to deduct from deposit.');
+    } finally {
+      setIsRecordingDeduction(false);
+    }
+  };
+
+  // 1-Click Switch Directly to Continuation Mode (Keep Remaining Deposit Safe in Custody)
+  const handleActivateContinuationDirectly = async () => {
+    if (!selectedRentalForLedger) return;
+    setPaymentError('');
+    setIsActivatingContinuation(true);
+    try {
+      const res = await api.post<{ data: { usage: InternalUsage } }>(
+        `/usage/${selectedRentalForLedger._id}/activate-continuation`,
+        { notes: 'Continuation mode activated directly by manager' }
+      );
+      const updated: InternalUsage = (res as any)?.usage || (res as any)?.data?.usage || selectedRentalForLedger;
+      setSelectedRentalForLedger(updated);
+      setLedgerPaymentTab('DIRECT');
+      const nextDue = (updated.monthlyPayments || []).find((p) => p.status !== 'PAID');
+      if (nextDue) {
+        setSelectedBillingMonth(nextDue.billingMonth);
+        setPaymentAmount(Math.max(0, nextDue.amountDue - (nextDue.amountPaid || 0)));
+      }
+      setReminderFeedback(
+        'Continuation mode activated! Customer can now pay upcoming rent directly via UPI, Cash, or Card.'
+      );
+      fetchUsages();
+    } catch (err: any) {
+      setPaymentError(err.message || 'Failed to activate continuation mode.');
+    } finally {
+      setIsActivatingContinuation(false);
     }
   };
 
@@ -432,7 +447,10 @@ export default function UsagePage() {
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+      }
       setEditingPayment(null);
       fetchUsages();
     } catch (err: any) {
@@ -466,7 +484,10 @@ export default function UsagePage() {
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updatedUsage: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updatedUsage && updatedUsage._id) {
+        setSelectedRentalForLedger(updatedUsage);
+      }
       setAdjustingMonth(null);
       fetchUsages();
     } catch (err: any) {
@@ -482,14 +503,18 @@ export default function UsagePage() {
     setIsAddingMonth(true);
 
     try {
-      const res = await api.post<{ usage: InternalUsage }>(
+      const res = await api.post<{ usage?: InternalUsage; data?: { usage: InternalUsage } }>(
         `/usage/${selectedRentalForLedger._id}/add-month`,
         {
           amountDue: selectedRentalForLedger.monthlyRent || 1500,
         }
       );
 
-      setSelectedRentalForLedger(res.usage);
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
+        setSelectedRentalForLedger(updated);
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? { ...u, ...updated } : u)));
+      }
       fetchUsages();
     } catch (err: any) {
       alert(err.message || 'Failed to add next rental month.');
@@ -523,8 +548,66 @@ export default function UsagePage() {
     }
   };
 
+  const handleResendReturnConfirmation = async (usage: InternalUsage) => {
+    try {
+      let targetEmail = (usage.customerEmail || '').trim();
+      if (!targetEmail || !targetEmail.includes('@')) {
+        const input = window.prompt(
+          `Enter customer email address to send equipment return confirmation for ${usage.assignedPerson}:`,
+          usage.customerEmail || ''
+        );
+        if (!input || !input.trim().includes('@')) {
+          alert('A valid email address is required to dispatch the equipment return confirmation.');
+          return;
+        }
+        targetEmail = input.trim();
+      }
+
+      const res = await api.post<{ success: boolean; message: string; recipient: string; provider?: string }>(
+        `/usage/${usage._id}/send-return-confirmation`,
+        { recipientEmail: targetEmail }
+      );
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || targetEmail;
+      const message = (res as any)?.message || (res as any)?.data?.message || `Equipment return confirmation email dispatched to ${recipient}!`;
+      alert(`✅ ${message}`);
+      await fetchUsages();
+    } catch (err: any) {
+      alert(err.message || 'Failed to dispatch return confirmation email.');
+    }
+  };
+
+  const handleResendRefundReceipt = async (usage: InternalUsage) => {
+    try {
+      let targetEmail = (usage.customerEmail || '').trim();
+      if (!targetEmail || !targetEmail.includes('@')) {
+        const input = window.prompt(
+          `Enter customer email address to send deposit refund receipt for ${usage.assignedPerson}:`,
+          usage.customerEmail || ''
+        );
+        if (!input || !input.trim().includes('@')) {
+          alert('A valid email address is required to dispatch the deposit refund receipt.');
+          return;
+        }
+        targetEmail = input.trim();
+      }
+
+      const res = await api.post<{ success: boolean; message: string; recipient: string; provider?: string }>(
+        `/usage/${usage._id}/send-refund-receipt`,
+        { recipientEmail: targetEmail }
+      );
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || targetEmail;
+      const message = (res as any)?.message || (res as any)?.data?.message || `Deposit refund receipt email dispatched to ${recipient}!`;
+      alert(`✅ ${message}`);
+      await fetchUsages();
+    } catch (err: any) {
+      alert(err.message || 'Failed to dispatch deposit refund receipt email.');
+    }
+  };
+
   const openReturnModal = (usage: InternalUsage) => {
     setReturnModalUsage(usage);
+    setReturnCustomerEmail(usage.customerEmail || '');
+    setSendReturnReceiptEmail(true);
     const initialOutcomes: any = {};
     usage.items.forEach((item, idx) => {
       initialOutcomes[idx] = {
@@ -537,13 +620,14 @@ export default function UsagePage() {
     setReturnError('');
   };
 
-  const handleReturnSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleReturnSubmit = async (e?: React.FormEvent, openRefundDirectlyAfter: boolean = false) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!returnModalUsage) return;
     setReturnError('');
     setIsReturning(true);
 
     try {
+      const currentUsageToRefund = returnModalUsage;
       const itemsPayload = returnModalUsage.items.map((item, idx) => {
         const insp = inspectionOutcomes[idx] || {
           condition: 'GOOD',
@@ -562,42 +646,191 @@ export default function UsagePage() {
         };
       });
 
-      await api.post(`/usage/${returnModalUsage._id}/return`, {
-        items: itemsPayload,
-        notes: 'Rental inspection processed & equipment returned',
-      });
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage; emailSent?: boolean; recipient?: string } }>(
+        `/usage/${returnModalUsage._id}/return`,
+        {
+          items: itemsPayload,
+          notes: 'Equipment inspected & returned to active inventory pool',
+          customerEmail: returnCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendReturnReceiptEmail,
+        }
+      );
+
+      const returnedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || returnCustomerEmail;
 
       setReturnModalUsage(null);
-      fetchUsages();
-      fetchInventory();
+      await fetchUsages();
+
+      if (emailSent && recipient) {
+        setReminderFeedback(`✅ Equipment returned and confirmation email dispatched to ${recipient}!`);
+      }
+
+      // If user selected to also refund deposit immediately, trigger refund modal
+      if (openRefundDirectlyAfter) {
+        const docForRefund = returnedDoc || currentUsageToRefund;
+        openRefundModal(docForRefund);
+      }
     } catch (err: any) {
-      setReturnError(err.message || 'Failed to process return inspection.');
+      setReturnError(err.message || 'Failed to process return inspection and stock intake.');
     } finally {
       setIsReturning(false);
     }
   };
 
+  const openRefundModal = (usage: InternalUsage) => {
+    setRefundModalUsage(usage);
+    setRefundCustomerEmail(usage.customerEmail || '');
+    setSendRefundReceiptEmail(true);
+    setRefundDeductionAmount(0);
+    setRefundDeductionReason('');
+    setRefundPaymentMethod('UPI');
+    setRefundTransactionRef('');
+    setRefundNotes('');
+    setRefundError('');
+    setRefundFeedback('');
+  };
+
+  const handleRefundSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refundModalUsage) return;
+    setRefundError('');
+    setRefundFeedback('');
+    setIsRefundingDeposit(true);
+
+    try {
+      const depositBal = typeof refundModalUsage.depositBalance === 'number'
+        ? refundModalUsage.depositBalance
+        : (refundModalUsage.securityDeposit || 0);
+
+      const netRefundAmount = Math.max(0, depositBal - (refundDeductionAmount || 0));
+
+      if (netRefundAmount > 0 && !refundTransactionRef.trim() && refundPaymentMethod !== 'CASH') {
+        throw new Error('Transaction / UPI reference number is required for non-cash security deposit refund disbursement.');
+      }
+
+      const res = await api.post<{ success: boolean; usage?: InternalUsage; data?: { usage: InternalUsage; emailSent?: boolean; recipient?: string; provider?: string } }>(
+        `/usage/${refundModalUsage._id}/refund-deposit`,
+        {
+          refundAmount: netRefundAmount,
+          deductionAmount: refundDeductionAmount || 0,
+          deductionReason: refundDeductionReason.trim() || undefined,
+          paymentMethod: refundPaymentMethod,
+          transactionRef: refundTransactionRef.trim() || undefined,
+          notes: refundNotes.trim() || undefined,
+          customerEmail: refundCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendRefundReceiptEmail,
+        }
+      );
+
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || refundCustomerEmail;
+      const provider = (res as any)?.provider || (res as any)?.data?.provider;
+
+      const updatedDoc: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage;
+      if (updatedDoc && selectedRentalForLedger && selectedRentalForLedger._id === updatedDoc._id) {
+        setSelectedRentalForLedger(updatedDoc);
+      }
+
+      if (emailSent && recipient) {
+        setRefundFeedback(`✅ Security deposit refund of ${formatCurrency(netRefundAmount)} processed & official receipt email dispatched to ${recipient}${provider ? ` (via ${provider})` : ''}!`);
+      } else if (!sendRefundReceiptEmail) {
+        setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed successfully (email receipt skipped as unchecked).`);
+      } else {
+        setRefundFeedback(`Security deposit refund of ${formatCurrency(netRefundAmount)} processed & recorded successfully!`);
+      }
+
+      await fetchUsages();
+      setTimeout(() => {
+        setRefundModalUsage(null);
+        setRefundFeedback('');
+      }, 2000);
+    } catch (err: any) {
+      setRefundError(err.message || 'Failed to process security deposit refund.');
+    } finally {
+      setIsRefundingDeposit(false);
+    }
+  };
+
+  const formatLocalDateForInput = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  };
+
   const openExtendModal = (usage: InternalUsage) => {
     setExtendModalUsage(usage);
-    setNewExtendedDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
-    setExtensionReason('');
+    const currentExpected = usage.expectedReturnDate ? new Date(usage.expectedReturnDate) : new Date();
+    const effectiveBase = currentExpected.getTime() > Date.now() ? currentExpected : new Date();
+    // Default to +30 days (1 month) from whichever is later: current deadline or today!
+    const defaultDate = new Date(effectiveBase.getTime() + 30 * 24 * 60 * 60 * 1000);
+    setNewExtendedDate(formatLocalDateForInput(defaultDate));
+    setExtensionReason('Customer requested rental return deadline extension');
+    setAddRentalMonthsOnExtend(true);
     setExtendError('');
+    setExtendFeedback('');
+  };
+
+  const setQuickExtensionDays = (days: number) => {
+    if (!extendModalUsage) return;
+    const currentExpected = extendModalUsage.expectedReturnDate
+      ? new Date(extendModalUsage.expectedReturnDate)
+      : new Date();
+    const effectiveBase = currentExpected.getTime() > Date.now() ? currentExpected : new Date();
+    const target = new Date(effectiveBase.getTime() + days * 24 * 60 * 60 * 1000);
+    setNewExtendedDate(formatLocalDateForInput(target));
   };
 
   const handleExtendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!extendModalUsage) return;
     setExtendError('');
+    setExtendFeedback('');
     setIsExtending(true);
 
     try {
-      await api.post(`/usage/${extendModalUsage._id}/extend`, {
-        extendedDate: newExtendedDate,
-        reason: extensionReason.trim(),
-      });
+      if (!newExtendedDate) {
+        throw new Error('Please select a new expected return date.');
+      }
 
-      setExtendModalUsage(null);
+      const chosenDate = new Date(newExtendedDate);
+      const currentReturn = new Date(extendModalUsage.expectedReturnDate);
+      if (isNaN(chosenDate.getTime())) {
+        throw new Error('Please enter a valid date and time.');
+      }
+      if (chosenDate <= currentReturn) {
+        throw new Error(
+          `The new return date must be strictly later than current deadline (${formatDate(extendModalUsage.expectedReturnDate)}).`
+        );
+      }
+
+      const res = await api.post<{ success?: boolean; data?: { usage: InternalUsage }; usage?: InternalUsage }>(
+        `/usage/${extendModalUsage._id}/extend`,
+        {
+          extendedDate: chosenDate.toISOString(),
+          reason: extensionReason.trim() || 'Customer requested return extension',
+          addRentalMonths: addRentalMonthsOnExtend,
+        }
+      );
+
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+        if (selectedRentalForLedger && selectedRentalForLedger._id === updated._id) {
+          setSelectedRentalForLedger(updated);
+        }
+      }
+
+      setExtendFeedback(`Return deadline successfully extended to ${formatDateTime(chosenDate)}!`);
       fetchUsages();
+      setTimeout(() => {
+        setExtendModalUsage(null);
+        setExtendFeedback('');
+      }, 1400);
     } catch (err: any) {
       setExtendError(err.message || 'Failed to extend rental schedule.');
     } finally {
@@ -605,80 +838,272 @@ export default function UsagePage() {
     }
   };
 
+  // ── Edit Rental Agreement Modal State & Handlers ──
+  const [editingAgreement, setEditingAgreement] = useState<InternalUsage | null>(null);
+  const [editAssignedPerson, setEditAssignedPerson] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerEmail, setEditCustomerEmail] = useState('');
+  const [editLockInPeriodMonths, setEditLockInPeriodMonths] = useState<number>(3);
+  const [editMonthlyRent, setEditMonthlyRent] = useState<number>(1500);
+  const [editSecurityDeposit, setEditSecurityDeposit] = useState<number>(0);
+  const [editAgreementNotes, setEditAgreementNotes] = useState('');
+  const [editPayAllNow, setEditPayAllNow] = useState(false);
+  const [editAgreementPaymentMethod, setEditAgreementPaymentMethod] = useState<'UPI' | 'CASH' | 'CARD' | 'BANK_TRANSFER'>('UPI');
+  const [editAgreementTransactionRef, setEditAgreementTransactionRef] = useState('');
+  const [isUpdatingAgreement, setIsUpdatingAgreement] = useState(false);
+  const [updateAgreementError, setUpdateAgreementError] = useState('');
+  const [updateAgreementFeedback, setUpdateAgreementFeedback] = useState('');
+
+  const openEditAgreementModal = (usage: InternalUsage) => {
+    setEditingAgreement(usage);
+    setEditAssignedPerson(usage.assignedPerson || '');
+    setEditCustomerPhone(usage.assignedPersonContact || '');
+    setEditCustomerEmail(usage.customerEmail || '');
+    // Ensure lock-in tenure is at least the current length of scheduled monthly payments
+    const currentScheduleLength = (usage.monthlyPayments || []).length;
+    setEditLockInPeriodMonths(Math.max(usage.lockInPeriodMonths || 3, currentScheduleLength));
+    setEditMonthlyRent(usage.monthlyRent || 1500);
+    setEditSecurityDeposit(usage.securityDeposit || 0);
+    setEditAgreementNotes(usage.notes || '');
+    setEditPayAllNow(false);
+    setEditAgreementPaymentMethod('UPI');
+    setEditAgreementTransactionRef('');
+    setUpdateAgreementError('');
+    setUpdateAgreementFeedback('');
+  };
+
+  // Computed values for editing agreement buyout calculation
+  const editingExistingPayments = editingAgreement?.monthlyPayments || [];
+  const editingPaidMonths = editingExistingPayments.filter((p) => p.status === 'PAID');
+  const editingPaidCount = editingPaidMonths.length;
+  const editingAlreadyPaidTotal = editingPaidMonths.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+
+  // Unpaid months in the existing schedule (including manually added months like Month 4, adjusted months, etc.)
+  const editingUnpaidMonths = editingExistingPayments.filter((p) => p.status !== 'PAID');
+  const editingUnpaidScheduledTotal = editingUnpaidMonths.reduce(
+    (sum, p) => sum + Math.max(0, p.amountDue - (p.amountPaid || 0)),
+    0
+  );
+
+  // If user sets a higher tenure than current schedule length, calculate extra future months
+  const editingTargetTenure = Math.max(1, editLockInPeriodMonths || 1);
+  const editingExtraFutureMonths = Math.max(0, editingTargetTenure - editingExistingPayments.length);
+  const editingExtraFutureTotal = editingExtraFutureMonths * (editMonthlyRent || 0);
+
+  // Total settlement buyout amount across all remaining unpaid months + any extended future months
+  const editingTotalSettlementAmount = editingUnpaidScheduledTotal + editingExtraFutureTotal;
+  const editingRemainingMonthsToSettle = editingUnpaidMonths.length + editingExtraFutureMonths;
+
+  const handleUpdateAgreement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAgreement) return;
+    setUpdateAgreementError('');
+    setIsUpdatingAgreement(true);
+
+    try {
+      if (editPayAllNow && editingTotalSettlementAmount > 0 && !editAgreementTransactionRef.trim()) {
+        throw new Error('Transaction / UPI reference number is compulsory when settling remaining rent.');
+      }
+
+      const res = await api.put<{ success: boolean; data: { usage: InternalUsage } }>(
+        `/usage/${editingAgreement._id}`,
+        {
+          assignedPerson: editAssignedPerson.trim(),
+          assignedPersonContact: editCustomerPhone.trim(),
+          customerEmail: editCustomerEmail.trim().toLowerCase() || undefined,
+          lockInPeriodMonths: editLockInPeriodMonths,
+          monthlyRent: editMonthlyRent,
+          securityDeposit: editSecurityDeposit,
+          notes: editAgreementNotes.trim() || undefined,
+          payAllRemainingNow: editPayAllNow,
+          paymentMethod: editAgreementPaymentMethod,
+          transactionRef: editAgreementTransactionRef.trim() || (editPayAllNow ? `SETTLE-${editingAgreement.issueReference}` : undefined),
+        }
+      );
+
+      const updated: InternalUsage | undefined = (res as any)?.usage || (res as any)?.data?.usage || (res as any);
+      if (updated && updated._id) {
+        setUsages((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+        if (selectedRentalForLedger && selectedRentalForLedger._id === updated._id) {
+          setSelectedRentalForLedger(updated);
+        }
+      }
+
+      setUpdateAgreementFeedback(
+        editPayAllNow
+          ? editingTotalSettlementAmount > 0
+            ? `Rental buyout settled successfully for ${formatCurrency(editingTotalSettlementAmount)}! All remaining dues cleared.`
+            : 'Rental agreement updated and marked fully satisfied!'
+          : 'Rental agreement updated & recalculated successfully!'
+      );
+      fetchUsages();
+      setTimeout(() => {
+        setEditingAgreement(null);
+        setUpdateAgreementFeedback('');
+      }, 1500);
+    } catch (err: any) {
+      setUpdateAgreementError(err.message || 'Failed to update rental agreement.');
+    } finally {
+      setIsUpdatingAgreement(false);
+    }
+  };
+
   // Financial KPIs for Rentals
   const activeRentals = usages.filter((u) => u.status !== 'RETURNED');
-  const totalDepositsHeld = activeRentals.reduce((sum, u) => sum + (u.securityDeposit || 0), 0);
+  const totalDepositsHeld = usages
+    .filter((u) => u.depositRefundStatus !== 'REFUNDED' && (typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0)) > 0)
+    .reduce((sum, u) => sum + (typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0)), 0);
   const totalRentCollected = usages.reduce((sum, u) => sum + (u.totalRentPaid || 0), 0);
   const totalRentPending = activeRentals.reduce((sum, u) => sum + (u.totalRentDue || 0), 0);
+
+  // ── Outward Money / Deposit Refunds Calculation ──
+  // Includes both active rentals with refundable deposits AND returned equipment with refund pending
+  const outwardRefundList = React.useMemo(() => {
+    return usages
+      .filter((u) => u.depositRefundStatus !== 'REFUNDED' && ((u.securityDeposit || 0) > 0 || (u.depositBalance || 0) > 0))
+      .map((u) => {
+        const deposit = u.securityDeposit || 0;
+        let rentPaidOrDeducted = 0;
+        let outwardRefundDue = 0;
+
+        if (u.status === 'RETURNED' || u.depositRefundStatus === 'REFUND_PENDING') {
+          // Physical instrument already back in inventory; deposit held awaiting refund disbursement
+          outwardRefundDue = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+          rentPaidOrDeducted = Math.max(0, deposit - outwardRefundDue);
+        } else if (u.depositMode) {
+          // Deposit deduction mode: rent is deducted from the deposit
+          const balance =
+            typeof u.depositBalance === 'number'
+              ? u.depositBalance
+              : Math.max(0, deposit - (u.totalRentPaid || 0));
+          rentPaidOrDeducted = Math.max(0, deposit - balance);
+          outwardRefundDue = Math.max(0, balance);
+        } else {
+          // Standard rental mode: deposit is held; rent is paid directly.
+          // If any rent installments are unpaid (totalRentDue), that is offset against deposit upon return.
+          rentPaidOrDeducted = u.totalRentPaid || 0;
+          const rentDue = u.totalRentDue || 0;
+          const balance = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+          outwardRefundDue = Math.max(0, balance - rentDue);
+        }
+
+        const firstItem = u.items && u.items[0];
+        const prod = firstItem?.product as any;
+        const instrumentName = prod?.name || (firstItem as any)?.productName || 'Musical Instrument';
+        const instrumentBrand = prod?.brand || '';
+        const assetId = (firstItem?.serializedItemId as any)?.assetId || (firstItem as any)?.assetId;
+        const serialNo = (firstItem?.serializedItemId as any)?.manufacturerSerial;
+
+        return {
+          usage: u,
+          customerName: u.assignedPerson || 'Unnamed Renter',
+          customerPhone: u.assignedPersonContact || '',
+          customerEmail: u.customerEmail || '',
+          instrumentName,
+          instrumentBrand,
+          assetId,
+          serialNo,
+          depositMode: !!u.depositMode,
+          depositCollected: deposit,
+          rentPaidOrDeducted,
+          outwardRefundDue,
+          status: u.status,
+          issueDate: u.issueDate || u.createdAt,
+          expectedReturnDate: u.expectedReturnDate,
+        };
+      })
+      .filter((r) => r.outwardRefundDue > 0);
+  }, [usages]);
+
+  const totalOutwardRefund = React.useMemo(() => {
+    return outwardRefundList.reduce((sum, r) => sum + r.outwardRefundDue, 0);
+  }, [outwardRefundList]);
+
+  // Filtered outward refund list by search query and mode filter
+  const filteredOutwardRefundList = React.useMemo(() => {
+    return outwardRefundList.filter((r) => {
+      if (outwardModeFilter === 'DEPOSIT_MODE' && !r.depositMode) return false;
+      if (outwardModeFilter === 'STANDARD' && r.depositMode) return false;
+
+      if (!outwardSearch.trim()) return true;
+      const q = outwardSearch.toLowerCase().trim();
+      return (
+        r.customerName.toLowerCase().includes(q) ||
+        r.customerPhone.toLowerCase().includes(q) ||
+        r.customerEmail.toLowerCase().includes(q) ||
+        r.instrumentName.toLowerCase().includes(q) ||
+        (r.assetId && r.assetId.toLowerCase().includes(q)) ||
+        r.usage.issueReference.toLowerCase().includes(q)
+      );
+    });
+  }, [outwardRefundList, outwardSearch, outwardModeFilter]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <Music2 className="h-6 w-6 text-amber-500" />
-              <span>Rent Instrument & Instrument Loans</span>
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <Music2 className="h-6 w-6 text-amber-500" />
+            <span>Rent Instrument &amp; Instrument Loans</span>
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
+          </p>
         </div>
 
         {canIssueUsage() && (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={openIssueModal}
-            className="gap-1.5 text-xs font-bold shadow-md"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Rent Instrument / Issue Loan</span>
-          </Button>
+          <Link href="/usage/new">
+            <Button
+              size="sm"
+              variant="default"
+              className="gap-1.5 text-xs font-bold shadow-md cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Rent Instrument / Issue Loan</span>
+            </Button>
+          </Link>
         )}
       </div>
 
-      {/* Rental Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Rental Financial Overview Cards (5 Columns with Outward Deposit Refunds) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <Card className="border-l-4 border-l-amber-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Active Rentals & Loans</span>
+              <span>Active Rentals</span>
               <Music2 className="h-4 w-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {activeRentals.length}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Instruments currently on rent/loan</p>
+            <p className="text-[11px] text-slate-400 mt-1">Instruments on active rent</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-indigo-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Security Deposits Held</span>
+              <span>Deposits Held</span>
               <Shield className="h-4 w-4 text-indigo-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {formatCurrency(totalDepositsHeld)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Refundable customer safety deposits</p>
+            <p className="text-[11px] text-slate-400 mt-1">Customer safety deposits</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-emerald-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-              <span>Total Rent Collected</span>
+              <span>Rent Collected</span>
               <IndianRupee className="h-4 w-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
               {formatCurrency(totalRentCollected)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Monthly rental income processed</p>
+            <p className="text-[11px] text-slate-400 mt-1">Rental income processed</p>
           </CardContent>
         </Card>
 
@@ -691,7 +1116,36 @@ export default function UsagePage() {
             <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
               {formatCurrency(totalRentPending)}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Outstanding rental installments</p>
+            <p className="text-[11px] text-slate-400 mt-1">Outstanding installments</p>
+          </CardContent>
+        </Card>
+
+        {/* 5. Outward Money / Deposit Refunds Due Card (Clickable to inspect users and instruments) */}
+        <Card
+          onClick={() => {
+            setOutwardSearch('');
+            setOutwardModeFilter('ALL');
+            setIsOutwardModalOpen(true);
+          }}
+          className="border-l-4 border-l-teal-500 hover:border-teal-400 bg-teal-500/5 dark:bg-teal-950/20 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-[0.99] group"
+        >
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center text-teal-700 dark:text-teal-300 text-xs font-bold uppercase tracking-wider">
+              <span>Outward Refunds Due</span>
+              <Wallet className="h-4 w-4 text-teal-500 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black text-teal-600 dark:text-teal-400 mt-1">
+              {formatCurrency(totalOutwardRefund)}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400">
+                {outwardRefundList.length} customer{outwardRefundList.length === 1 ? '' : 's'} refundable
+              </span>
+              <span className="font-bold text-teal-600 dark:text-teal-400 group-hover:underline flex items-center gap-0.5">
+                <span>Inspect</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -738,15 +1192,15 @@ export default function UsagePage() {
           <div className="responsive-table-wrapper">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                  <th className="py-3 px-4">Agreement Ref</th>
-                  <th className="py-3 px-4">Renter / Customer</th>
-                  <th className="py-3 px-4">Rented Instrument & Accessories</th>
-                  <th className="py-3 px-4">Rental Plan & Terms</th>
-                  <th className="py-3 px-4">Rent Paid / Remaining</th>
-                  <th className="py-3 px-4">Return / Renewal</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-center">Tracking & Actions</th>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                  <th className="py-2.5 px-3 whitespace-nowrap">Agreement</th>
+                  <th className="py-2.5 px-3">Renter / Customer</th>
+                  <th className="py-2.5 px-3">Instrument &amp; Accessories</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Plan &amp; Terms</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Rent &amp; Outward Refund</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Return Deadline</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -772,6 +1226,27 @@ export default function UsagePage() {
                     const paid = u.totalRentPaid || 0;
                     const due = u.totalRentDue || 0;
 
+                    const deposit = u.securityDeposit || 0;
+                    let outwardRefund = 0;
+                    if (u.depositRefundStatus === 'REFUNDED') {
+                      outwardRefund = 0;
+                    } else if (u.status === 'RETURNED' || u.depositRefundStatus === 'REFUND_PENDING') {
+                      outwardRefund = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+                    } else if (u.depositMode) {
+                      const balance =
+                        typeof u.depositBalance === 'number'
+                          ? u.depositBalance
+                          : Math.max(0, deposit - paid);
+                      outwardRefund = Math.max(0, balance);
+                    } else {
+                      const balance = typeof u.depositBalance === 'number' ? u.depositBalance : deposit;
+                      outwardRefund = Math.max(0, balance - due);
+                    }
+
+                    const daysRemaining = Math.ceil(
+                      (new Date(u.expectedReturnDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                    );
+
                     return (
                       <tr
                         key={u._id}
@@ -779,8 +1254,9 @@ export default function UsagePage() {
                           isOverdue ? 'bg-rose-500/5' : ''
                         }`}
                       >
-                        <td className="py-3 px-4">
-                          <span className="font-mono font-bold text-amber-500 block">
+                        {/* 1. Agreement Reference */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <span className="font-mono font-bold text-amber-500 block text-xs">
                             {u.issueReference}
                           </span>
                           <span className="text-[10px] text-slate-400">
@@ -788,169 +1264,286 @@ export default function UsagePage() {
                           </span>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white">
+                        {/* 2. Customer Information (Compact) */}
+                        <td className="py-2 px-3 align-middle">
+                          <div className="font-bold text-slate-900 dark:text-white text-xs truncate max-w-[150px]" title={u.assignedPerson}>
                             {u.assignedPerson}
                           </div>
-                          {u.assignedPersonContact && (
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              <span>{u.assignedPersonContact}</span>
-                            </div>
-                          )}
-                          {u.customerEmail && (
-                            <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                              <Mail className="h-3 w-3 text-indigo-400" />
-                              <span>{u.customerEmail}</span>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="space-y-1">
-                            {u.items.map((it, idx) => (
-                              <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                <span className="font-semibold">{it.product?.name}</span>
-                                {it.product?.color && (
-                                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                                    {it.product.color}
-                                  </span>
-                                )}
-                                {it.serializedItemId && (
-                                  <span className="ml-1.5 font-mono text-amber-500 font-bold text-[10px]">
-                                    [{(it.serializedItemId as any).assetId || 'Unit'}]
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-
-                            {/* Detailing: Bundled accessories tags */}
-                            {accessories.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 pt-1">
-                                {accessories.map((acc, aidx) => (
-                                  <span
-                                    key={aidx}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                                  >
-                                    <Tag className="h-2.5 w-2.5" />
-                                    <span>{acc}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic">No bundled accessories</span>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+                            {u.assignedPersonContact && (
+                              <span className="flex items-center gap-0.5 whitespace-nowrap">
+                                <Phone className="h-2.5 w-2.5 text-slate-500" />
+                                <span>{u.assignedPersonContact}</span>
+                              </span>
+                            )}
+                            {u.customerEmail && (
+                              <span className="flex items-center gap-0.5 text-slate-400 truncate max-w-[130px]" title={u.customerEmail}>
+                                <Mail className="h-2.5 w-2.5 text-indigo-400 shrink-0" />
+                                <span className="truncate">{u.customerEmail}</span>
+                              </span>
                             )}
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        {/* 3. Instrument & Single-Line Compact Accessories */}
+                        <td className="py-2 px-3 align-middle">
+                          <div className="space-y-0.5">
+                            {u.items.map((it, idx) => {
+                              const pName = (it.product as any)?.name || (it as any).productName || 'Musical Instrument';
+                              const pColor = (it.product as any)?.color;
+                              return (
+                                <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">{pName}</span>
+                                  {pColor && (
+                                    <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700">
+                                      {pColor}
+                                    </span>
+                                  )}
+                                  {it.serializedItemId && (
+                                    <span className="font-mono text-amber-500 font-bold text-[10px]">
+                                      [{(it.serializedItemId as any).assetId || 'Unit'}]
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Sleek single-line accessories */}
+                            {accessories.length > 0 ? (
+                              <div
+                                className="text-[11px] text-slate-400 flex items-center gap-1 max-w-[220px] truncate"
+                                title={accessories.join(', ')}
+                              >
+                                <Tag className="h-2.5 w-2.5 text-indigo-400 shrink-0" />
+                                <span className="truncate">{accessories.join(' • ')}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">No bundled items</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Plan & Terms (Compact 2 lines) */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
                           <div className="space-y-0.5">
                             <div className="text-xs font-bold text-amber-500">
-                              {formatCurrency(u.monthlyRent || 0)} / mo
+                              {formatCurrency(u.monthlyRent || 0)} <span className="text-[10px] font-normal text-slate-400">/ mo</span>
+                              <span className="ml-1 text-[10px] font-semibold text-slate-400">• {u.lockInPeriodMonths || 3}M</span>
                             </div>
-                            <div className="text-[11px] text-slate-500">
-                              Lock-in: <strong>{u.lockInPeriodMonths || 3} Months</strong>
-                            </div>
-                            <div className="text-[11px] text-indigo-500 font-medium">
-                              Deposit: {formatCurrency(u.securityDeposit || 0)}
+                            <div className="text-[11px] text-slate-400">
+                              Deposit: <strong className="text-indigo-400 font-mono">{formatCurrency(deposit)}</strong>
+                              {u.depositMode && <span className="ml-1 text-[9px] font-semibold text-indigo-400">(Auto-deduct)</span>}
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-xs font-bold">
-                              <span className="text-emerald-500">{formatCurrency(paid)}</span>
-                              <span className="text-slate-400">/</span>
-                              <span className="text-slate-700 dark:text-slate-300">
-                                {formatCurrency(paid + due)}
-                              </span>
+                        {/* 5. Rent Collection & Outward Money Outcome */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-mono font-bold text-emerald-500">{formatCurrency(paid)}</span>
+                              <span className="text-slate-500">/</span>
+                              <span className="font-mono text-slate-400 text-[11px]">{formatCurrency(paid + due)}</span>
+                              {due > 0 ? (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                  {formatCurrency(due)} Due
+                                </span>
+                              ) : (
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
+                                  All Paid
+                                </span>
+                              )}
                             </div>
-                            {due > 0 ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                                {formatCurrency(due)} Due
-                              </span>
+                            <div className="text-[11px] flex items-center justify-between gap-1 text-teal-600 dark:text-teal-400 font-medium">
+                              <span>Refund: <strong className="font-mono font-bold text-teal-500">{formatCurrency(outwardRefund)}</strong></span>
+                              {u.depositRefundStatus === 'REFUNDED' ? (
+                                <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                                  Refunded
+                                </span>
+                              ) : isReturned && (u.depositBalance ?? 0) > 0 ? (
+                                <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.2 rounded animate-pulse">
+                                  Pending
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 6. Return Deadline & Progress */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          <div className="space-y-0.5">
+                            <span
+                              className={
+                                isOverdue
+                                  ? 'font-bold text-rose-500 flex items-center gap-1 text-xs'
+                                  : 'text-slate-800 dark:text-slate-200 text-xs font-semibold'
+                              }
+                            >
+                              {isOverdue && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                              {formatDate(u.expectedReturnDate)}
+                            </span>
+                            <div className="text-[10px] text-slate-400">
+                              {isReturned ? (
+                                <span className="text-emerald-500 font-medium">Closed</span>
+                              ) : isOverdue ? (
+                                <span className="text-rose-400 font-bold">Overdue by {Math.abs(daysRemaining)}d</span>
+                              ) : (
+                                <span>{daysRemaining === 0 ? 'Due Today' : `Due in ${daysRemaining}d`}</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 7. Status */}
+                        <td className="py-2 px-3 whitespace-nowrap align-middle">
+                          {isReturned ? (
+                            (u.depositBalance ?? 0) > 0 && u.depositRefundStatus !== 'REFUNDED' ? (
+                              <div className="space-y-1">
+                                <Badge variant="warning" className="text-[10px] px-2 py-0.5 flex items-center gap-1 w-fit bg-amber-500/15 text-amber-500 border border-amber-500/30 font-bold">
+                                  <PackagePlus className="h-3 w-3" />
+                                  <span>IN STOCK (REFUND PENDING)</span>
+                                </Badge>
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <Coins className="h-3 w-3" />
+                                  <span>Pending: {formatCurrency(u.depositBalance || 0)}</span>
+                                </div>
+                              </div>
                             ) : (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
-                                All Paid
+                              <Badge variant="success" className="text-[10px] px-2 py-0.5">
+                                RETURNED & SETTLED
+                              </Badge>
+                            )
+                          ) : (
+                            <Badge
+                              variant={isOverdue ? 'danger' : 'info'}
+                              className="text-[10px] px-2 py-0.5"
+                            >
+                              {isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
+                            </Badge>
+                          )}
+                          {u.depositMode && u.depositExhausted && (
+                            <div className="mt-0.5">
+                              <span
+                                className="inline-flex items-center gap-1 px-1 rounded text-[9px] font-bold uppercase bg-rose-500/10 text-rose-500"
+                                title={`Deposit exhausted${u.continuationStartedAt ? ` • Started ${formatDate(u.continuationStartedAt)}` : ''}`}
+                              >
+                                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                                <span>Deposit Exhausted</span>
                               </span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 8. Actions Bar — Two Separate Return & Refund Operations */}
+                        <td className="py-2 px-3 text-right whitespace-nowrap align-middle">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Button 1: Add Again to Inventory (Return Inspection) */}
+                            {!isReturned && canIssueUsage() && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openReturnModal(u)}
+                                className="h-7 px-2 text-[11px] font-bold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/40 hover:bg-teal-500/10 hover:border-teal-500 shadow-xs cursor-pointer"
+                                title="1. Inspect equipment condition & add again to active inventory"
+                              >
+                                <PackagePlus className="h-3.5 w-3.5" />
+                                <span>Add to Stock</span>
+                              </Button>
                             )}
-                          </div>
-                        </td>
 
-                        <td className="py-3 px-4">
-                          <span
-                            className={
-                              isOverdue
-                                ? 'font-bold text-rose-500 flex items-center gap-1'
-                                : 'text-slate-700 dark:text-slate-300'
-                            }
-                          >
-                            {isOverdue && <AlertTriangle className="h-3 w-3 shrink-0" />}
-                            {formatDate(u.expectedReturnDate)}
-                          </span>
-                        </td>
+                            {/* Button 2: Refund Deposit (Separate Accounting Process) */}
+                            {((u.depositBalance ?? 0) > 0 || (u.securityDeposit ?? 0) > 0) &&
+                              u.depositRefundStatus !== 'REFUNDED' &&
+                              canIssueUsage() && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openRefundModal(u)}
+                                  className={`h-7 px-2 text-[11px] font-bold gap-1 shadow-xs cursor-pointer ${
+                                    isReturned
+                                      ? 'bg-amber-500/15 text-amber-500 border-amber-500/50 hover:bg-amber-500/25'
+                                      : 'text-indigo-400 border-indigo-500/40 hover:bg-indigo-500/10 hover:border-indigo-500'
+                                  }`}
+                                  title={`2. Refund security deposit (${formatCurrency(typeof u.depositBalance === 'number' ? u.depositBalance : (u.securityDeposit || 0))} available)`}
+                                >
+                                  <Coins className="h-3.5 w-3.5" />
+                                  <span>Refund Deposit</span>
+                                </Button>
+                              )}
 
-                        <td className="py-3 px-4">
-                          <Badge
-                            variant={isReturned ? 'success' : isOverdue ? 'danger' : 'info'}
-                            className="text-[10px]"
-                          >
-                            {isReturned ? 'RETURNED' : isOverdue ? 'DUE / OVERDUE' : 'ACTIVE RENTAL'}
-                          </Badge>
-                        </td>
-
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
                             {/* Track Rent & Monthly Ledger button */}
                             <Button
                               size="sm"
                               variant="default"
                               onClick={() => openLedgerModal(u)}
-                              className="h-7 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                              className="h-7 px-2.5 text-[11px] font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm cursor-pointer"
                               title="Track Monthly Rent Payments & Ledger"
                             >
                               <CreditCard className="h-3 w-3" />
-                              <span>Track Rent</span>
+                              <span>Ledger</span>
                             </Button>
 
-                            {/* Email Payment Reminder button */}
+                            {/* Secondary Actions as compact icon buttons with clear tooltips */}
+                            {!isReturned && canIssueUsage() && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditAgreementModal(u)}
+                                className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                title="Edit Rental Agreement Terms & Tenure"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
                             {!isReturned && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleSendReminder(u)}
-                                className="h-7 text-[11px] text-indigo-400 hover:text-indigo-300 border-indigo-500/30 gap-1"
-                                title="Send Email Reminder"
+                                className="h-7 w-7 p-0 text-indigo-400 hover:text-indigo-300 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                title="Send Email Due Reminder"
                               >
-                                <Mail className="h-3 w-3" />
-                                <span className="hidden sm:inline">Reminder</span>
+                                <Mail className="h-3.5 w-3.5" />
                               </Button>
                             )}
 
                             {!isReturned && canIssueUsage() && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openReturnModal(u)}
-                                  className="h-7 text-[11px] gap-1"
-                                  title="Inspect & Return Instrument"
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                  <span className="hidden sm:inline">Return</span>
-                                </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openExtendModal(u)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-white border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                title="Extend Duration / Renewal Deadline"
+                              >
+                                <CalendarPlus className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
 
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openExtendModal(u)}
-                                  className="h-7 text-[11px]"
-                                  title="Extend Duration / Renewal"
-                                >
-                                  <CalendarPlus className="h-3.5 w-3.5" />
-                                </Button>
-                              </>
+                            {isReturned && u.customerEmail && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResendReturnConfirmation(u)}
+                                className="h-7 px-2 text-[11px] font-semibold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/30 hover:bg-teal-500/10 cursor-pointer"
+                                title={`Resend Equipment Return & Restocking Receipt to ${u.customerEmail}`}
+                              >
+                                <Mail className="h-3 w-3" />
+                                <span>Return Mail</span>
+                              </Button>
+                            )}
+
+                            {u.depositRefundStatus === 'REFUNDED' && u.customerEmail && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResendRefundReceipt(u)}
+                                className="h-7 px-2 text-[11px] font-semibold gap-1 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
+                                title={`Resend Security Deposit Refund Receipt to ${u.customerEmail}`}
+                              >
+                                <Receipt className="h-3 w-3" />
+                                <span>Refund Mail</span>
+                              </Button>
                             )}
                           </div>
                         </td>
@@ -964,242 +1557,18 @@ export default function UsagePage() {
         </CardContent>
       </Card>
 
-      {/* Rent Instrument / Loan Agreement Modal */}
-      <Modal
-        isOpen={isIssueModalOpen}
-        onClose={() => setIsIssueModalOpen(false)}
-        title="Rent Instrument & Create Agreement"
-        description="Customer details, rental terms, deposit, instrument selection and accessories."
-        maxWidth="4xl"
-        footer={
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {issueTab !== 'customer' && (
-                <button type="button" onClick={() => setIssueTab(issueTab === 'instrument' ? 'terms' : 'customer')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                  ← Back
-                </button>
-              )}
-              <div className="flex items-center gap-1 ml-1">
-                {(['customer','terms','instrument'] as const).map((t) => (
-                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${issueTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsIssueModalOpen(false)}>Cancel</Button>
-              {issueTab !== 'instrument' ? (
-                <Button type="button" size="sm" variant="default" className="font-bold gap-1.5"
-                  onClick={() => setIssueTab(issueTab === 'customer' ? 'terms' : 'instrument')}>
-                  Next →
-                </Button>
-              ) : (
-                <Button type="submit" form="issue-rental-form" size="sm" variant="default" isLoading={isIssuing} className="font-bold">
-                  Confirm & Issue Agreement
-                </Button>
-              )}
-            </div>
-          </div>
-        }
-      >
-        <form id="issue-rental-form" onSubmit={handleIssueSubmit}>
-          {issueError && (
-            <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
-              {issueError}
-            </div>
-          )}
 
-          {/* ── Tab Bar ── */}
-          <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-            {([
-              { key: 'customer',   label: 'Customer',            icon: <User className="h-3.5 w-3.5" /> },
-              { key: 'terms',      label: 'Rental Terms',        icon: <Shield className="h-3.5 w-3.5" /> },
-              { key: 'instrument', label: 'Instrument & Accessories', icon: <Music2 className="h-3.5 w-3.5" /> },
-            ] as const).map((tab) => (
-              <button key={tab.key} type="button" onClick={() => setIssueTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                  issueTab === tab.key ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-                }`}>
-                {tab.icon}{tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* •• TAB 1 — Customer •• */}
-          <div className={issueTab === 'customer' ? 'space-y-4' : 'hidden'}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input label="Renter / Customer Name *" required placeholder="e.g. Rohan Deshmukh"
-                value={assignedPerson} onChange={(e) => setAssignedPerson(e.target.value)} />
-              <Input label="Phone Number" placeholder="+91 98765 43210"
-                value={assignedPersonContact} onChange={(e) => setAssignedPersonContact(e.target.value)} />
-              <Input label="Email (for reminders) *" type="email" required placeholder="rohan@example.com"
-                value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
-            </div>
-            <Input label="Agreement Remarks / Special Terms"
-              placeholder="e.g. Security deposit refundable upon inspection. Maintenance covered by Stereobliss."
-              value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-
-          {/* •• TAB 2 — Rental Terms & Deposit •• */}
-          <div className={issueTab === 'terms' ? 'space-y-4' : 'hidden'}>
-            {/* Lock-in + rent + deposit */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Rental Plan & Lock-In Period</span>
-                <span className="text-[11px] text-slate-500">Standard: 3 months</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Lock-In Duration</label>
-                  <div className="flex gap-1">
-                    {[1, 3, 6, 12].map((m) => (
-                      <button type="button" key={m} onClick={() => applyLockInMonths(m)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${lockInPeriodMonths === m ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 hover:border-amber-400'}`}>
-                        {m}M
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Monthly Rent (₹) *</label>
-                  <input type="number" min="0" required value={monthlyRent}
-                    onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Security Deposit (₹)</label>
-                  <input type="number" min="0" value={securityDeposit}
-                    onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
-                    className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right" />
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
-                <span>Agreement end date:</span>
-                <strong className="text-slate-800 dark:text-slate-200">
-                  {expectedReturnDate ? new Date(expectedReturnDate).toLocaleDateString('en-IN') : 'N/A'} ({lockInPeriodMonths}M tenure)
-                </strong>
-              </div>
-            </div>
-
-            {/* Deposit details (only when deposit > 0) */}
-            {securityDeposit > 0 && (
-              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" />Security Deposit Details (Mandatory)
-                  </span>
-                  <span className="text-[11px] text-indigo-500">Transaction ref required</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Deposit Collected Via *</label>
-                    <select value={depositPaymentMethod} onChange={(e) => setDepositPaymentMethod(e.target.value as any)}
-                      className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-500">
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI (GPay / PhonePe)</option>
-                      <option value="CARD">Card</option>
-                      <option value="BANK_TRANSFER">Bank Transfer / IMPS</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">Transaction / Receipt No. *</label>
-                    <input type="text" required={securityDeposit > 0} placeholder="e.g. CASH-RCPT-001 / UPI-8837261"
-                      value={depositTransactionRef} onChange={(e) => setDepositTransactionRef(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono" />
-                  </div>
-                </div>
-                {/* Deposit-as-Rent toggle */}
-                <div onClick={() => setDepositMode(!depositMode)}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${depositMode ? 'border-indigo-500 bg-indigo-100/70 dark:bg-indigo-950/40' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'}`}>
-                  <div className={`mt-0.5 h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center ${depositMode ? 'border-indigo-500 bg-indigo-500' : 'border-slate-400 bg-white dark:bg-slate-800'}`}>
-                    {depositMode && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white">Deposit-as-Rent Mode</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Monthly rent is auto-deducted from this deposit. No separate monthly payment needed during lock-in. When exhausted, continuation rent tracking begins.
-                    </div>
-                    {depositMode && monthlyRent > 0 && (
-                      <div className="mt-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                        {formatCurrency(securityDeposit)} &divide; {formatCurrency(monthlyRent)}/mo = {Math.floor(securityDeposit / monthlyRent)} months covered
-                        {securityDeposit % monthlyRent > 0 && ` (${formatCurrency(securityDeposit % monthlyRent)} remaining)`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* •• TAB 3 — Instrument & Accessories •• */}
-          <div className={issueTab === 'instrument' ? 'space-y-4' : 'hidden'}>
-            {/* Instrument select */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Select Instrument *</label>
-              <select required value={selectedProductId}
-                onChange={(e) => { setSelectedProductId(e.target.value); setSelectedSerialId(''); }}
-                className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium">
-                <option value="">Choose an instrument…</option>
-                {products.filter((p) => p.availableForSale > 0).map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name} {p.color ? `[${p.color}] ` : ''}({p.sku}) — {p.availableForSale} available
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Accessories checklist */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Bundled Accessories & Checklist</span>
-                <span className="text-[11px] text-slate-500">{includedAccessories.length} selected</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {COMMON_ACCESSORIES.map((acc) => {
-                  const isChecked = includedAccessories.includes(acc);
-                  return (
-                    <div key={acc} onClick={() => toggleAccessory(acc)}
-                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-colors ${isChecked ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 hover:border-slate-400'}`}>
-                      {isChecked ? <CheckSquare className="h-4 w-4 shrink-0 text-amber-500" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
-                      <span>{acc}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Custom item add */}
-              <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
-                <input type="text" placeholder="Add custom item (e.g. Sheet Music Stand)…"
-                  value={customAccessoryInput} onChange={(e) => setCustomAccessoryInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addCustomAccessory(); } }}
-                  className="flex-1 h-8 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />
-                <Button type="button" variant="outline" size="sm" onClick={addCustomAccessory} className="h-8 text-xs font-bold">+ Add</Button>
-              </div>
-              {/* Show custom items */}
-              {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {includedAccessories.filter(a => !COMMON_ACCESSORIES.includes(a)).map((acc, i) => (
-                    <span key={i} onClick={() => toggleAccessory(acc)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors" title="Click to remove">
-                      {acc} −
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </form>
-      </Modal>
 
       {/* Monthly Rent Payment Tracker & Ledger Modal */}
       <Modal
         isOpen={!!selectedRentalForLedger}
         onClose={() => setSelectedRentalForLedger(null)}
         title={`Monthly Rental Ledger — ${selectedRentalForLedger?.issueReference}`}
-        description="Track month-by-month rent payments, pending balances, bundled accessories, and send email reminders."
-        maxWidth="2xl"
+        description="Month-by-month rental ledger, deposit reconciliation, and payment settlement."
+        maxWidth="4xl"
       >
         {selectedRentalForLedger && (
-          <div className="space-y-6 text-xs text-slate-900 dark:text-white">
+          <div className="space-y-5 text-xs text-slate-900 dark:text-white">
             {paymentError && (
               <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 font-semibold text-red-500">
                 {paymentError}
@@ -1213,20 +1582,113 @@ export default function UsagePage() {
               </div>
             )}
 
-            {/* Renter & Financial Summary Header */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Renter</span>
-                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                  {selectedRentalForLedger.assignedPerson}
-                </span>
-                <span className="text-[11px] text-slate-400 block">{selectedRentalForLedger.customerEmail}</span>
-              </div>
+            {/* 1. Renter & Instrument Agreement Header */}
+            {(() => {
+              const primaryIt = selectedRentalForLedger.items?.[0];
+              const prod = primaryIt?.product as any;
+              const serialUnit = primaryIt?.serializedItemId as any;
+              const pName = prod?.name || (primaryIt as any)?.productName || 'Musical Instrument';
 
+              return (
+                <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
+                      <Music2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">
+                          {pName}
+                        </span>
+                        {prod?.color && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700">
+                            {prod.color}
+                          </span>
+                        )}
+                        {serialUnit?.assetId && (
+                          <span className="font-mono text-amber-500 font-bold text-xs bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                            [{serialUnit.assetId}]
+                          </span>
+                        )}
+                        <Badge
+                          variant={selectedRentalForLedger.status === 'ACTIVE' ? 'success' : 'default'}
+                          className="text-[10px]"
+                        >
+                          {selectedRentalForLedger.status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Renter: <strong className="text-slate-800 dark:text-slate-200">{selectedRentalForLedger.assignedPerson}</strong>
+                        {selectedRentalForLedger.assignedPersonContact && ` (${selectedRentalForLedger.assignedPersonContact})`}
+                        {selectedRentalForLedger.customerEmail && ` • ${selectedRentalForLedger.customerEmail}`}
+                        {' '}• Agreement: <strong className="font-mono text-slate-800 dark:text-slate-200">{selectedRentalForLedger.issueReference}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {selectedRentalForLedger.status !== 'RETURNED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const agreement = selectedRentalForLedger;
+                          setSelectedRentalForLedger(null);
+                          openReturnModal(agreement);
+                        }}
+                        className="h-8 text-xs font-bold gap-1.5 border-teal-500/40 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 cursor-pointer"
+                        title="Add equipment back to active inventory"
+                      >
+                        <PackagePlus className="h-3.5 w-3.5" />
+                        <span>Add to Stock</span>
+                      </Button>
+                    )}
+
+                    {((selectedRentalForLedger.depositBalance ?? 0) > 0 || (selectedRentalForLedger.securityDeposit ?? 0) > 0) &&
+                      selectedRentalForLedger.depositRefundStatus !== 'REFUNDED' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const agreement = selectedRentalForLedger;
+                            setSelectedRentalForLedger(null);
+                            openRefundModal(agreement);
+                          }}
+                          className="h-8 text-xs font-bold gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 cursor-pointer"
+                          title="Refund customer security deposit"
+                        >
+                          <Coins className="h-3.5 w-3.5" />
+                          <span>Refund Deposit</span>
+                        </Button>
+                      )}
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const agreement = selectedRentalForLedger;
+                        setSelectedRentalForLedger(null);
+                        openEditAgreementModal(agreement);
+                      }}
+                      className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Edit Agreement</span>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 2. Renter Terms & Deposit Status Breakdown */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               {selectedRentalForLedger.depositMode ? (
                 <>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Collected</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Initial Security Deposit</span>
                     <span className="font-bold text-indigo-400 text-sm">
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
@@ -1235,50 +1697,76 @@ export default function UsagePage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Balance</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Custody Balance</span>
                     <span className={`font-bold text-sm ${(selectedRentalForLedger.depositBalance || 0) <= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      {selectedRentalForLedger.depositExhausted ? '⚠️ Exhausted — continuation mode' : 'Remaining'}
+                      {selectedRentalForLedger.depositExhausted
+                        ? '⚠️ Exhausted — continuation mode'
+                        : (selectedRentalForLedger.depositBalance || 0) < (selectedRentalForLedger.monthlyRent || 1500)
+                        ? '⚠️ Low balance — continuation needed'
+                        : selectedRentalForLedger.depositRefundStatus === 'REFUNDED'
+                        ? 'Refund disbursed & closed'
+                        : 'Available for deductions'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Months Deducted</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Monthly Deduction Rate</span>
                     <span className="font-bold text-amber-500 text-sm">
-                      {(selectedRentalForLedger.depositDeductions || []).length}
-                      {' / '}
-                      {selectedRentalForLedger.lockInPeriodMonths || '—'}
+                      {formatCurrency(selectedRentalForLedger.monthlyRent || 0)} / mo
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Tenure: {selectedRentalForLedger.lockInPeriodMonths || '—'} Months
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Deposit Deductions</span>
+                    <span className="font-bold text-indigo-400 text-sm">
+                      {(selectedRentalForLedger.depositDeductions || []).length} Recorded
                     </span>
                     <span className="text-[10px] text-slate-500 block">
                       {(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length > 0
                         ? `⚡ ${(selectedRentalForLedger.depositDeductions || []).filter((d) => !d.noticeSent).length} notice(s) pending`
-                        : 'All notices sent'}
+                        : 'All notices dispatched'}
                     </span>
                   </div>
                 </>
               ) : (
                 <>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Security Deposit</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Security Deposit (Refundable)</span>
                     <span className="font-bold text-indigo-400 text-sm">
                       {formatCurrency(selectedRentalForLedger.securityDeposit || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Refundable</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      {selectedRentalForLedger.depositRefundStatus === 'REFUNDED'
+                        ? `✅ Refunded ${formatCurrency(selectedRentalForLedger.depositRefundedAmount || 0)}`
+                        : (selectedRentalForLedger.depositBalance ?? selectedRentalForLedger.securityDeposit ?? 0) > 0
+                        ? `Refundable: ${formatCurrency(selectedRentalForLedger.depositBalance ?? selectedRentalForLedger.securityDeposit ?? 0)}`
+                        : 'Settled to ₹0'}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Rent Paid</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Agreed Monthly Rent</span>
+                    <span className="font-bold text-amber-500 text-sm">
+                      {formatCurrency(selectedRentalForLedger.monthlyRent || 0)} / mo
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">Tenure: {selectedRentalForLedger.lockInPeriodMonths || 3} Months</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Rent Paid to Date</span>
                     <span className="font-bold text-emerald-500 text-sm">
                       {formatCurrency(selectedRentalForLedger.totalRentPaid || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Received to date</span>
+                    <span className="text-[10px] text-slate-500 block">Logged via UPI/Cash/Card</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Remaining Due</span>
-                    <span className="font-bold text-rose-500 text-sm">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Remaining Rent Due</span>
+                    <span className={`font-bold text-sm ${(selectedRentalForLedger.totalRentDue || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {formatCurrency(selectedRentalForLedger.totalRentDue || 0)}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Outstanding rent</span>
+                    <span className="text-[10px] text-slate-500 block">Outstanding balance</span>
                   </div>
                 </>
               )}
@@ -1290,25 +1778,34 @@ export default function UsagePage() {
                 Bundled Items & Accessories with Instrument:
               </span>
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {(selectedRentalForLedger.includedAccessories || []).map((acc, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                  >
-                    <Check className="h-3 w-3" />
-                    <span>{acc}</span>
-                  </span>
-                ))}
+                {(selectedRentalForLedger.includedAccessories || []).length > 0 ? (
+                  (selectedRentalForLedger.includedAccessories || []).map((acc, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>{acc}</span>
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-400 italic text-[11px]">No extra accessories bundled</span>
+                )}
               </div>
             </div>
 
-            {/* Month-by-Month Schedule Table */}
+            {/* 3. Month-by-Month Schedule Table with Quick Actions */}
             <div className="space-y-2">
-              <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                Month-by-Month Rental Payment Schedule ({selectedRentalForLedger.monthlyPayments?.length || 0} Months)
-              </h4>
+              <div className="flex justify-between items-center">
+                <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                  Month-by-Month Rental Payment Schedule ({selectedRentalForLedger.monthlyPayments?.length || 0} Months)
+                </h4>
+                <span className="text-[11px] text-slate-400">
+                  Editing rent auto-carries difference to next month
+                </span>
+              </div>
 
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
@@ -1322,77 +1819,93 @@ export default function UsagePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {(selectedRentalForLedger.monthlyPayments || []).map((p, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
-                          {p.billingMonth}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-500">
-                          {formatDate(p.dueDate)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500">
-                          {formatCurrency(p.amountDue)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-500">
-                          {formatCurrency(p.amountPaid || 0)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <Badge
-                            variant={p.status === 'PAID' ? 'success' : 'danger'}
-                            className="text-[10px]"
-                          >
-                            {p.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-500">
-                          {p.paymentMethod ? (
-                            <div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {p.paymentMethod}
-                              </span>
-                              {p.transactionRef && (
-                                <span className="ml-1 text-[11px] font-mono text-amber-500">
-                                  ({p.transactionRef})
+                    {(selectedRentalForLedger.monthlyPayments || []).map((p, idx) => {
+                      const isOverdueMonth = p.status !== 'PAID' && new Date(p.dueDate) < new Date();
+                      const hasAdjustment = p.notes && (p.notes.includes('Auto-adjusted') || p.notes.includes('Auto-generated') || p.notes.includes('carry'));
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{p.billingMonth}</span>
+                              {hasAdjustment && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-500 border border-indigo-200 dark:border-indigo-800" title={p.notes}>
+                                  Adjusted
                                 </span>
                               )}
-                              {p.notes && (
-                                <div className="text-[10px] text-slate-400 italic">{p.notes}</div>
-                              )}
                             </div>
-                          ) : (
-                            <span className="text-slate-400 italic">Pending payment</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenEditPayment(p)}
-                              className="h-6 px-2 text-[10px] font-bold gap-1 text-amber-500 hover:text-amber-400 border-amber-500/30"
-                              title="Edit Price, Trn No. & Adjust Next Month Rent"
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={isOverdueMonth ? 'font-bold text-rose-500 flex items-center gap-1' : 'text-slate-500'}>
+                              {isOverdueMonth && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                              {formatDate(p.dueDate)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500 whitespace-nowrap">
+                            {formatCurrency(p.amountDue)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-500 whitespace-nowrap">
+                            {formatCurrency(p.amountPaid || 0)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <Badge
+                              variant={p.status === 'PAID' ? 'success' : isOverdueMonth ? 'danger' : 'warning'}
+                              className="text-[10px]"
                             >
-                              <Pencil className="h-2.5 w-2.5" />
-                              <span>Edit</span>
-                            </Button>
-                            {p.status !== 'PAID' && (
+                              {p.status === 'PAID' ? 'PAID' : isOverdueMonth ? 'OVERDUE' : 'DUE'}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {p.paymentMethod ? (
+                              <div>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {p.paymentMethod}
+                                </span>
+                                {p.transactionRef && (
+                                  <span className="ml-1 text-[11px] font-mono text-amber-500">
+                                    ({p.transactionRef})
+                                  </span>
+                                )}
+                                {p.notes && (
+                                  <div className="text-[10px] text-slate-400 italic line-clamp-1" title={p.notes}>{p.notes}</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Pending payment</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {p.status !== 'PAID' && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenAdjustMonthDue(p)}
+                                  className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                                  title="Adjust Rent Due for this Month (Auto-carries difference)"
+                                >
+                                  <SlidersHorizontal className="h-2.5 w-2.5" />
+                                  <span>Adjust</span>
+                                </Button>
+                              )}
+
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleOpenAdjustMonthDue(p)}
-                                className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
-                                title="Adjust Rent Due for this Month"
+                                onClick={() => handleOpenEditPayment(p)}
+                                className="h-6 px-2 text-[10px] font-bold gap-1 text-amber-500 hover:text-amber-400 border-amber-500/30"
+                                title="Edit Paid Amount, Trn No. & Payment Method"
                               >
-                                <SlidersHorizontal className="h-2.5 w-2.5" />
-                                <span>Adjust Rent</span>
+                                <Pencil className="h-2.5 w-2.5" />
+                                <span>Edit</span>
                               </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1406,293 +1919,527 @@ export default function UsagePage() {
                   onClick={handleAddRentalMonth}
                   isLoading={isAddingMonth}
                   disabled={isAddingMonth}
-                  className="h-7 text-xs font-bold gap-1 text-indigo-400 hover:text-indigo-300 border-indigo-500/30"
+                  className="h-7 text-xs font-bold gap-1.5 text-indigo-400 hover:text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/10"
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
                   <span>+ Add Next Rental Month</span>
                 </Button>
-                <span className="text-[11px] text-slate-400">
-                  Click &quot;Edit&quot; on any month to update price &amp; trn no. or adjust next month&apos;s rent.
-                </span>
               </div>
             </div>
 
-            {/* Deposit Deduction Form (deposit-mode rentals) */}
-            {selectedRentalForLedger.depositMode && !selectedRentalForLedger.depositExhausted && (
-              <form
-                onSubmit={handleRecordDeduction}
-                className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" />
-                    Deduct This Month's Rent from Deposit
-                  </span>
-                  <span className="text-[11px] text-indigo-500">
-                    Balance: {formatCurrency(selectedRentalForLedger.depositBalance || 0)}
-                  </span>
-                </div>
+            {/* Deposit Deduction & Continuation Payment Controls with Complete Flexibility */}
+            {(() => {
+              const depositBal = selectedRentalForLedger.depositBalance ?? 0;
+              const isDepositMode = Boolean(selectedRentalForLedger.depositMode);
+              const isExhausted = Boolean(selectedRentalForLedger.depositExhausted) || (isDepositMode && depositBal <= 0);
+              const unpaidMonths = (selectedRentalForLedger.monthlyPayments || []).filter((p) => p.status !== 'PAID');
+              const currentDeductMonth =
+                unpaidMonths.find((p) => p.monthIndex === deductionMonthIndex) || unpaidMonths[0];
+              const targetDue = currentDeductMonth
+                ? Math.max(0, currentDeductMonth.amountDue - (currentDeductMonth.amountPaid || 0))
+                : (selectedRentalForLedger.monthlyRent || 1500);
+              const isInsufficient = isDepositMode && !isExhausted && depositBal < targetDue;
+              const actualDeductAmount = Math.min(depositBal, targetDue);
 
-                {deductionError && (
-                  <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
-                    {deductionError}
-                  </div>
-                )}
-                {deductionFeedback && (
-                  <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs font-semibold text-emerald-600 flex gap-2 items-start">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>{deductionFeedback}</span>
-                  </div>
-                )}
+              return (
+                <div className="space-y-3.5">
+                  {/* 1. Low / Insufficient Deposit Balance Notification & Continuation Guidance */}
+                  {isInsufficient && (
+                    <div className="p-3.5 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 space-y-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                            ⚠️ Low Deposit Balance ({formatCurrency(depositBal)}) — Continuation Option Available for {currentDeductMonth?.billingMonth || 'Next Rent'}
+                          </span>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                            The deposit balance of <strong>{formatCurrency(depositBal)}</strong> cannot cover the full monthly rent of <strong>{formatCurrency(targetDue)}</strong>.
+                            You have <strong>complete flexibility</strong>: deduct the remaining {formatCurrency(depositBal)} from deposit (leaves {formatCurrency(targetDue - depositBal)} due to be paid directly), or keep the deposit intact and collect rent directly.
+                          </p>
+                        </div>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Billing Month *
-                    </label>
-                    <select
-                      required
-                      value={deductionBillingMonth}
-                      onChange={(e) => {
-                        const p = (selectedRentalForLedger.monthlyPayments || []).find(
-                          (x) => x.billingMonth === e.target.value
-                        );
-                        setDeductionBillingMonth(e.target.value);
-                        setDeductionMonthIndex(p?.monthIndex || 0);
-                      }}
-                      className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
-                    >
-                      <option value="">Select month…</option>
-                      {(selectedRentalForLedger.monthlyPayments || [])
-                        .filter((p) => p.status !== 'PAID')
-                        .map((p) => (
-                          <option key={p.monthIndex} value={p.billingMonth}>
-                            {p.billingMonth} — {formatCurrency(p.amountDue)}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
+                      {/* 1-Click Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-300/50 dark:border-amber-700/40">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          isLoading={isRecordingDeduction}
+                          disabled={isRecordingDeduction || isActivatingContinuation}
+                          onClick={() => handleDeductRemainingAndSwitch(currentDeductMonth?.monthIndex, currentDeductMonth?.billingMonth)}
+                          className="h-7 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm"
+                          title="Deduct remaining deposit balance and switch month to continuation"
+                        >
+                          <Shield className="h-3.5 w-3.5" />
+                          <span>Deduct Remaining {formatCurrency(depositBal)} &amp; Switch to Continuation</span>
+                        </Button>
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Deduct
-                    </label>
-                    <div className="h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 flex items-center font-bold text-indigo-500 text-sm">
-                      {deductionMonthIndex
-                        ? formatCurrency(
-                            (selectedRentalForLedger.monthlyPayments || []).find(
-                              (p) => p.monthIndex === deductionMonthIndex
-                            )?.amountDue || 0
-                          )
-                        : '—'}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          isLoading={isActivatingContinuation}
+                          disabled={isRecordingDeduction || isActivatingContinuation}
+                          onClick={() => {
+                            setLedgerPaymentTab('DIRECT');
+                            handleActivateContinuationDirectly();
+                          }}
+                          className="h-7 text-xs font-bold text-slate-800 dark:text-slate-200 border-amber-400/50 hover:bg-amber-500/10 gap-1.5"
+                          title="Keep deposit safe in custody and pay rent directly via UPI/Cash/Card"
+                        >
+                          <Zap className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Keep Deposit &amp; Switch to Direct Payment</span>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Internal Note (optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Deducted on 1st of month"
-                      value={deductionNotes}
-                      onChange={(e) => setDeductionNotes(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
-                    />
-                  </div>
-                </div>
+                  {/* 2. Deposit Exhausted Banner */}
+                  {isDepositMode && isExhausted && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-rose-300 dark:border-rose-900/40 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 text-xs font-semibold">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span>Deposit Exhausted (₹0 Balance)</span>
+                        <span className="font-normal text-slate-500 dark:text-slate-400 hidden sm:inline">
+                          — Continuation Mode Active (Rent Paid Directly via UPI / Cash)
+                        </span>
+                      </div>
+                      {selectedRentalForLedger.continuationStartedAt && (
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          Started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
-                <div className="flex items-center justify-between pt-1 border-t border-indigo-200 dark:border-indigo-800/40">
-                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400">
-                    After deduction, the bell icon will show a pending notice. Manager must click "Send Notice Email" to inform the customer.
-                  </p>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="default"
-                    isLoading={isRecordingDeduction}
-                    disabled={!deductionBillingMonth || isRecordingDeduction}
-                    className="shrink-0 gap-1.5 font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
-                  >
-                    <Shield className="h-3.5 w-3.5" />
-                    <span>Deduct from Deposit</span>
-                  </Button>
-                </div>
-              </form>
-            )}
+                  {/* 3. Flexibility Mode Switcher / Tabs for Deposit Mode */}
+                  {isDepositMode && (
+                    <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPaymentTab('DEDUCT')}
+                        disabled={isExhausted || depositBal <= 0}
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          ledgerPaymentTab === 'DEDUCT'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        <Shield className="h-3.5 w-3.5" />
+                        <span>Deduct from Deposit</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500">
+                          {formatCurrency(depositBal)} left
+                        </span>
+                      </button>
 
-            {/* Deposit exhausted — continuation mode notice */}
-            {selectedRentalForLedger.depositMode && selectedRentalForLedger.depositExhausted && (
-              <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50/60 dark:bg-rose-950/20 space-y-2">
-                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>Deposit Fully Utilised — Continuation Rent Mode Active</span>
-                </div>
-                <p className="text-[11px] text-rose-600 dark:text-rose-400/80">
-                  The security deposit has been fully exhausted. The customer must now pay monthly rent directly.
-                  Use the "Record Rent Payment" form below to collect and log payments for ongoing months.
-                </p>
-                {selectedRentalForLedger.continuationStartedAt && (
-                  <p className="text-[11px] text-slate-500">
-                    Continuation started: {formatDate(selectedRentalForLedger.continuationStartedAt)}
-                  </p>
-                )}
-              </div>
-            )}
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPaymentTab('DIRECT')}
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          ledgerPaymentTab === 'DIRECT'
+                            ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        <span>Record Direct / Continuation Rent (UPI / Cash / Card)</span>
+                        {isExhausted && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500">
+                            Active
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  )}
 
-            {/* Deposit Deduction History */}
-            {selectedRentalForLedger.depositMode && (selectedRentalForLedger.depositDeductions || []).length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                  Deposit Deduction History ({(selectedRentalForLedger.depositDeductions || []).length} entries)
-                </h4>
-                <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
-                        <th className="py-2 px-3">Billing Month</th>
-                        <th className="py-2 px-3 text-right">Deducted</th>
-                        <th className="py-2 px-3 text-right">Balance After</th>
-                        <th className="py-2 px-3 text-center">Notice Sent</th>
-                        <th className="py-2 px-3">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {(selectedRentalForLedger.depositDeductions || []).map((d, i) => (
-                        <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${!d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
-                          <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">{d.billingMonth}</td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
-                            − {formatCurrency(d.deductedAmount)}
-                          </td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {formatCurrency(d.depositBalanceAfter)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {d.noticeSent ? (
-                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Sent
+                  {/* 4. Deposit Deduction Form */}
+                  {isDepositMode && !isExhausted && ledgerPaymentTab === 'DEDUCT' && (
+                    <form
+                      onSubmit={handleRecordDeduction}
+                      className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/20 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <Shield className="h-3.5 w-3.5" />
+                          Deduct Rent from Security Deposit
+                        </span>
+                        <span className="text-[11px] text-indigo-500 font-semibold">
+                          Available Balance: {formatCurrency(depositBal)}
+                        </span>
+                      </div>
+
+                      {deductionError && (
+                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs font-semibold text-red-500">
+                          {deductionError}
+                        </div>
+                      )}
+                      {deductionFeedback && (
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs font-semibold text-emerald-600 flex gap-2 items-start">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>{deductionFeedback}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Billing Month *
+                          </label>
+                          <select
+                            required
+                            value={deductionBillingMonth}
+                            onChange={(e) => {
+                              const p = (selectedRentalForLedger.monthlyPayments || []).find(
+                                (x) => x.billingMonth === e.target.value
+                              );
+                              setDeductionBillingMonth(e.target.value);
+                              setDeductionMonthIndex(p?.monthIndex || 0);
+                            }}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold text-xs"
+                          >
+                            <option value="">Select month…</option>
+                            {(selectedRentalForLedger.monthlyPayments || [])
+                              .filter((p) => p.status !== 'PAID')
+                              .map((p) => {
+                                const unpaid = Math.max(0, p.amountDue - (p.amountPaid || 0));
+                                return (
+                                  <option key={p.monthIndex} value={p.billingMonth}>
+                                    {p.billingMonth} — {formatCurrency(unpaid)} due
+                                  </option>
+                                );
+                              })}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Amount to Deduct
+                          </label>
+                          <div className="h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 flex items-center font-bold text-indigo-500 text-sm">
+                            {deductionMonthIndex ? formatCurrency(actualDeductAmount) : '—'}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Internal Note (optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Deducted on 1st of month"
+                            value={deductionNotes}
+                            onChange={(e) => setDeductionNotes(e.target.value)}
+                            className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                          />
+                        </div>
+                      </div>
+
+                      {targetDue > depositBal && (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          <span>
+                            Notice: Month rent due is <strong>{formatCurrency(targetDue)}</strong>, but deposit is <strong>{formatCurrency(depositBal)}</strong>. Deducting will apply remaining {formatCurrency(depositBal)}, leave <strong>{formatCurrency(targetDue - depositBal)}</strong> due, and automatically switch to continuation mode.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 border-t border-indigo-200 dark:border-indigo-800/40">
+                        <p className="text-[11px] text-indigo-600 dark:text-indigo-400">
+                          After deduction, manager can click the bell notice icon to dispatch the deduction receipt email.
+                        </p>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="default"
+                          isLoading={isRecordingDeduction}
+                          disabled={!deductionBillingMonth || isRecordingDeduction || depositBal <= 0}
+                          className="shrink-0 gap-1.5 font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
+                        >
+                          <Shield className="h-3.5 w-3.5" />
+                          <span>
+                            {targetDue > depositBal
+                              ? `Deduct Remaining ${formatCurrency(actualDeductAmount)} & Switch to Continuation`
+                              : `Deduct ${formatCurrency(actualDeductAmount)} from Deposit`}
+                          </span>
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* 5. Direct / Continuation Rent Payment Form */}
+                  {(!isDepositMode || isExhausted || ledgerPaymentTab === 'DIRECT') && (
+                    <form
+                      onSubmit={handleRecordPayment}
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-3"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-amber-500" />
+                          {isDepositMode
+                            ? isExhausted
+                              ? 'Record Continuation Rent Payment'
+                              : 'Record Direct Rent Payment (Continuation Mode)'
+                            : 'Record Monthly Rent Payment'}
+                        </span>
+                        <span className="text-[11px] text-slate-500">Instant ledger update + receipt email</span>
+                      </div>
+
+                      {/* Settle All Remaining Rent Directly at Once (Buyout) Quick Banner */}
+                      {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                        <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                              <Zap className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                                Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[10px] animate-pulse">
-                                <Bell className="h-3 w-3" />
-                                Pending
+                              <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                                Remaining balance across all upcoming months:{' '}
+                                <strong className="text-amber-600 dark:text-amber-400 font-bold">
+                                  {formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)}
+                                </strong>
                               </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                              setSelectedBillingMonth('');
+                              setRentalPaymentNotes('Full rental buyout/settlement in one payment');
+                              if (!rentalTransactionRef) {
+                                setRentalTransactionRef(`SETTLE-${selectedRentalForLedger.issueReference}`);
+                              }
+                            }}
+                            className="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm transition-colors flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Fill Buyout ({formatCurrency(selectedRentalForLedger.totalRentDue ?? 0)})</span>
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-semibold uppercase text-slate-500">
+                              Amount to Pay (₹) *
+                            </label>
+                            {(selectedRentalForLedger.totalRentDue ?? 0) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentAmount(selectedRentalForLedger.totalRentDue ?? 0);
+                                  setSelectedBillingMonth('');
+                                }}
+                                className="text-[10px] font-bold text-amber-500 hover:underline"
+                              >
+                                Pay All Due (₹{selectedRentalForLedger.totalRentDue ?? 0})
+                              </button>
                             )}
-                          </td>
-                          <td className="py-2 px-3 text-slate-500">{formatDate(d.deductedAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                          <input
+                            type="number"
+                            min="1"
+                            required
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Billing Month
+                          </label>
+                          <select
+                            value={selectedBillingMonth}
+                            onChange={(e) => {
+                              setSelectedBillingMonth(e.target.value);
+                              const p = (selectedRentalForLedger.monthlyPayments || []).find(
+                                (x) => x.billingMonth === e.target.value
+                              );
+                              if (p) {
+                                setPaymentAmount(Math.max(0, p.amountDue - (p.amountPaid || 0)));
+                              }
+                            }}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                          >
+                            <option value="">Next Due Month</option>
+                            {(selectedRentalForLedger.monthlyPayments || []).map((p, i) => (
+                              <option key={i} value={p.billingMonth}>
+                                {p.billingMonth} ({p.status} - Due: {formatCurrency(Math.max(0, p.amountDue - (p.amountPaid || 0)))})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            Payment Method *
+                          </label>
+                          <select
+                            value={rentalPaymentMethod}
+                            onChange={(e) => setRentalPaymentMethod(e.target.value as any)}
+                            className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500"
+                          >
+                            <option value="UPI">UPI (GPay / PhonePe)</option>
+                            <option value="CARD">Debit / Credit Card</option>
+                            <option value="CASH">Cash</option>
+                            <option value="BANK_TRANSFER">Bank IMPS</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
+                            UPI / Txn Reference *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. UPI-998822"
+                            value={rentalTransactionRef}
+                            onChange={(e) => setRentalTransactionRef(e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Customer Email & Receipt Dispatch Toggle */}
+                      <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <Mail className="h-3 w-3 text-amber-500" />
+                            <span>Customer Email for Receipt</span>
+                          </label>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Auto-dispatch ready</span>
+                        </div>
+                        <input
+                          type="email"
+                          value={rentalCustomerEmail}
+                          onChange={(e) => setRentalCustomerEmail(e.target.value)}
+                          placeholder="customer@example.com (Required for sending payment receipt)"
+                          className="w-full h-8 px-3 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                        />
+                        <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                          <input
+                            type="checkbox"
+                            checked={sendRentalPaymentEmail}
+                            onChange={(e) => setSendRentalPaymentEmail(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                          />
+                          <span className="text-[11px] text-slate-700 dark:text-slate-300 select-none">
+                            Send official rent payment receipt email to customer immediately upon recording
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSendReminder(selectedRentalForLedger)}
+                            isLoading={isSendingReminder}
+                            className="gap-1.5 text-indigo-400 border-indigo-500/30"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                            <span>Send Email Reminder</span>
+                          </Button>
+
+                          {isDepositMode && !isExhausted && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleActivateContinuationDirectly}
+                              isLoading={isActivatingContinuation}
+                              className="gap-1.5 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 text-xs"
+                              title="Switch agreement to continuation mode while retaining deposit"
+                            >
+                              <Zap className="h-3.5 w-3.5" />
+                              <span>Activate Continuation Mode</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        <Button
+                          type="submit"
+                          variant="default"
+                          size="sm"
+                          isLoading={isRecordingPayment}
+                          disabled={isRecordingPayment}
+                          className="gap-1.5 font-bold"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Confirm Rent Payment</span>
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* 6. Deposit Deduction History */}
+                  {isDepositMode && (selectedRentalForLedger.depositDeductions || []).length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                        Deposit Deduction History ({(selectedRentalForLedger.depositDeductions || []).length} entries)
+                      </h4>
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px]">
+                              <th className="py-2 px-3">Billing Month</th>
+                              <th className="py-2 px-3 text-right">Deducted</th>
+                              <th className="py-2 px-3 text-right">Balance After</th>
+                              <th className="py-2 px-3 text-center">Notice Sent</th>
+                              <th className="py-2 px-3">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                            {(selectedRentalForLedger.depositDeductions || []).map((d, i) => (
+                              <tr
+                                key={i}
+                                className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${
+                                  !d.noticeSent ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''
+                                }`}
+                              >
+                                <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
+                                  {d.billingMonth}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-indigo-500">
+                                  − {formatCurrency(d.deductedAmount)}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrency(d.depositBalanceAfter)}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  {d.noticeSent ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Sent
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[10px] animate-pulse">
+                                      <Bell className="h-3 w-3" />
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-slate-500">{formatDate(d.deductedAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-
-            {/* Record Monthly Payment Form — shown always (required for continuation mode; hidden-ish for pure deposit mode) */}
-            {(!selectedRentalForLedger.depositMode || selectedRentalForLedger.depositExhausted) && (
-            <form
-              onSubmit={handleRecordPayment}
-              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-3"
-            >
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
-                  {selectedRentalForLedger.depositExhausted ? 'Record Continuation Rent Payment' : 'Record Monthly Rent Payment'}
-                </span>
-                <span className="text-[11px] text-slate-500">Instant ledger update + receipt email</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Amount to Pay (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Billing Month
-                  </label>
-                  <select
-                    value={selectedBillingMonth}
-                    onChange={(e) => setSelectedBillingMonth(e.target.value)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
-                  >
-                    <option value="">Next Due Month</option>
-                    {(selectedRentalForLedger.monthlyPayments || []).map((p, i) => (
-                      <option key={i} value={p.billingMonth}>
-                        {p.billingMonth} ({p.status})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    Payment Method *
-                  </label>
-                  <select
-                    value={rentalPaymentMethod}
-                    onChange={(e) => setRentalPaymentMethod(e.target.value as any)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500"
-                  >
-                    <option value="UPI">UPI (GPay / PhonePe)</option>
-                    <option value="CARD">Debit / Credit Card</option>
-                    <option value="CASH">Cash</option>
-                    <option value="BANK_TRANSFER">Bank IMPS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                    UPI / Txn Reference *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. UPI-998822"
-                    value={rentalTransactionRef}
-                    onChange={(e) => setRentalTransactionRef(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSendReminder(selectedRentalForLedger)}
-                  isLoading={isSendingReminder}
-                  className="gap-1.5 text-indigo-400 border-indigo-500/30"
-                >
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>Send Email Reminder</span>
-                </Button>
-
-                <Button
-                  type="submit"
-                  variant="default"
-                  size="sm"
-                  isLoading={isRecordingPayment}
-                  disabled={isRecordingPayment}
-                  className="gap-1.5 font-bold"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Confirm Rent Payment</span>
-                </Button>
-              </div>
-            </form>
-            )}
+              );
+            })()}
 
             {/* Reminder History Log */}
             {selectedRentalForLedger.remindersSent && selectedRentalForLedger.remindersSent.length > 0 && (
@@ -1716,8 +2463,58 @@ export default function UsagePage() {
               </div>
             )}
 
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setSelectedRentalForLedger(null)}>
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    openExtendModal(selectedRentalForLedger);
+                  }}
+                  className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold cursor-pointer text-xs"
+                >
+                  <CalendarPlus className="h-3.5 w-3.5" />
+                  <span>Extend Return Deadline</span>
+                </Button>
+
+                {selectedRentalForLedger.status !== 'RETURNED' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const agreement = selectedRentalForLedger;
+                      setSelectedRentalForLedger(null);
+                      openReturnModal(agreement);
+                    }}
+                    className="gap-1.5 text-teal-600 dark:text-teal-400 border-teal-500/30 font-bold hover:bg-teal-500/10 cursor-pointer text-xs"
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    <span>Add to Stock</span>
+                  </Button>
+                )}
+
+                {((selectedRentalForLedger.depositBalance ?? 0) > 0 || (selectedRentalForLedger.securityDeposit ?? 0) > 0) &&
+                  selectedRentalForLedger.depositRefundStatus !== 'REFUNDED' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const agreement = selectedRentalForLedger;
+                        setSelectedRentalForLedger(null);
+                        openRefundModal(agreement);
+                      }}
+                      className="gap-1.5 text-amber-500 border-amber-500/40 font-bold hover:bg-amber-500/10 cursor-pointer text-xs"
+                    >
+                      <Coins className="h-3.5 w-3.5" />
+                      <span>Refund Deposit</span>
+                    </Button>
+                  )}
+              </div>
+
+              <Button variant="outline" size="sm" onClick={() => setSelectedRentalForLedger(null)}>
                 Close Ledger
               </Button>
             </div>
@@ -1905,6 +2702,18 @@ export default function UsagePage() {
               />
             </div>
 
+            {adjustingMonth && adjustAmountDue !== adjustingMonth.amountDue && (
+              <div className="p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-400 font-medium">
+                ⚡ Difference of{' '}
+                <strong>
+                  {adjustAmountDue < adjustingMonth.amountDue
+                    ? `+₹${adjustingMonth.amountDue - adjustAmountDue} shortfall`
+                    : `-₹${adjustAmountDue - adjustingMonth.amountDue} credit`}
+                </strong>{' '}
+                will automatically be carried forward to next month&apos;s schedule!
+              </div>
+            )}
+
             <div>
               <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
                 Reason / Adjustment Note
@@ -1936,31 +2745,104 @@ export default function UsagePage() {
         )}
       </Modal>
 
-      {/* Return & Inspection Modal */}
+      {/* 1. Return Inspection Modal — Add Equipment to Inventory */}
       <Modal
         isOpen={!!returnModalUsage}
         onClose={() => setReturnModalUsage(null)}
-        title={`Return Inspection — ${returnModalUsage?.issueReference}`}
-        description="Inspect physical condition of returned equipment, bundled accessories, and process deposit release."
+        title={`Return Equipment — Add to Inventory (${returnModalUsage?.issueReference || ''})`}
+        description="Inspect physical equipment condition, verify bundled accessories, and immediately restore stock to active inventory. Security deposit refund can be disbursed separately."
         maxWidth="2xl"
       >
         {returnModalUsage && (
-          <form onSubmit={handleReturnSubmit} className="space-y-5">
+          <form onSubmit={(e) => handleReturnSubmit(e, false)} className="space-y-5">
             {returnError && (
               <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
                 {returnError}
               </div>
             )}
 
-            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs">
-              <span className="text-slate-500">Rented to:</span>{' '}
-              <strong className="text-slate-900 dark:text-white">
-                {returnModalUsage.assignedPerson}
-              </strong>{' '}
-              | Deposit to reconcile:{' '}
-              <strong className="text-indigo-400">
-                {formatCurrency(returnModalUsage.securityDeposit || 0)}
-              </strong>
+            {/* Explanatory Dual-Process Banner */}
+            <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-xs flex items-start gap-2.5">
+              <PackagePlus className="h-5 w-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-teal-900 dark:text-teal-200">
+                  Step 1: Physical Equipment Intake &amp; Inventory Restoration
+                </div>
+                <p className="text-teal-900/80 dark:text-teal-200/80 leading-relaxed text-[11px]">
+                  All inspected items below will be restored to your active inventory pool (Available / Maintenance / Quarantine).
+                  The customer&apos;s security deposit of{' '}
+                  <strong className="font-mono text-indigo-500 dark:text-indigo-400">
+                    {formatCurrency(
+                      typeof returnModalUsage.depositBalance === 'number'
+                        ? returnModalUsage.depositBalance
+                        : returnModalUsage.securityDeposit || 0
+                    )}
+                  </strong>{' '}
+                  will be placed in <strong className="text-amber-500">Refund Pending</strong> status, allowing you to refund it whenever your internal finance processes are ready.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs flex flex-wrap justify-between items-center gap-2">
+              <div>
+                <span className="text-slate-500">Renter:</span>{' '}
+                <strong className="text-slate-900 dark:text-white">
+                  {returnModalUsage.assignedPerson}
+                </strong>
+                {returnModalUsage.assignedPersonContact && (
+                  <span className="text-slate-400 ml-1">({returnModalUsage.assignedPersonContact})</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-500">Pending Security Deposit:</span>{' '}
+                <strong className="text-indigo-400 font-mono font-bold">
+                  {formatCurrency(
+                    typeof returnModalUsage.depositBalance === 'number'
+                      ? returnModalUsage.depositBalance
+                      : returnModalUsage.securityDeposit || 0
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            {/* Customer Return Confirmation Email Card */}
+            <div className="p-3.5 rounded-xl border border-teal-200 dark:border-teal-900/50 bg-gradient-to-r from-teal-50/60 to-emerald-50/40 dark:from-teal-950/20 dark:to-emerald-950/10 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-teal-900 dark:text-teal-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-teal-500" />
+                  <span>Customer Equipment Return Receipt Email</span>
+                </label>
+                <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-full border border-teal-500/20">
+                  Automatic Dispatch
+                </span>
+              </div>
+
+              <div>
+                <input
+                  type="email"
+                  value={returnCustomerEmail}
+                  onChange={(e) => setReturnCustomerEmail(e.target.value)}
+                  placeholder="customer@example.com (Required for sending return receipt)"
+                  className="w-full h-8 px-3 rounded-lg border border-teal-200 dark:border-teal-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendReturnReceiptEmail}
+                  onChange={(e) => setSendReturnReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch equipment return &amp; restocking confirmation email to customer
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes condition check result, remaining deposit balance status, and return reference.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="space-y-4">
@@ -2048,12 +2930,275 @@ export default function UsagePage() {
               })}
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="outline" onClick={() => setReturnModalUsage(null)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="default" isLoading={isReturning} className="font-bold">
-                Confirm Return & Reconcile Deposit
+              <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={(e) => handleReturnSubmit(e, true)}
+                  isLoading={isReturning}
+                  className="font-semibold gap-1.5 text-amber-500 border-amber-500/40 hover:bg-amber-500/10 cursor-pointer text-xs"
+                  title="Add to inventory and open Refund Deposit modal immediately"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  <span>Add &amp; Refund Deposit Now</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={(e) => handleReturnSubmit(e, false)}
+                  isLoading={isReturning}
+                  className="font-bold gap-1.5 bg-teal-600 hover:bg-teal-700 text-white cursor-pointer shadow-sm text-xs"
+                  title="Add items to inventory and leave deposit pending for later disbursement"
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  <span>Add Again to Inventory (Refund Later)</span>
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* 2. Dedicated Refund Security Deposit Modal */}
+      <Modal
+        isOpen={!!refundModalUsage}
+        onClose={() => setRefundModalUsage(null)}
+        title={`Refund Security Deposit — ${refundModalUsage?.issueReference || ''}`}
+        description="Process customer security deposit disbursement separately from physical inventory intake."
+        maxWidth="lg"
+      >
+        {refundModalUsage && (
+          <form onSubmit={handleRefundSubmit} className="space-y-4 text-xs">
+            {refundError && (
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{refundError}</span>
+              </div>
+            )}
+            {refundFeedback && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs font-semibold text-emerald-600 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{refundFeedback}</span>
+              </div>
+            )}
+
+            {/* Customer & Agreement Context */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white text-sm">
+                    {refundModalUsage.assignedPerson}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {refundModalUsage.assignedPersonContact && `Phone: ${refundModalUsage.assignedPersonContact} • `}
+                    Agreement: <span className="font-mono font-bold text-amber-500">{refundModalUsage.issueReference}</span>
+                  </div>
+                </div>
+                <Badge
+                  variant={refundModalUsage.status === 'RETURNED' ? 'success' : 'warning'}
+                  className="text-[10px] px-2 py-0.5 shrink-0"
+                >
+                  {refundModalUsage.status === 'RETURNED' ? '✅ Equipment in Stock' : '⚠️ Equipment With Customer'}
+                </Badge>
+              </div>
+
+              {/* Financial Snapshot */}
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-center">
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Deposit</span>
+                  <span className="font-mono font-bold text-indigo-400 text-xs">
+                    {formatCurrency(refundModalUsage.securityDeposit || 0)}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Available Deposit</span>
+                  <span className="font-mono font-bold text-amber-500 text-xs">
+                    {formatCurrency(
+                      typeof refundModalUsage.depositBalance === 'number'
+                        ? refundModalUsage.depositBalance
+                        : refundModalUsage.securityDeposit || 0
+                    )}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Unpaid Rent Due</span>
+                  <span className={`font-mono font-bold text-xs ${(refundModalUsage.totalRentDue || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                    {formatCurrency(refundModalUsage.totalRentDue || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Customer Receipt Email Automation Section */}
+            <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 dark:from-indigo-950/20 dark:to-purple-950/10 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Customer Refund Receipt Email (Automatic)</span>
+                </label>
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Resend + Nodemailer Active
+                </span>
+              </div>
+
+              <div>
+                <input
+                  type="email"
+                  value={refundCustomerEmail}
+                  onChange={(e) => setRefundCustomerEmail(e.target.value)}
+                  placeholder="customer@example.com (Required for sending refund receipt)"
+                  className="w-full h-8 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendRefundReceiptEmail}
+                  onChange={(e) => setSendRefundReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch official refund receipt email to customer upon submission
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes initial deposit, itemized deductions breakdown, net disbursed amount, and payment mode.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Deductions Section */}
+            {(() => {
+              const depositBal =
+                typeof refundModalUsage.depositBalance === 'number'
+                  ? refundModalUsage.depositBalance
+                  : refundModalUsage.securityDeposit || 0;
+              const netDisbursement = Math.max(0, depositBal - (refundDeductionAmount || 0));
+
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Deduction from Deposit (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={depositBal}
+                        value={refundDeductionAmount}
+                        onChange={(e) =>
+                          setRefundDeductionAmount(
+                            Math.min(depositBal, Math.max(0, parseFloat(e.target.value) || 0))
+                          )
+                        }
+                        placeholder="0"
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-right font-mono font-bold text-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Deduction Reason (if any)
+                      </label>
+                      <input
+                        type="text"
+                        value={refundDeductionReason}
+                        onChange={(e) => setRefundDeductionReason(e.target.value)}
+                        placeholder="e.g. Scratch repair, missing strap, late fee"
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Net Disbursed Highlight */}
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs block">
+                        Net Refund Disbursed to Customer
+                      </span>
+                      <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                        Remaining security deposit will be settled to ₹0.00
+                      </span>
+                    </div>
+                    <span className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(netDisbursement)}
+                    </span>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Disbursement Payment Mode *
+                      </label>
+                      <select
+                        value={refundPaymentMethod}
+                        onChange={(e) => setRefundPaymentMethod(e.target.value as any)}
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
+                      >
+                        <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
+                        <option value="BANK_TRANSFER">Bank Transfer (NEFT / IMPS / RTGS)</option>
+                        <option value="CASH">Cash</option>
+                        <option value="CARD">Card Reversal</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Transaction / UPI Reference No. {refundPaymentMethod !== 'CASH' && '*'}
+                      </label>
+                      <input
+                        type="text"
+                        value={refundTransactionRef}
+                        onChange={(e) => setRefundTransactionRef(e.target.value)}
+                        placeholder={
+                          refundPaymentMethod === 'CASH'
+                            ? 'Optional (e.g. Cash Voucher #)'
+                            : 'e.g. UPI Ref / UTR / Cheque No.'
+                        }
+                        required={refundPaymentMethod !== 'CASH' && netDisbursement > 0}
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                      Internal Refund Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={refundNotes}
+                      onChange={(e) => setRefundNotes(e.target.value)}
+                      placeholder="e.g. Returned in good condition, security deposit released via Google Pay"
+                      className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setRefundModalUsage(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                isLoading={isRefundingDeposit}
+                className="font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer"
+              >
+                <Coins className="h-4 w-4" />
+                <span>Confirm &amp; Disburse Refund</span>
               </Button>
             </div>
           </form>
@@ -2065,43 +3210,741 @@ export default function UsagePage() {
         isOpen={!!extendModalUsage}
         onClose={() => setExtendModalUsage(null)}
         title="Extend Rental Return Deadline"
-        description={`Extend schedule for rental ${extendModalUsage?.issueReference}`}
-        maxWidth="md"
+        description={`Extend return date & schedule for ${extendModalUsage?.issueReference || ''}`}
+        maxWidth="lg"
       >
         {extendModalUsage && (
-          <form onSubmit={handleExtendSubmit} className="space-y-4">
+          <form onSubmit={handleExtendSubmit} className="space-y-4 text-xs">
             {extendError && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500">
-                {extendError}
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{extendError}</span>
+              </div>
+            )}
+            {extendFeedback && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs font-semibold text-emerald-600 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{extendFeedback}</span>
               </div>
             )}
 
-            <Input
-              label="New Expected Return Date & Time *"
-              type="datetime-local"
-              required
-              value={newExtendedDate}
-              onChange={(e) => setNewExtendedDate(e.target.value)}
-            />
+            {/* Current Status Overview */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Agreement Ref</span>
+                <span className="font-mono font-bold text-amber-500">{extendModalUsage.issueReference}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Renter</span>
+                <span className="font-bold text-slate-900 dark:text-white">{extendModalUsage.assignedPerson}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500 font-semibold uppercase text-[10px]">Current Return Deadline</span>
+                <span className="font-bold font-mono text-rose-600 dark:text-rose-400">
+                  {formatDateTime(extendModalUsage.expectedReturnDate)}
+                </span>
+              </div>
+            </div>
 
-            <Input
-              label="Reason for Extension *"
-              required
-              placeholder="e.g. Customer renewed rental agreement for another 3 months"
-              value={extensionReason}
-              onChange={(e) => setExtensionReason(e.target.value)}
-            />
+            {/* Quick Extension Presets */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-semibold uppercase text-slate-500">
+                Quick Extension Presets (From Current Deadline)
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: '+7 Days', days: 7 },
+                  { label: '+15 Days', days: 15 },
+                  { label: '+1 Month', days: 30, recommended: true },
+                  { label: '+3 Months', days: 90 },
+                ].map((preset) => (
+                  <button
+                    type="button"
+                    key={preset.days}
+                    onClick={() => setQuickExtensionDays(preset.days)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold border transition-all text-center ${
+                      preset.recommended
+                        ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm hover:bg-amber-600'
+                        : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date Input */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-semibold uppercase text-slate-500">
+                New Expected Return Date &amp; Time *
+              </label>
+              <input
+                type="datetime-local"
+                required
+                min={formatLocalDateForInput(new Date(extendModalUsage.expectedReturnDate))}
+                value={newExtendedDate}
+                onChange={(e) => setNewExtendedDate(e.target.value)}
+                className="w-full h-10 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white"
+              />
+              {newExtendedDate && (
+                <div className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1 font-medium">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span>
+                    New return deadline will be: <strong>{formatDateTime(newExtendedDate)}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Sync Rental Schedule Checkbox */}
+            {extendModalUsage.isRental && (extendModalUsage.monthlyRent || 0) > 0 && (
+              <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/20">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addRentalMonthsOnExtend}
+                    onChange={(e) => setAddRentalMonthsOnExtend(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold text-xs text-indigo-900 dark:text-indigo-300 block">
+                      Sync rental schedule (add monthly rent for extended tenure)
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Adds upcoming month(s) at {formatCurrency(extendModalUsage.monthlyRent || 0)}/mo to the ledger tracker so the customer can be billed accurately.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Reason with Quick Chips */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-semibold uppercase text-slate-500">
+                  Reason for Extension *
+                </label>
+                <div className="flex gap-1.5 text-[10px]">
+                  {['Customer Renewal', 'Grace Extension', 'Event Delay'].map((tag) => (
+                    <button
+                      type="button"
+                      key={tag}
+                      onClick={() => setExtensionReason(tag)}
+                      className="font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="text"
+                required
+                value={extensionReason}
+                onChange={(e) => setExtensionReason(e.target.value)}
+                placeholder="e.g. Customer renewed rental agreement for another month"
+                className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {/* Previous Extensions */}
+            {(extendModalUsage.extensions || []).length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                  Extension History ({(extendModalUsage.extensions || []).length})
+                </span>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {(extendModalUsage.extensions || []).map((ext, idx) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between text-[11px] p-1.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+                    >
+                      <span className="text-slate-600 dark:text-slate-400 truncate max-w-[220px]">
+                        {ext.reason}
+                      </span>
+                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {formatDate(ext.extendedDate)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="outline" onClick={() => setExtendModalUsage(null)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="default" isLoading={isExtending} className="font-bold">
-                Confirm Renewal Extension
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isExtending}
+                disabled={isExtending || !!extendFeedback}
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 gap-1.5"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                <span>Confirm Return Extension</span>
               </Button>
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Edit Rental Agreement Modal */}
+      <Modal
+        isOpen={!!editingAgreement}
+        onClose={() => setEditingAgreement(null)}
+        title={`Edit Rental Agreement #${editingAgreement?.issueReference || ''}`}
+        description="Update tenure months, monthly rent amount, or settle all remaining dues directly."
+        maxWidth="xl"
+      >
+        {editingAgreement && (
+          <form onSubmit={handleUpdateAgreement} className="space-y-4">
+            {updateAgreementError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{updateAgreementError}</span>
+              </div>
+            )}
+
+            {updateAgreementFeedback && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{updateAgreementFeedback}</span>
+              </div>
+            )}
+
+            {/* Customer Details */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                1. Customer Information
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Input
+                  label="Customer Name *"
+                  required
+                  value={editAssignedPerson}
+                  onChange={(e) => setEditAssignedPerson(e.target.value)}
+                />
+                <Input
+                  label="Phone Number"
+                  value={editCustomerPhone}
+                  onChange={(e) => setEditCustomerPhone(e.target.value)}
+                />
+                <Input
+                  label="Email (for receipts)"
+                  type="email"
+                  value={editCustomerEmail}
+                  onChange={(e) => setEditCustomerEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Agreement Terms & Tenure */}
+            <div className="rounded-xl border border-amber-500/30 p-3.5 bg-amber-500/5 dark:bg-amber-950/20 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+                  2. Rental Tenure &amp; Pricing Parameters
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  Paid so far: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{editingPaidCount} of {editingAgreement.lockInPeriodMonths || 3} Mo</strong> ({formatCurrency(editingAlreadyPaidTotal)})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400">
+                      Lock-In Duration
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                      {editLockInPeriodMonths} Months
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {[1, 3, 6, 12].map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => setEditLockInPeriodMonths(m)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          editLockInPeriodMonths === m
+                            ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                            : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 hover:border-amber-400'
+                        }`}
+                      >
+                        {m}M
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                    Monthly Rent (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editMonthlyRent}
+                    onChange={(e) => setEditMonthlyRent(parseFloat(e.target.value) || 0)}
+                    className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                    Security Deposit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editSecurityDeposit}
+                    onChange={(e) => setEditSecurityDeposit(parseFloat(e.target.value) || 0)}
+                    className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs space-y-1">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Tenure Plan:</span>
+                  <strong className="text-slate-900 dark:text-white font-bold">{editLockInPeriodMonths} Month(s) Agreement</strong>
+                </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Deduction / Due Schedule:</span>
+                  <strong className="text-amber-500 font-bold">1st date of each upcoming month</strong>
+                </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Remaining Unpaid under this Plan:</span>
+                  <strong className={editingRemainingMonthsToSettle > 0 ? "text-rose-500 font-bold" : "text-emerald-500 font-bold"}>
+                    {editingRemainingMonthsToSettle > 0
+                      ? `${editingRemainingMonthsToSettle} Month(s) (${formatCurrency(editingTotalSettlementAmount)})`
+                      : 'All Planned Months Satisfied (₹0 Due)'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Pay & Settle All Remaining Rent Directly at Once (Buyout) */}
+            <div className={`rounded-xl border transition-all ${
+              editPayAllNow
+                ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/30 p-4 space-y-3.5 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 p-3.5'
+            }`}>
+              <div className="flex items-start sm:items-center justify-between gap-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editPayAllNow}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditPayAllNow(checked);
+                      if (checked && !editAgreementTransactionRef && editingTotalSettlementAmount > 0) {
+                        setEditAgreementTransactionRef(`BUYOUT-${editingAgreement.issueReference}`);
+                      }
+                    }}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span>Pay &amp; Settle All Remaining Rent Directly at Once (Buyout)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Collect remaining rent and close out all future dues immediately in a single transaction
+                    </span>
+                  </div>
+                </label>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Settlement</span>
+                  <span className="text-sm font-black font-mono text-indigo-600 dark:text-indigo-400">
+                    {formatCurrency(editingTotalSettlementAmount)}
+                  </span>
+                </div>
+              </div>
+
+              {editPayAllNow && (
+                <div className="pt-3 border-t border-indigo-200 dark:border-indigo-800/60 space-y-3">
+                  {/* Financial Settlement Breakdown Alert */}
+                  {editingTotalSettlementAmount > 0 ? (
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                            Exact Amount Manager / Admin Must Collect:
+                          </span>
+                          <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-tight mt-0.5">
+                            {formatCurrency(editingTotalSettlementAmount)}
+                          </div>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                            {editingRemainingMonthsToSettle} Unpaid {editingRemainingMonthsToSettle === 1 ? 'Month' : 'Months'} to Clear
+                          </span>
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            ✓ Clears all remaining scheduled &amp; added dues in 1 payment
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                          Agreed Tenure: <strong>{editingTargetTenure} Months</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium border border-emerald-200 dark:border-emerald-800/40">
+                          Already Paid: <strong>{editingPaidCount} Mo ({formatCurrency(editingAlreadyPaidTotal)})</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium border border-amber-200 dark:border-amber-800/40">
+                          Months to Clear: <strong>{editingRemainingMonthsToSettle} Mo</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                      <span>
+                        All {editingPaidCount} month(s) under this {editingTargetTenure}-month agreement are already paid ({formatCurrency(editingAlreadyPaidTotal)} collected). No additional payment required!
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Payment Details Inputs */}
+                  {editingTotalSettlementAmount > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">
+                          Payment Method *
+                        </label>
+                        <select
+                          value={editAgreementPaymentMethod}
+                          onChange={(e) => setEditAgreementPaymentMethod(e.target.value as any)}
+                          className="w-full h-9 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-slate-900 dark:text-white"
+                        >
+                          <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                          <option value="CASH">Cash at Store Counter</option>
+                          <option value="CARD">Debit / Credit Card</option>
+                          <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] font-semibold uppercase text-slate-600 dark:text-slate-400">
+                            Transaction / Receipt Ref *
+                          </label>
+                          <div className="flex gap-1.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setEditAgreementTransactionRef(`CASH-${Date.now().toString().slice(-6)}`)}
+                              className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Cash Receipt
+                            </button>
+                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setEditAgreementTransactionRef(`UPI-${Date.now().toString().slice(-6)}`)}
+                              className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              UPI Ref
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          required={editPayAllNow && editingTotalSettlementAmount > 0}
+                          placeholder="e.g. UPI-998822 or CASH-RCPT"
+                          value={editAgreementTransactionRef}
+                          onChange={(e) => setEditAgreementTransactionRef(e.target.value)}
+                          className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button type="button" variant="outline" onClick={() => setEditingAgreement(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isUpdatingAgreement}
+                className="font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 gap-1.5"
+              >
+                {editPayAllNow ? (
+                  editingTotalSettlementAmount > 0 ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Confirm &amp; Settle {formatCurrency(editingTotalSettlementAmount)} (Buyout)</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Save Agreement (Fully Satisfied)</span>
+                    </>
+                  )
+                ) : (
+                  <span>Save Changes &amp; Recalculate</span>
+                )}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* ── Outward Money / Deposit Refunds Due Modal ── */}
+      <Modal
+        isOpen={isOutwardModalOpen}
+        onClose={() => setIsOutwardModalOpen(false)}
+        title="Outward Deposit Refunds — Customer & Instrument Breakdown"
+        description="Comprehensive summary of security deposit balances held in custody that will be disbursed outward to customers upon instrument return or contract settlement."
+        maxWidth="4xl"
+      >
+        <div className="space-y-4 pt-1">
+          {/* Outward Liability Summary Banner */}
+          <div className="p-4 rounded-xl bg-teal-500/10 border border-teal-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                <Wallet className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <span>Total Outward Money Due for Refund</span>
+              </span>
+              <div className="text-3xl font-black font-mono text-teal-600 dark:text-teal-400">
+                {formatCurrency(totalOutwardRefund)}
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Formula: <strong>Security Deposit Collected − Rent Paid / Rent Deducted</strong> = Outward Refundable Balance
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="px-3.5 py-2 rounded-lg bg-white dark:bg-slate-900 border border-teal-500/30 text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Eligible Customers</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {outwardRefundList.length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-between pt-1">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search customer, phone, instrument, asset ID..."
+                value={outwardSearch}
+                onChange={(e) => setOutwardSearch(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex gap-1 self-start sm:self-auto p-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+              {(['ALL', 'DEPOSIT_MODE', 'STANDARD'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setOutwardModeFilter(mode)}
+                  className={`px-2.5 py-1 font-bold rounded-md transition-colors text-[11px] ${
+                    outwardModeFilter === mode
+                      ? 'bg-teal-500 text-slate-950 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {mode === 'ALL'
+                    ? `All (${outwardRefundList.length})`
+                    : mode === 'DEPOSIT_MODE'
+                    ? 'Deposit Auto-Deduct'
+                    : 'Standard Deposit'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Customer & Instrument Cards List */}
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+            {filteredOutwardRefundList.length === 0 ? (
+              <div className="p-8 text-center rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-300 dark:border-slate-800 text-slate-500 text-xs">
+                No outward deposit refund records found matching your query.
+              </div>
+            ) : (
+              filteredOutwardRefundList.map((item) => (
+                <div
+                  key={item.usage._id}
+                  className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-colors space-y-3 shadow-sm"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    {/* Customer & Instrument Details */}
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <User className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                          <span>{item.customerName}</span>
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          #{item.usage.issueReference}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            item.depositMode
+                              ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {item.depositMode ? 'Deposit Auto-Deduct' : 'Standard Deposit'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                        {item.customerPhone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{item.customerPhone}</span>
+                          </span>
+                        )}
+                        {item.customerEmail && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{item.customerEmail}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Instrument Information */}
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Music2 className="h-3.5 w-3.5 text-amber-500" />
+                            <span>{item.instrumentName}</span>
+                            {item.instrumentBrand && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({item.instrumentBrand})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Return Deadline: <strong className="text-slate-700 dark:text-slate-300">{formatDate(item.expectedReturnDate)}</strong>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          {item.assetId ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              Asset: {item.assetId}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Standard Stock</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Financial Snapshot & Outward Money */}
+                    <div className="sm:text-right flex sm:flex-col justify-between items-end gap-2 bg-teal-500/5 dark:bg-teal-950/30 p-3 rounded-xl border border-teal-500/20 shrink-0 min-w-[200px]">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-400 block tracking-wider">
+                          Outward Money (Refund Due)
+                        </span>
+                        <div className="text-2xl font-black font-mono text-teal-600 dark:text-teal-400">
+                          {formatCurrency(item.outwardRefundDue)}
+                        </div>
+                      </div>
+
+                      <div className="text-xs space-y-0.5 text-slate-500 dark:text-slate-400 text-left sm:text-right">
+                        <div>
+                          Deposit Collected:{' '}
+                          <strong className="text-slate-900 dark:text-white font-mono">
+                            {formatCurrency(item.depositCollected)}
+                          </strong>
+                        </div>
+                        <div>
+                          Rent Deducted/Paid:{' '}
+                          <strong className="text-slate-900 dark:text-white font-mono">
+                            {formatCurrency(item.rentPaidOrDeducted)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions for this Customer & Instrument */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="text-[11px] text-slate-400">
+                      Rented on {formatDate(item.issueDate)}
+                    </span>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsOutwardModalOpen(false);
+                          openLedgerModal(item.usage);
+                        }}
+                        className="h-7 text-xs font-semibold gap-1"
+                      >
+                        <ClipboardList className="h-3.5 w-3.5 text-indigo-500" />
+                        <span>View Ledger</span>
+                      </Button>
+
+                      {item.usage.status !== 'RETURNED' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsOutwardModalOpen(false);
+                            openReturnModal(item.usage);
+                          }}
+                          className="h-7 text-xs font-bold gap-1 text-teal-600 dark:text-teal-400 border-teal-500/40 hover:bg-teal-500/10"
+                        >
+                          <PackagePlus className="h-3.5 w-3.5" />
+                          <span>1. Add to Inventory</span>
+                        </Button>
+                      )}
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        onClick={() => {
+                          setIsOutwardModalOpen(false);
+                          openRefundModal(item.usage);
+                        }}
+                        className="h-7 text-xs font-bold gap-1 bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer shadow-xs"
+                      >
+                        <Coins className="h-3.5 w-3.5" />
+                        <span>2. Refund Deposit</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <span className="text-slate-500">
+              Showing {filteredOutwardRefundList.length} of {outwardRefundList.length} refundable agreement(s)
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsOutwardModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

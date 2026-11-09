@@ -22,7 +22,6 @@ import {
   Tag,
   Boxes,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function ReturnsMaintenancePage() {
   const { user, canApproveAdjustments } = useAuth();
@@ -199,16 +198,13 @@ export default function ReturnsMaintenancePage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Repairs, Maintenance & Adjustments
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Luthier repairs, quarantine dispositions, and manager approval queues.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Repairs, Maintenance & Adjustments
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Luthier repairs, quarantine dispositions, and manager approval queues.
+          </p>
         </div>
 
         <div className="flex gap-2">

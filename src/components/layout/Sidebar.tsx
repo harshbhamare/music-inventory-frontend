@@ -37,13 +37,13 @@ export function Sidebar() {
       visible: true,
     },
     {
-      title: 'Inventory Catalog',
+      title: 'Product Catalog',
       href: '/inventory',
       icon: Boxes,
       visible: true,
     },
     {
-      title: 'Receive Stock',
+      title: 'My Stock',
       href: '/intake',
       icon: Truck,
       badge: 'Stock In',

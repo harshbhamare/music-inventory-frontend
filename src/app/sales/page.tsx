@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, getApiUrl } from '@/lib/api';
 import { Sale, Product, StockLocation, EmiMonthlyPayment } from '@/lib/types';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime, addMonthsPreservingDay } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -35,12 +35,15 @@ import {
   Edit,
   Save,
   Send,
-  FileEdit,
   Package,
   User,
   Truck,
+  Sliders,
+  Edit2,
+  Zap,
+  ArrowRight,
+  X,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
 
 export default function SalesPage() {
@@ -86,6 +89,7 @@ export default function SalesPage() {
 
   const [saleError, setSaleError] = useState('');
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+  const [sendSaleReceiptEmail, setSendSaleReceiptEmail] = useState(true);
 
   // Printable Invoice Modal
   const [activeInvoice, setActiveInvoice] = useState<Sale | null>(null);
@@ -102,6 +106,38 @@ export default function SalesPage() {
   const [emiLedgerError, setEmiLedgerError] = useState('');
   const [isSendingEmiReminder, setIsSendingEmiReminder] = useState(false);
   const [emiReminderFeedback, setEmiReminderFeedback] = useState('');
+  const [emiCustomerEmail, setEmiCustomerEmail] = useState('');
+  const [sendEmiPaymentReceiptEmail, setSendEmiPaymentReceiptEmail] = useState(true);
+
+  // Early payoff / bulk settlement state
+  const [settleAllRemaining, setSettleAllRemaining] = useState(false);
+  const [earlySettlementDiscount, setEarlySettlementDiscount] = useState<number>(0);
+
+  // Adjust EMI Installment Due Modal
+  const [adjustingEmiMonth, setAdjustingEmiMonth] = useState<EmiMonthlyPayment | null>(null);
+  const [adjustAmountDue, setAdjustAmountDue] = useState<number>(0);
+  const [adjustDueDate, setAdjustDueDate] = useState<string>('');
+  const [adjustCarryForward, setAdjustCarryForward] = useState<boolean>(true);
+  const [adjustReason, setAdjustReason] = useState<string>('');
+  const [isAdjustingEmiDue, setIsAdjustingEmiDue] = useState<boolean>(false);
+  const [adjustModalError, setAdjustModalError] = useState<string>('');
+
+  // Edit Recorded EMI Payment Modal
+  const [editingEmiPayment, setEditingEmiPayment] = useState<EmiMonthlyPayment | null>(null);
+  const [editEmiAmountPaid, setEditEmiAmountPaid] = useState<number>(0);
+  const [editEmiAmountDue, setEditEmiAmountDue] = useState<number>(0);
+  const [editEmiPaymentMethod, setEditEmiPaymentMethod] = useState<'UPI' | 'CARD' | 'CASH' | 'BANK_TRANSFER'>('UPI');
+  const [editEmiTransactionRef, setEditEmiTransactionRef] = useState<string>('');
+  const [editEmiNotes, setEditEmiNotes] = useState<string>('');
+  const [isUpdatingEmiPayment, setIsUpdatingEmiPayment] = useState<boolean>(false);
+  const [editEmiModalError, setEditEmiModalError] = useState<string>('');
+
+  // Add Extra EMI Month Modal
+  const [isAddingEmiMonthModalOpen, setIsAddingEmiMonthModalOpen] = useState(false);
+  const [newEmiMonthAmount, setNewEmiMonthAmount] = useState<number>(0);
+  const [newEmiMonthDueDate, setNewEmiMonthDueDate] = useState<string>('');
+  const [newEmiMonthReason, setNewEmiMonthReason] = useState<string>('');
+  const [isSubmittingAddMonth, setIsSubmittingAddMonth] = useState(false);
 
   // Edit Sale / Bill Modal State (Manager & Super Admin)
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
@@ -281,15 +317,14 @@ export default function SalesPage() {
     let runningAllocated = 0;
 
     for (let i = 1; i <= emiTenureMonths; i++) {
-      const d = new Date(baseDate);
-      d.setMonth(d.getMonth() + i);
+      const d = addMonthsPreservingDay(baseDate, i);
       let amount = monthlyEmi;
       if (i === emiTenureMonths) {
         amount = Math.max(0, financedPrincipal - runningAllocated);
       } else {
         runningAllocated += amount;
       }
-      const monthName = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+      const monthName = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
       schedule.push({
         monthIndex: i,
         billingMonth: `Month ${i} (${monthName})`,
@@ -300,12 +335,144 @@ export default function SalesPage() {
     return schedule;
   }, [saleType, emiTenureMonths, financedPrincipal, monthlyEmi]);
 
-  const handleCreateSale = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Dynamic step tabs based on Sale Type (EMI vs DIRECT)
+  // For Direct Selling, the EMI tab is skipped and user moves directly from Items to Dispatch & Delivery!
+  const availablePosTabs = useMemo(() => {
+    if (saleType === 'DIRECT') {
+      return [
+        { key: 'items' as const, label: '1. Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
+        { key: 'dispatch' as const, label: '2. Dispatch & Delivery', icon: <Truck className="h-3.5 w-3.5" /> },
+      ];
+    }
+    return [
+      { key: 'items' as const, label: '1. Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
+      { key: 'payment' as const, label: '2. EMI Financing Plan', icon: <CreditCard className="h-3.5 w-3.5" /> },
+      { key: 'dispatch' as const, label: '3. Dispatch & Delivery', icon: <Truck className="h-3.5 w-3.5" /> },
+    ];
+  }, [saleType]);
+
+  // If sale type is switched to DIRECT while currently on payment tab, jump directly to dispatch
+  useEffect(() => {
+    if (saleType === 'DIRECT' && posTab === 'payment') {
+      setPosTab('dispatch');
+    }
+  }, [saleType, posTab]);
+
+  // Step-by-step tab validation before advancing
+  const validateTab = (tab: 'items' | 'payment' | 'dispatch'): boolean => {
     setSaleError('');
 
-    if (cartItems.length === 0) {
-      setSaleError('Cart is empty. Please add at least one product.');
+    if (tab === 'items') {
+      if (cartItems.length === 0) {
+        setSaleError('Cart is empty. Please add at least one product before proceeding.');
+        return false;
+      }
+
+      const trimmedName = customerName.trim();
+      const trimmedPhone = customerPhone.trim();
+      const trimmedEmail = customerEmail.trim();
+
+      if (!trimmedName) {
+        setSaleError('Customer Name is required.');
+        return false;
+      }
+
+      if (!trimmedPhone) {
+        setSaleError('Customer Phone Number is mandatory for billing, warranty & EMI alerts.');
+        return false;
+      }
+
+      if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+        setSaleError('Customer Phone Number must be a valid 10-digit Indian mobile number (e.g. 9876543210).');
+        return false;
+      }
+
+      if (!trimmedEmail) {
+        setSaleError('Customer Email Address is mandatory for tax invoice & EMI payment reminders.');
+        return false;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        setSaleError('Please provide a valid Customer Email Address.');
+        return false;
+      }
+
+      return true;
+    }
+
+    if (tab === 'payment') {
+      if (saleType === 'EMI') {
+        if (effectiveDownPayment >= grandTotal) {
+          setSaleError('Down Payment is equal to or greater than Grand Total. Please choose "Direct Sale (Full Payment)" instead.');
+          return false;
+        }
+        if (emiTenureMonths < 1 || emiTenureMonths > 36) {
+          setSaleError('Please select a valid EMI tenure between 1 and 36 months.');
+          return false;
+        }
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  const handleNextTab = () => {
+    if (!validateTab(posTab)) return;
+
+    if (posTab === 'items') {
+      // Direct selling skips EMI tab and moves straight to dispatch & delivery!
+      if (saleType === 'DIRECT') {
+        setPosTab('dispatch');
+      } else {
+        setPosTab('payment');
+      }
+    } else if (posTab === 'payment') {
+      setPosTab('dispatch');
+    }
+  };
+
+  const handleBackTab = () => {
+    setSaleError('');
+    if (posTab === 'dispatch') {
+      // Direct selling goes back straight to items
+      if (saleType === 'DIRECT') {
+        setPosTab('items');
+      } else {
+        setPosTab('payment');
+      }
+    } else if (posTab === 'payment') {
+      setPosTab('items');
+    }
+  };
+
+  const handleTabClick = (targetTab: 'items' | 'payment' | 'dispatch') => {
+    if (targetTab === posTab) return;
+    if (posTab === 'items' && !validateTab('items')) return;
+    if (posTab === 'payment' && !validateTab('payment')) return;
+    setPosTab(targetTab);
+  };
+
+  const handleCreateSale = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSaleError('');
+
+    // CRITICAL GUARD: Only allow sale completion and invoice generation when on the final step (Dispatch & Delivery)
+    if (posTab !== 'dispatch') {
+      return;
+    }
+
+    if (isSubmittingSale) {
+      return;
+    }
+
+    if (!validateTab('items')) {
+      setPosTab('items');
+      return;
+    }
+
+    if (saleType === 'EMI' && !validateTab('payment')) {
+      setPosTab('payment');
       return;
     }
 
@@ -313,42 +480,6 @@ export default function SalesPage() {
     const trimmedName = customerName.trim();
     const trimmedPhone = customerPhone.trim();
     const trimmedEmail = customerEmail.trim();
-
-    if (!trimmedName) {
-      setSaleError('Customer Name is required.');
-      return;
-    }
-
-    if (!trimmedPhone) {
-      setSaleError('Customer Phone Number is mandatory for billing, warranty & EMI alerts.');
-      return;
-    }
-
-    if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
-      setSaleError('Customer Phone Number must be a valid 10-digit Indian mobile number (e.g. 9876543210).');
-      return;
-    }
-
-    if (!trimmedEmail) {
-      setSaleError('Customer Email Address is mandatory for tax invoice & EMI payment reminders.');
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setSaleError('Please provide a valid Customer Email Address.');
-      return;
-    }
-
-    if (saleType === 'EMI') {
-      if (effectiveDownPayment >= grandTotal) {
-        setSaleError('Down Payment is equal to or greater than Grand Total. Please choose "Direct Sale (Full Payment)" instead.');
-        return;
-      }
-      if (emiTenureMonths < 1 || emiTenureMonths > 36) {
-        setSaleError('Please select a valid EMI tenure between 1 and 36 months.');
-        return;
-      }
-    }
 
     setIsSubmittingSale(true);
 
@@ -371,6 +502,7 @@ export default function SalesPage() {
         notes: notes.trim() || undefined,
         remarks: remarks.trim() || undefined,
         idempotencyKey: `sale-${Date.now()}`,
+        sendReceiptEmail: sendSaleReceiptEmail,
         lineItems: cartItems.map((i) => ({
           product: i.product._id,
           hsnCode: i.hsnCode || (i.product as any).hsnCode || '9202',
@@ -394,9 +526,12 @@ export default function SalesPage() {
       setSaleType('DIRECT');
       setDownPayment(0);
       setEmiTenureMonths(6);
+      setPosTab('items');
       fetchSales();
-      fetchInventoryForSale();
-      setActiveInvoice(res.sale);
+      const created = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
+      if (created && created._id) {
+        setActiveInvoice(created);
+      }
     } catch (err: any) {
       setSaleError(err.message || 'Failed to record customer sale.');
     } finally {
@@ -406,11 +541,17 @@ export default function SalesPage() {
 
   // Open EMI Ledger
   const openEmiLedger = (sale: Sale) => {
-    setSelectedSaleForLedger(sale);
+    // Look up freshest record in case sale state was updated via Edit
+    const freshSale = sales.find((s) => s._id === sale._id) || sale;
+    setSelectedSaleForLedger(freshSale);
+    setEmiCustomerEmail(freshSale.customerEmail || '');
+    setSendEmiPaymentReceiptEmail(true);
     setEmiLedgerError('');
     setEmiReminderFeedback('');
     setEmiTransactionRef('');
     setEmiPaymentNotes('');
+    setSettleAllRemaining(false);
+    setEarlySettlementDiscount(0);
     // Auto populate next due EMI rounded to whole rupee
     const nextDue = (sale.emiPayments || []).find((p) => p.status !== 'PAID');
     if (nextDue) {
@@ -422,13 +563,31 @@ export default function SalesPage() {
     }
   };
 
-  // Record EMI installment payment
+  // Automatically open EMI ledger modal if redirected from Notification Bell with ?emi=INVOICE
+  useEffect(() => {
+    if (typeof window !== 'undefined' && sales.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const emiRef = urlParams.get('emi') || urlParams.get('invoice');
+      if (emiRef) {
+        const found = sales.find(
+          (s) =>
+            s.invoiceNumber?.toLowerCase() === emiRef.toLowerCase() ||
+            s._id === emiRef
+        );
+        if (found) {
+          openEmiLedger(found);
+        }
+      }
+    }
+  }, [sales]);
+
+  // Record EMI installment payment (supports single month, multi-month, or early lump-sum payoff)
   const handleRecordEmiPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSaleForLedger) return;
     setEmiLedgerError('');
 
-    if (emiPaymentAmount <= 0) {
+    if (emiPaymentAmount <= 0 && !settleAllRemaining) {
       setEmiLedgerError('Please enter a valid installment payment amount.');
       return;
     }
@@ -441,21 +600,42 @@ export default function SalesPage() {
     setIsRecordingEmiPayment(true);
 
     try {
-      const res = await api.post<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
+      const res = await api.post<{ success: boolean; data?: { sale: Sale; emailSent?: boolean; recipient?: string }; sale?: Sale; emailSent?: boolean; recipient?: string }>(
         `/sales/${selectedSaleForLedger._id}/emi-payments`,
         {
           amount: Math.round(emiPaymentAmount),
-          billingMonth: selectedEmiBillingMonth || undefined,
+          billingMonth: settleAllRemaining ? undefined : (selectedEmiBillingMonth || undefined),
           paymentMethod: emiPaymentMethod,
           transactionRef: emiTransactionRef.trim(),
           notes: emiPaymentNotes.trim() || undefined,
+          earlySettlementDiscount: earlySettlementDiscount > 0 ? Math.round(earlySettlementDiscount) : undefined,
+          settleAllRemaining: settleAllRemaining || undefined,
+          customerEmail: emiCustomerEmail.trim() || undefined,
+          sendReceiptEmail: sendEmiPaymentReceiptEmail,
         }
       );
 
       const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      const emailSent = (res as any)?.emailSent || (res as any)?.data?.emailSent;
+      const recipient = (res as any)?.recipient || (res as any)?.data?.recipient || emiCustomerEmail || selectedSaleForLedger.customerEmail;
+
       setSelectedSaleForLedger(updated);
+      setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
       setEmiTransactionRef('');
       setEmiPaymentNotes('');
+      setSettleAllRemaining(false);
+      setEarlySettlementDiscount(0);
+      if (emailSent && recipient) {
+        setEmiReminderFeedback(
+          `✅ EMI payment of ${formatCurrency(emiPaymentAmount)} recorded & official receipt email dispatched to ${recipient}!`
+        );
+      } else if (!sendEmiPaymentReceiptEmail) {
+        setEmiReminderFeedback(
+          `EMI payment of ${formatCurrency(emiPaymentAmount)} recorded successfully (receipt email skipped as unchecked).`
+        );
+      } else {
+        setEmiReminderFeedback(`EMI payment of ${formatCurrency(emiPaymentAmount)} recorded successfully.`);
+      }
       fetchSales();
 
       // Recalculate next due installment
@@ -471,6 +651,124 @@ export default function SalesPage() {
       setEmiLedgerError(err.message || 'Failed to record EMI payment.');
     } finally {
       setIsRecordingEmiPayment(false);
+    }
+  };
+
+  // Adjust EMI Installment Due
+  const handleOpenAdjustEmiDue = (payment: EmiMonthlyPayment) => {
+    setAdjustingEmiMonth(payment);
+    setAdjustAmountDue(payment.amountDue);
+    setAdjustDueDate(payment.dueDate ? new Date(payment.dueDate).toISOString().slice(0, 10) : '');
+    setAdjustCarryForward(true);
+    setAdjustReason('');
+    setAdjustModalError('');
+  };
+
+  const handleSaveAdjustEmiDue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSaleForLedger || !adjustingEmiMonth) return;
+    setIsAdjustingEmiDue(true);
+    setAdjustModalError('');
+    try {
+      const res = await api.post<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
+        `/sales/${selectedSaleForLedger._id}/adjust-emi-due`,
+        {
+          monthIndex: adjustingEmiMonth.monthIndex,
+          newAmountDue: Math.round(adjustAmountDue),
+          newDueDate: adjustDueDate || undefined,
+          carryForwardDifference: adjustCarryForward,
+          reason: adjustReason.trim() || undefined,
+        }
+      );
+      const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      setSelectedSaleForLedger(updated);
+      setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
+      setAdjustingEmiMonth(null);
+      fetchSales();
+    } catch (err: any) {
+      setAdjustModalError(err.message || 'Failed to adjust EMI installment.');
+    } finally {
+      setIsAdjustingEmiDue(false);
+    }
+  };
+
+  // Edit Recorded EMI Payment
+  const handleOpenEditEmiPayment = (payment: EmiMonthlyPayment) => {
+    setEditingEmiPayment(payment);
+    setEditEmiAmountPaid(payment.amountPaid || 0);
+    setEditEmiAmountDue(payment.amountDue || 0);
+    setEditEmiPaymentMethod((payment.paymentMethod as any) || 'UPI');
+    setEditEmiTransactionRef(payment.transactionRef || '');
+    setEditEmiNotes(payment.notes || '');
+    setEditEmiModalError('');
+  };
+
+  const handleSaveEditEmiPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSaleForLedger || !editingEmiPayment) return;
+    setIsUpdatingEmiPayment(true);
+    setEditEmiModalError('');
+    try {
+      const res = await api.put<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
+        `/sales/${selectedSaleForLedger._id}/emi-payments/${editingEmiPayment.monthIndex}`,
+        {
+          amountPaid: Math.round(editEmiAmountPaid),
+          amountDue: Math.round(editEmiAmountDue),
+          paymentMethod: editEmiPaymentMethod,
+          transactionRef: editEmiTransactionRef.trim() || undefined,
+          notes: editEmiNotes.trim() || undefined,
+        }
+      );
+      const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      setSelectedSaleForLedger(updated);
+      setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
+      setEditingEmiPayment(null);
+      fetchSales();
+    } catch (err: any) {
+      setEditEmiModalError(err.message || 'Failed to update EMI payment.');
+    } finally {
+      setIsUpdatingEmiPayment(false);
+    }
+  };
+
+  // Add Extra EMI Month
+  const handleOpenAddEmiMonth = () => {
+    setIsAddingEmiMonthModalOpen(true);
+    setNewEmiMonthAmount(Math.round(selectedSaleForLedger?.monthlyEmiAmount || 0));
+    const payments = selectedSaleForLedger?.emiPayments || [];
+    const lastP = payments.length > 0 ? payments[payments.length - 1] : null;
+    if (lastP?.dueDate) {
+      const d = new Date(lastP.dueDate);
+      d.setMonth(d.getMonth() + 1);
+      setNewEmiMonthDueDate(d.toISOString().slice(0, 10));
+    } else {
+      setNewEmiMonthDueDate('');
+    }
+    setNewEmiMonthReason('');
+  };
+
+  const handleSaveAddEmiMonth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSaleForLedger) return;
+    setIsSubmittingAddMonth(true);
+    try {
+      const res = await api.post<{ success: boolean; data?: { sale: Sale }; sale?: Sale }>(
+        `/sales/${selectedSaleForLedger._id}/add-emi-month`,
+        {
+          amountDue: Math.round(newEmiMonthAmount),
+          dueDate: newEmiMonthDueDate || undefined,
+          reason: newEmiMonthReason.trim() || undefined,
+        }
+      );
+      const updated = res.data?.sale || res.sale || selectedSaleForLedger;
+      setSelectedSaleForLedger(updated);
+      setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
+      setIsAddingEmiMonthModalOpen(false);
+      fetchSales();
+    } catch (err: any) {
+      setEmiLedgerError(err.message || 'Failed to add EMI installment month.');
+    } finally {
+      setIsSubmittingAddMonth(false);
     }
   };
 
@@ -572,6 +870,15 @@ export default function SalesPage() {
         setEditSaleFeedback('Sale bill successfully updated!');
       }
 
+      // Update active sales state immediately so changes reflect everywhere (table, ledger, invoice)
+      const updatedSale: Sale | undefined = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
+      if (updatedSale && updatedSale._id) {
+        setSales((prev) => prev.map((s) => (s._id === updatedSale._id ? updatedSale : s)));
+        if (selectedSaleForLedger && selectedSaleForLedger._id === updatedSale._id) {
+          setSelectedSaleForLedger(updatedSale);
+        }
+      }
+
       fetchSales();
       setTimeout(() => {
         setEditingSale(null);
@@ -600,8 +907,9 @@ export default function SalesPage() {
 
       setEmiReminderFeedback(`EMI reminder dispatched to ${res.sentTo}!`);
       fetchSales();
-      if (selectedSaleForLedger && selectedSaleForLedger._id === sale._id) {
-        setSelectedSaleForLedger(res.sale);
+      const updatedSale = (res as any)?.sale || (res as any)?.data?.sale;
+      if (updatedSale && selectedSaleForLedger && selectedSaleForLedger._id === sale._id) {
+        setSelectedSaleForLedger(updatedSale);
       }
       setTimeout(() => setEmiReminderFeedback(''), 5000);
     } catch (err: any) {
@@ -615,16 +923,13 @@ export default function SalesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Sales &amp; Point of Sale (POS)
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Sales &amp; Point of Sale (POS)
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Live stock lookup, retail sales transactions, EMI financing, invoices, and customer reminders.
+          </p>
         </div>
 
         {canMakeSales() && (
@@ -830,11 +1135,26 @@ export default function SalesPage() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="space-y-0.5">
-                            {sale.lineItems?.map((li, idx) => (
-                              <div key={idx} className="text-slate-800 dark:text-slate-200">
-                                â€¢ {li.product?.name} (x{li.quantity})
-                              </div>
-                            ))}
+                            {sale.lineItems?.map((li, idx) => {
+                              const pName = (li.product as any)?.name || (li as any).productName || 'Musical Product';
+                              const pColor = (li.product as any)?.color;
+                              return (
+                                <div key={idx} className="text-slate-800 dark:text-slate-200">
+                                  • <span className="font-semibold">{pName}</span>
+                                  {pColor && (
+                                    <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                      {pColor}
+                                    </span>
+                                  )}
+                                  <span className="text-slate-500 font-normal ml-1">(x{li.quantity})</span>
+                                  {li.discount ? (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold ml-1">
+                                      (−{formatCurrency(li.discount * li.quantity)})
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right font-extrabold text-slate-900 dark:text-white">
@@ -927,58 +1247,92 @@ export default function SalesPage() {
         isOpen={isNewSaleOpen}
         onClose={() => setIsNewSaleOpen(false)}
         title="New Customer Sale — POS"
-        description="Add items to cart, set customer details, choose payment plan, and confirm."
+        description={
+          saleType === 'DIRECT'
+            ? 'Direct Sale (Full Payment): Select products, enter customer details, and configure delivery dispatch.'
+            : 'EMI Plan Sale: Select products, customer details, zero-interest installment plan, and delivery dispatch.'
+        }
         maxWidth="5xl"
         footer={
           <div className="flex items-center justify-between gap-3">
-            {/* Tab navigation in footer */}
-            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+            {/* Step navigation / Back button */}
+            <div className="flex items-center gap-2">
               {posTab !== 'items' && (
                 <button
                   type="button"
-                  onClick={() => setPosTab(posTab === 'dispatch' ? 'payment' : 'items')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  onClick={handleBackTab}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition-colors text-slate-700 dark:text-slate-300"
                 >
                   ← Back
                 </button>
               )}
-              <div className="flex items-center gap-1 ml-2">
-                {(['items','payment','dispatch'] as const).map((t, i) => (
-                  <div key={t} className={`h-1.5 w-6 rounded-full transition-colors ${posTab === t ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+              {/* Step indicator pills */}
+              <div className="flex items-center gap-1.5 ml-1">
+                {availablePosTabs.map((t) => (
+                  <div
+                    key={t.key}
+                    title={t.label}
+                    className={`h-1.5 rounded-full transition-all duration-200 ${
+                      posTab === t.key
+                        ? 'w-8 bg-amber-500'
+                        : 'w-4 bg-slate-200 dark:bg-slate-700'
+                    }`}
+                  />
                 ))}
+                <span className="text-[11px] text-slate-400 font-medium ml-1">
+                  Step {availablePosTabs.findIndex((t) => t.key === posTab) + 1} of {availablePosTabs.length}
+                </span>
               </div>
             </div>
+
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsNewSaleOpen(false)}>
                 Cancel
               </Button>
               {posTab !== 'dispatch' ? (
                 <Button
+                  key="pos-next-footer-btn"
                   type="button"
                   size="sm"
                   variant="default"
                   className="font-bold gap-1.5"
-                  onClick={() => setPosTab(posTab === 'items' ? 'payment' : 'dispatch')}
+                  onClick={handleNextTab}
                 >
-                  Next →
+                  <span>{posTab === 'items' && saleType === 'DIRECT' ? 'Next: Dispatch & Delivery →' : 'Next →'}</span>
                 </Button>
               ) : (
                 <Button
-                  type="submit"
-                  form="pos-sale-form"
+                  key="pos-generate-footer-btn"
+                  type="button"
                   size="sm"
                   variant="default"
                   isLoading={isSubmittingSale}
-                  className="font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950"
+                  onClick={handleCreateSale}
+                  className="font-bold gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md px-4"
                 >
-                  {saleType === 'EMI' ? 'Confirm & Setup EMI Plan' : 'Confirm & Complete Sale'}
+                  <Receipt className="h-4 w-4" />
+                  <span>{saleType === 'EMI' ? 'Generate Invoice & Setup EMI Plan' : 'Generate Invoice & Complete Sale'}</span>
                 </Button>
               )}
             </div>
           </div>
         }
       >
-        <form id="pos-sale-form" onSubmit={handleCreateSale}>
+        <form
+          id="pos-sale-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+          }}
+          onKeyDown={(e) => {
+            // Prevent accidental early submission when pressing Enter anywhere in form
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (posTab !== 'dispatch') {
+                handleNextTab();
+              }
+            }
+          }}
+        >
           {saleError && (
             <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-500 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -986,25 +1340,21 @@ export default function SalesPage() {
             </div>
           )}
 
-          {/* ── Tab Bar ── */}
+          {/* ── Dynamic Tab Bar ── */}
           <div className="flex items-center gap-1 mb-5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-            {([
-              { key: 'items',    label: 'Items & Customer', icon: <Package className="h-3.5 w-3.5" /> },
-              { key: 'payment',  label: 'Payment Plan',     icon: <CreditCard className="h-3.5 w-3.5" /> },
-              { key: 'dispatch', label: 'Dispatch & GST',   icon: <Truck className="h-3.5 w-3.5" /> },
-            ] as const).map((tab) => (
+            {availablePosTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setPosTab(tab.key)}
+                onClick={() => handleTabClick(tab.key)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
                   posTab === tab.key
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-slate-700 font-bold'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
               >
                 {tab.icon}
-                {tab.label}
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -1084,11 +1434,11 @@ export default function SalesPage() {
                       onClick={() => handleAddToCart(p)}
                       className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-amber-500 bg-white dark:bg-slate-950 cursor-pointer transition-colors flex justify-between items-center text-xs"
                     >
-                      <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white truncate">{p.name}
-                          {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{p.color}</span>}
+                      <div className="min-w-0 pr-2">
+                        <div className="font-semibold text-slate-900 dark:text-white break-words leading-tight">{p.name}
+                          {p.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">{p.color}</span>}
                         </div>
-                        <div className="text-[11px] text-slate-400">{p.brand} · Avail: <strong>{p.availableForSale}</strong></div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{p.brand} · Avail: <strong>{p.availableForSale}</strong></div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <div className="font-bold text-amber-500">{formatCurrency(p.defaultSellingPrice)}</div>
@@ -1113,11 +1463,11 @@ export default function SalesPage() {
                   <div className="space-y-2 max-h-[240px] overflow-y-auto pr-0.5">
                     {cartItems.map((item, idx) => (
                       <div key={item.product._id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-slate-900 dark:text-white truncate">{item.product.name}
-                            {item.product.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">{item.product.color}</span>}
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-bold text-slate-900 dark:text-white break-words leading-tight pr-2">{item.product.name}
+                            {item.product.color && <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">{item.product.color}</span>}
                           </span>
-                          <button type="button" onClick={() => handleRemoveFromCart(item.product._id)} className="text-slate-400 hover:text-red-500 ml-2 shrink-0">
+                          <button type="button" onClick={() => handleRemoveFromCart(item.product._id)} className="text-slate-400 hover:text-red-500 shrink-0">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -1163,6 +1513,18 @@ export default function SalesPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* In-tab step progression button */}
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="default"
+                className="font-bold gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs text-xs"
+                onClick={handleNextTab}
+              >
+                <span>{saleType === 'DIRECT' ? 'Proceed to Step 2: Dispatch & Delivery →' : 'Proceed to Step 2: EMI Financing Plan →'}</span>
+              </Button>
             </div>
           </div>
 
@@ -1234,6 +1596,27 @@ export default function SalesPage() {
                     </div>
                   </div>
                 )}
+
+                {/* In-tab step navigation */}
+                <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBackTab}
+                  >
+                    ← Back to Items &amp; Customer
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="font-bold gap-1.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
+                    onClick={handleNextTab}
+                  >
+                    <span>Proceed to Step 3: Dispatch &amp; Delivery →</span>
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1263,15 +1646,112 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Final order summary before confirm */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2 text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px] tracking-wider block">Order Summary</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><span className="text-slate-500 block">Customer</span><span className="font-bold text-slate-900 dark:text-white">{customerName || '—'}</span></div>
-                <div><span className="text-slate-500 block">Sale Type</span><span className="font-bold text-amber-500">{saleType}</span></div>
-                <div><span className="text-slate-500 block">Items</span><span className="font-bold text-slate-900 dark:text-white">{cartItems.length} product{cartItems.length !== 1 ? 's' : ''}</span></div>
-                <div><span className="text-slate-500 block">Grand Total</span><span className="font-bold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span></div>
+            {/* Final order summary before invoice generation */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="font-bold text-slate-800 dark:text-slate-200 uppercase text-[11px] tracking-wider">
+                  Order &amp; Billing Summary Review
+                </span>
+                <span className="text-[10px] font-semibold text-slate-500">
+                  Ready for Invoice Generation
+                </span>
               </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Customer</span>
+                  <span className="font-bold text-slate-900 dark:text-white block">{customerName || '—'}</span>
+                  <span className="text-[11px] text-slate-400 block">{customerPhone}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Sale Mode</span>
+                  <span className="font-bold text-amber-500 block">{saleType === 'DIRECT' ? 'Direct Sale' : 'EMI Financing Plan'}</span>
+                  <span className="text-[11px] text-slate-400 block">{saleType === 'DIRECT' ? paymentMethod : `${emiTenureMonths} Mo. Plan`}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Dispatch To</span>
+                  <span className="font-bold text-slate-900 dark:text-white block truncate">{destination || 'PUNE'}</span>
+                  <span className="text-[11px] text-slate-400 block truncate">{dispatchThrough || 'XP India'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Cart Items</span>
+                  <span className="font-bold text-slate-900 dark:text-white block">{cartItems.length} Product{cartItems.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[11px] text-slate-400 block">{cartItems.reduce((acc, i) => acc + i.quantity, 0)} Units Total</span>
+                </div>
+              </div>
+
+              {/* Financial Totals Row */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div>
+                  <span className="text-slate-500 block">Gross Subtotal:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(subtotal)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Discount Offered:</span>
+                  <span className={`font-bold ${discountTotal > 0 ? 'text-emerald-500 font-extrabold' : 'text-slate-400'}`}>
+                    {discountTotal > 0 ? `−${formatCurrency(discountTotal)}` : '₹0'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Taxable Base:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(taxableAmount)}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 block">Grand Total:</span>
+                  <span className="font-extrabold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Automatic Invoice Email Dispatch Toggle */}
+            <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 dark:from-indigo-950/20 dark:to-purple-950/10 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Tax Invoice &amp; Receipt Email (Automatic)</span>
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Resend + Nodemailer Active
+                </span>
+              </div>
+              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={sendSaleReceiptEmail}
+                  onChange={(e) => setSendSaleReceiptEmail(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 select-none">
+                  <strong className="text-slate-900 dark:text-white font-semibold">
+                    Automatically dispatch official Tax Invoice PDF &amp; payment receipt to customer
+                  </strong>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Will be emailed immediately to <strong>{customerEmail || 'the entered customer email address'}</strong> upon checkout.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* In-tab final submission action bar */}
+            <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBackTab}
+              >
+                ← Back to {saleType === 'DIRECT' ? 'Items & Customer' : 'EMI Financing Plan'}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                isLoading={isSubmittingSale}
+                onClick={handleCreateSale}
+                className="font-bold gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md text-xs sm:text-sm"
+              >
+                <Receipt className="h-4 w-4" />
+                <span>{saleType === 'EMI' ? 'Generate Invoice & Setup EMI Plan' : 'Generate Invoice & Complete Sale'}</span>
+              </Button>
             </div>
           </div>
         </form>
@@ -1351,9 +1831,19 @@ export default function SalesPage() {
 
             {/* Month-by-Month Installment Schedule Table */}
             <div className="space-y-2">
-              <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                Month-by-Month EMI Installment Schedule ({selectedSaleForLedger.emiPayments?.length || 0} Months)
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                  Month-by-Month EMI Installment Schedule ({selectedSaleForLedger.emiPayments?.length || 0} Months)
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleOpenAddEmiMonth}
+                  className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Extend EMI (+1 Month)</span>
+                </button>
+              </div>
 
               <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs border-collapse">
@@ -1365,6 +1855,7 @@ export default function SalesPage() {
                       <th className="py-2.5 px-3 text-right">Amount Paid</th>
                       <th className="py-2.5 px-3 text-center">Status</th>
                       <th className="py-2.5 px-3">Payment Info</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -1407,12 +1898,221 @@ export default function SalesPage() {
                             <span className="text-slate-400 italic">Pending payment</span>
                           )}
                         </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {p.status !== 'PAID' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEmiBillingMonth(p.billingMonth);
+                                  setEmiPaymentAmount(Math.round(Math.max(0, p.amountDue - (p.amountPaid || 0))));
+                                  setSettleAllRemaining(false);
+                                  setEarlySettlementDiscount(0);
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                                title="Pay this installment"
+                              >
+                                Pay
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAdjustEmiDue(p)}
+                              className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-colors"
+                              title="Adjust Installment Due Amount, Due Date, or Carry Forward"
+                            >
+                              <Sliders className="h-3.5 w-3.5" />
+                            </button>
+                            {p.status === 'PAID' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditEmiPayment(p)}
+                                className="p-1 rounded text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+                                title="Edit Paid Transaction Record (Typos / Ref)"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Flexible Payoff & Early Settlement Banner */}
+            {(() => {
+              const unpaidInstallments = (selectedSaleForLedger.emiPayments || []).filter((p) => p.status !== 'PAID');
+              const totalRemainingDue = unpaidInstallments.reduce(
+                (acc, p) => acc + Math.max(0, p.amountDue - (p.amountPaid || 0)),
+                0
+              );
+
+              if (unpaidInstallments.length === 0) return null;
+
+              return (
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-emerald-500/10 dark:from-amber-950/20 dark:via-slate-900/40 dark:to-emerald-950/20 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                        <Zap className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-2">
+                          <span>Flexible Payoff &amp; Early Settlement</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-mono font-bold">
+                            {unpaidInstallments.length} Unpaid {unpaidInstallments.length === 1 ? 'EMI' : 'EMIs'}
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Pay multiple installments together or settle all remaining EMIs at once with early payoff adjustment.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block">Total Remaining Balance</span>
+                      <span className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400">
+                        {formatCurrency(totalRemainingDue)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick 1-Click Payoff Pills */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Quick Select:</span>
+
+                    {/* 1 EMI */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstDue = unpaidInstallments[0];
+                        const dueAmt = Math.round(Math.max(0, firstDue.amountDue - (firstDue.amountPaid || 0)));
+                        setEmiPaymentAmount(dueAmt);
+                        setSelectedEmiBillingMonth(firstDue.billingMonth);
+                        setSettleAllRemaining(false);
+                        setEarlySettlementDiscount(0);
+                        setEmiPaymentNotes(`Monthly installment for ${firstDue.billingMonth}`);
+                      }}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all ${
+                        !settleAllRemaining && selectedEmiBillingMonth === unpaidInstallments[0]?.billingMonth
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 shadow-xs'
+                          : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                      }`}
+                    >
+                      Pay Next 1 EMI ({formatCurrency(Math.max(0, unpaidInstallments[0]?.amountDue - (unpaidInstallments[0]?.amountPaid || 0)))})
+                    </button>
+
+                    {/* 2 EMIs if available */}
+                    {unpaidInstallments.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sum2 = Math.round(
+                            unpaidInstallments.slice(0, 2).reduce((acc, p) => acc + Math.max(0, p.amountDue - (p.amountPaid || 0)), 0)
+                          );
+                          setEmiPaymentAmount(sum2);
+                          setSelectedEmiBillingMonth('');
+                          setSettleAllRemaining(false);
+                          setEarlySettlementDiscount(0);
+                          setEmiPaymentNotes(`Lump-sum payment for next 2 EMIs (${unpaidInstallments[0]?.billingMonth}, ${unpaidInstallments[1]?.billingMonth})`);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-amber-400 transition-all"
+                      >
+                        Pay Next 2 EMIs ({formatCurrency(unpaidInstallments.slice(0, 2).reduce((acc, p) => acc + Math.max(0, p.amountDue - (p.amountPaid || 0)), 0))})
+                      </button>
+                    )}
+
+                    {/* 3 EMIs if available */}
+                    {unpaidInstallments.length >= 3 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sum3 = Math.round(
+                            unpaidInstallments.slice(0, 3).reduce((acc, p) => acc + Math.max(0, p.amountDue - (p.amountPaid || 0)), 0)
+                          );
+                          setEmiPaymentAmount(sum3);
+                          setSelectedEmiBillingMonth('');
+                          setSettleAllRemaining(false);
+                          setEarlySettlementDiscount(0);
+                          setEmiPaymentNotes(`Lump-sum payment for next 3 EMIs`);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-amber-400 transition-all"
+                      >
+                        Pay Next 3 EMIs ({formatCurrency(unpaidInstallments.slice(0, 3).reduce((acc, p) => acc + Math.max(0, p.amountDue - (p.amountPaid || 0)), 0))})
+                      </button>
+                    )}
+
+                    {/* Settle All Remaining EMIs at Once */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettleAllRemaining(true);
+                        setSelectedEmiBillingMonth('');
+                        setEmiPaymentAmount(Math.max(0, totalRemainingDue - earlySettlementDiscount));
+                        setEmiPaymentNotes(`Early payoff & full settlement of remaining ${unpaidInstallments.length} EMIs`);
+                      }}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+                        settleAllRemaining
+                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20'
+                          : 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Settle All Remaining {unpaidInstallments.length} EMIs at Once ({formatCurrency(totalRemainingDue)})</span>
+                    </button>
+                  </div>
+
+                  {/* Early Payoff / Settlement Waiver Section when Settle All is Active */}
+                  {settleAllRemaining && (
+                    <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/30 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider block">
+                            Early Payoff / Foreclosure Mode Active
+                          </span>
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                            All {unpaidInstallments.length} remaining installments will be closed and marked PAID. Outstanding balance will become ₹0.
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            Early Settlement Discount / Waiver (₹):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max={totalRemainingDue}
+                            value={earlySettlementDiscount || ''}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const disc = Math.max(0, Math.min(totalRemainingDue, Math.round(parseFloat(e.target.value) || 0)));
+                              setEarlySettlementDiscount(disc);
+                              setEmiPaymentAmount(Math.max(0, totalRemainingDue - disc));
+                            }}
+                            className="w-24 h-8 px-2 rounded border border-emerald-400 dark:border-emerald-800 bg-white dark:bg-slate-900 font-mono font-bold text-right text-emerald-600 dark:text-emerald-400 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs font-semibold pt-1 border-t border-emerald-500/20 text-emerald-800 dark:text-emerald-200">
+                        <span>
+                          Original Due: <span className="font-mono">{formatCurrency(totalRemainingDue)}</span>
+                          {earlySettlementDiscount > 0 && (
+                            <> &minus; Waiver: <span className="font-mono text-rose-500">₹{earlySettlementDiscount}</span></>
+                          )}
+                        </span>
+                        <span className="font-bold">
+                          Net Amount to Collect: <span className="font-mono font-extrabold text-amber-500 text-sm">₹{emiPaymentAmount}</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Record Installment Payment Form */}
             {(selectedSaleForLedger.totalEmiDue ?? 0) > 0 && (
@@ -1422,19 +2122,35 @@ export default function SalesPage() {
               >
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
-                    Record Monthly EMI Payment
+                    {settleAllRemaining ? 'Confirm Early Payoff & Full Settlement' : 'Record Monthly EMI Payment'}
                   </span>
                   <span className="text-[11px] text-slate-500">Instant ledger &amp; invoice update</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase text-slate-500 mb-1">
-                      Amount to Pay (₹) *
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[10px] font-semibold uppercase text-slate-500">
+                        Amount to Pay (₹) *
+                      </label>
+                      {(selectedSaleForLedger.totalEmiDue ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmiPaymentAmount(selectedSaleForLedger.totalEmiDue ?? 0);
+                            setSelectedEmiBillingMonth('');
+                            setSettleAllRemaining(false);
+                            setEarlySettlementDiscount(0);
+                          }}
+                          className="text-[10px] font-bold text-amber-500 hover:underline"
+                        >
+                          Pay Full Balance (₹{selectedSaleForLedger.totalEmiDue ?? 0})
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       step="any"
                       required
                       value={emiPaymentAmount}
@@ -1449,10 +2165,13 @@ export default function SalesPage() {
                     </label>
                     <select
                       value={selectedEmiBillingMonth}
-                      onChange={(e) => setSelectedEmiBillingMonth(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedEmiBillingMonth(e.target.value);
+                        setSettleAllRemaining(false);
+                      }}
                       className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-semibold"
                     >
-                      <option value="">Next Due Month</option>
+                      <option value="">{settleAllRemaining ? 'All Remaining Months' : 'Next Due Month'}</option>
                       {(selectedSaleForLedger.emiPayments || []).map((p, i) => (
                         <option key={i} value={p.billingMonth}>
                           {p.billingMonth} ({p.status})
@@ -1492,6 +2211,35 @@ export default function SalesPage() {
                   </div>
                 </div>
 
+                {/* Customer Email & Receipt Dispatch Toggle */}
+                <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Mail className="h-3 w-3 text-amber-500" />
+                      <span>Customer Email for Receipt</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Auto-dispatch ready</span>
+                  </div>
+                  <input
+                    type="email"
+                    value={emiCustomerEmail}
+                    onChange={(e) => setEmiCustomerEmail(e.target.value)}
+                    placeholder="customer@example.com (Required for sending payment receipt)"
+                    className="w-full h-8 px-3 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  />
+                  <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={sendEmiPaymentReceiptEmail}
+                      onChange={(e) => setSendEmiPaymentReceiptEmail(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    />
+                    <span className="text-[11px] text-slate-700 dark:text-slate-300 select-none">
+                      Automatically dispatch official EMI installment payment receipt email to customer upon recording
+                    </span>
+                  </label>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                   <Button
                     type="button"
@@ -1511,10 +2259,16 @@ export default function SalesPage() {
                     size="sm"
                     isLoading={isRecordingEmiPayment}
                     disabled={isRecordingEmiPayment}
-                    className="gap-1.5 font-bold"
+                    className={`gap-1.5 font-bold ${
+                      settleAllRemaining ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''
+                    }`}
                   >
                     <Check className="h-3.5 w-3.5" />
-                    <span>Confirm EMI Payment</span>
+                    <span>
+                      {settleAllRemaining
+                        ? `Confirm & Settle All Remaining EMIs (₹${emiPaymentAmount})`
+                        : `Confirm EMI Payment (₹${emiPaymentAmount})`}
+                    </span>
                   </Button>
                 </div>
               </form>
@@ -1660,7 +2414,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerName}
                     onChange={(e) => setEditCustomerName(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1672,7 +2426,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerPhone}
                     onChange={(e) => setEditCustomerPhone(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1684,7 +2438,7 @@ export default function SalesPage() {
                     required
                     value={editCustomerEmail}
                     onChange={(e) => setEditCustomerEmail(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1696,7 +2450,7 @@ export default function SalesPage() {
                     placeholder="e.g. 27AAAAA0000A1Z5"
                     value={editCustomerGstin}
                     onChange={(e) => setEditCustomerGstin(e.target.value.toUpperCase())}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono uppercase"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono uppercase text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -1708,7 +2462,7 @@ export default function SalesPage() {
                     placeholder="Full street address, City, Pincode"
                     value={editCustomerAddress}
                     onChange={(e) => setEditCustomerAddress(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -1727,7 +2481,7 @@ export default function SalesPage() {
                   <select
                     value={editPaymentMethod}
                     onChange={(e) => setEditPaymentMethod(e.target.value as any)}
-                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-900 dark:text-white"
                   >
                     <option value="UPI">UPI (GPay / PhonePe)</option>
                     <option value="CARD">Debit / Credit Card</option>
@@ -1744,7 +2498,7 @@ export default function SalesPage() {
                     type="text"
                     value={editDispatchThrough}
                     onChange={(e) => setEditDispatchThrough(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1755,7 +2509,7 @@ export default function SalesPage() {
                     type="text"
                     value={editDestination}
                     onChange={(e) => setEditDestination(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
@@ -1766,7 +2520,7 @@ export default function SalesPage() {
                     type="text"
                     value={editEWayBillNo}
                     onChange={(e) => setEditEWayBillNo(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -1786,57 +2540,70 @@ export default function SalesPage() {
                       className="grid grid-cols-1 sm:grid-cols-6 gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 items-center text-xs"
                     >
                       <div className="sm:col-span-2">
-                        <span className="font-bold text-slate-900 dark:text-white block truncate">
-                          {li.productName}
+                        <span className="font-bold text-slate-950 dark:text-white block break-words">
+                          {(li as any).productName || (li.product as any)?.name || 'Musical Product'}
                         </span>
-                        <span className="text-[10px] text-slate-400">Qty: {li.quantity}</span>
+                        <span className="inline-block mt-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                          Qty: {li.quantity}
+                        </span>
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Unit Price (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Unit Price (₹)
+                        </label>
                         <input
                           type="number"
                           min="0"
                           step="any"
+                          placeholder="0"
                           value={li.unitPrice}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].unitPrice = parseFloat(e.target.value) || 0;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-950 dark:text-white font-bold font-mono text-right placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">Discount/Unit (₹)</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Discount/Unit (₹)
+                        </label>
                         <input
                           type="number"
                           min="0"
                           step="any"
+                          placeholder="0"
                           value={li.discount}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].discount = parseFloat(e.target.value) || 0;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-right"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 font-bold font-mono text-right placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] uppercase font-bold text-slate-400">HSN/SAC</label>
+                        <label className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          HSN/SAC
+                        </label>
                         <input
                           type="text"
+                          placeholder="9202"
                           value={li.hsnCode}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].hsnCode = e.target.value;
                             setEditLineItems(updated);
                           }}
-                          className="w-full h-8 px-2 rounded border border-slate-300 dark:border-slate-800 font-mono text-center"
+                          className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-950 dark:text-white font-bold font-mono text-center placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs"
                         />
                       </div>
                       <div className="text-right">
-                        <span className="block text-[9px] uppercase font-bold text-slate-400">Net Total</span>
-                        <span className="font-bold text-slate-900 dark:text-white font-mono">
+                        <span className="block text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          Net Total
+                        </span>
+                        <span className="font-extrabold text-slate-950 dark:text-white font-mono text-xs">
                           {formatCurrency(Math.round(lineTotal))}
                         </span>
                       </div>
@@ -1940,7 +2707,7 @@ export default function SalesPage() {
                   placeholder="Notes printed on invoice"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                 />
               </div>
               <div>
@@ -1952,7 +2719,7 @@ export default function SalesPage() {
                   placeholder="Internal audit notes"
                   value={editRemarks}
                   onChange={(e) => setEditRemarks(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -1997,6 +2764,260 @@ export default function SalesPage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Adjust EMI Installment Due Modal */}
+      <Modal
+        isOpen={!!adjustingEmiMonth}
+        onClose={() => setAdjustingEmiMonth(null)}
+        title={`Adjust EMI Installment Due — ${adjustingEmiMonth?.billingMonth || ''}`}
+        maxWidth="md"
+      >
+        {adjustingEmiMonth && (
+          <form onSubmit={handleSaveAdjustEmiDue} className="space-y-4">
+            {adjustModalError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs">
+                {adjustModalError}
+              </div>
+            )}
+
+            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Current Due Amount:</span>
+                <span className="font-bold font-mono text-amber-500">{formatCurrency(adjustingEmiMonth.amountDue)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount Already Paid:</span>
+                <span className="font-bold font-mono text-emerald-500">{formatCurrency(adjustingEmiMonth.amountPaid || 0)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                New Amount Due (₹) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                required
+                value={adjustAmountDue}
+                onChange={(e) => setAdjustAmountDue(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Difference from previous due: {adjustAmountDue - adjustingEmiMonth.amountDue >= 0 ? '+' : ''}{adjustAmountDue - adjustingEmiMonth.amountDue}
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                New Due Date (Optional)
+              </label>
+              <input
+                type="date"
+                value={adjustDueDate}
+                onChange={(e) => setAdjustDueDate(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="carryForwardDiff"
+                checked={adjustCarryForward}
+                onChange={(e) => setAdjustCarryForward(e.target.checked)}
+                className="rounded border-slate-300 dark:border-slate-700 text-amber-500 focus:ring-amber-500"
+              />
+              <label htmlFor="carryForwardDiff" className="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer">
+                Automatically carry forward difference to subsequent months
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                Reason / Notes for Adjustment
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Partial waiver, rescheduled, customer requested adjustment"
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setAdjustingEmiMonth(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="default" size="sm" isLoading={isAdjustingEmiDue} disabled={isAdjustingEmiDue}>
+                Save Adjustment
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Edit Recorded EMI Payment Modal */}
+      <Modal
+        isOpen={!!editingEmiPayment}
+        onClose={() => setEditingEmiPayment(null)}
+        title={`Edit Recorded EMI Payment — ${editingEmiPayment?.billingMonth || ''}`}
+        maxWidth="md"
+      >
+        {editingEmiPayment && (
+          <form onSubmit={handleSaveEditEmiPayment} className="space-y-4">
+            {editEmiModalError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs">
+                {editEmiModalError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                  Amount Paid (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={editEmiAmountPaid}
+                  onChange={(e) => setEditEmiAmountPaid(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-emerald-500 text-right"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                  Amount Due (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={editEmiAmountDue}
+                  onChange={(e) => setEditEmiAmountDue(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-amber-500 text-right"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={editEmiPaymentMethod}
+                  onChange={(e) => setEditEmiPaymentMethod(e.target.value as any)}
+                  className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold"
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="CARD">Card</option>
+                  <option value="CASH">Cash</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                  Transaction Reference
+                </label>
+                <input
+                  type="text"
+                  value={editEmiTransactionRef}
+                  onChange={(e) => setEditEmiTransactionRef(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                Notes / Remarks
+              </label>
+              <input
+                type="text"
+                value={editEmiNotes}
+                onChange={(e) => setEditEmiNotes(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingEmiPayment(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="default" size="sm" isLoading={isUpdatingEmiPayment} disabled={isUpdatingEmiPayment}>
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Add Extra EMI Month Modal */}
+      <Modal
+        isOpen={isAddingEmiMonthModalOpen}
+        onClose={() => setIsAddingEmiMonthModalOpen(false)}
+        title="Extend EMI Plan (+1 Installment Month)"
+        maxWidth="md"
+      >
+        <form onSubmit={handleSaveAddEmiMonth} className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+              Installment Amount Due (₹) *
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              required
+              value={newEmiMonthAmount}
+              onChange={(e) => setNewEmiMonthAmount(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-amber-500 text-right"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+              Due Date
+            </label>
+            <input
+              type="date"
+              value={newEmiMonthDueDate}
+              onChange={(e) => setNewEmiMonthDueDate(e.target.value)}
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">
+              Reason for Tenure Extension
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Customer requested tenure elongation / split installment"
+              value={newEmiMonthReason}
+              onChange={(e) => setNewEmiMonthReason(e.target.value)}
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsAddingEmiMonthModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="default" size="sm" isLoading={isSubmittingAddMonth} disabled={isSubmittingAddMonth}>
+              Add Installment Month
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* Authentic Indian GST Tax Invoice Modal */}

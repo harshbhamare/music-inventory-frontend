@@ -4,7 +4,6 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getApiUrl } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
@@ -325,19 +324,16 @@ export default function AdminImportPage() {
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              Historical Data Import
-              <Badge variant="outline" className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 border-amber-500/30">
-                Superadmin
-              </Badge>
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Import previous sales, rentals, products, and stock records into the live database.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            Historical Data Import
+            <Badge variant="outline" className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 border-amber-500/30">
+              Superadmin
+            </Badge>
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            Import previous sales, rentals, products, and stock records into the live database.
+          </p>
         </div>
         {step !== 'upload' && (
           <Button variant="outline" size="sm" onClick={reset} className="gap-1.5 text-xs">

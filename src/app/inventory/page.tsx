@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
+import { ProductExcelImporter } from '@/components/inventory/ProductExcelImporter';
 import {
   Boxes,
   Search,
@@ -25,7 +26,6 @@ import {
   Calculator,
   Info,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 
 const POPULAR_BRANDS = [
   'Stereobliss',
@@ -125,6 +125,7 @@ export default function InventoryPage() {
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSku, setIsFetchingSku] = useState(false);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   // Quick Stock Adjustment Modal State (for audit recount corrections)
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
@@ -348,16 +349,13 @@ export default function InventoryPage() {
     <div className="space-y-6">
       {/* Header & Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Catalogue & Inventory
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Stereobliss Retail — Manage product specifications, bulk inventory counts, and retail pricing.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Catalogue & Inventory
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Stereobliss Retail — Manage product specifications, bulk inventory counts, and retail pricing.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -367,15 +365,28 @@ export default function InventoryPage() {
           </Button>
 
           {canManageCatalogue() && (
-            <Button
-              size="sm"
-              variant="default"
-              onClick={handleOpenAddProduct}
-              className="gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Product</span>
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsExcelModalOpen(true)}
+                className="gap-1.5 text-xs font-semibold border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer shadow-xs"
+                title="Bulk intake products using an Excel spreadsheet"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-amber-500" />
+                <span>Bulk Excel Import</span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleOpenAddProduct}
+                className="gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Product</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1048,6 +1059,21 @@ export default function InventoryPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Bulk Product Catalog Excel Import Modal */}
+      <Modal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        title="Product Catalog — Bulk Excel Import"
+        description="Download the Excel template, fill your items, and import them directly into the catalog."
+        maxWidth="3xl"
+      >
+        <ProductExcelImporter
+          onSuccess={() => {
+            fetchProducts();
+          }}
+        />
       </Modal>
     </div>
   );

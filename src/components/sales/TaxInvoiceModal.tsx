@@ -78,9 +78,11 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
   const pad = (n: number) => String(n).padStart(2, '0');
   const dateFormatted = `${pad(invoiceDate.getDate())}/${pad(invoiceDate.getMonth() + 1)}/${invoiceDate.getFullYear()}`;
 
-  const taxableAmount = sale.taxableAmount || (sale.subtotal - (sale.discountTotal || 0));
-  const cgstAmount = sale.cgstAmount || Math.round(taxableAmount * 0.09 * 100) / 100;
-  const sgstAmount = sale.sgstAmount || Math.round(taxableAmount * 0.09 * 100) / 100;
+  const grossSubtotal = sale.subtotal || (sale.lineItems || []).reduce((acc, li) => acc + (li.unitPrice || 0) * (li.quantity || 1), 0);
+  const discountTotal = sale.discountTotal ?? (sale.lineItems || []).reduce((acc, li) => acc + (li.discount || 0) * (li.quantity || 1), 0);
+  const taxableAmount = sale.taxableAmount ?? Math.max(0, grossSubtotal - discountTotal);
+  const cgstAmount = sale.cgstAmount ?? Math.round(taxableAmount * 0.09 * 100) / 100;
+  const sgstAmount = sale.sgstAmount ?? Math.round(taxableAmount * 0.09 * 100) / 100;
 
   const handleDownloadPdf = async () => {
     setIsDownloadingPdf(true);
@@ -338,19 +340,28 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                     <tbody className="divide-y divide-slate-200">
                       {sale.lineItems?.map((li, index) => {
                         const hsn = li.hsnCode || (li.product as any)?.hsnCode || '92029000';
-                        const itemAmount = li.total || li.quantity * li.unitPrice;
+                        const itemDiscount = (li.discount || 0) * (li.quantity || 1);
+                        const itemAmount = li.total ?? Math.max(0, (li.quantity * li.unitPrice) - itemDiscount);
                         return (
                           <tr key={index} className="align-top">
                             <td className="py-2.5 px-2.5 text-center text-slate-900 border-r border-slate-200">{index + 1}</td>
                             <td className="py-2.5 px-3 border-r border-slate-200">
                               <div className="font-bold text-slate-950">
-                                {li.product?.name}
-                                {li.product?.color && <span className="font-normal text-slate-600"> ({li.product.color})</span>}
+                                {(li.product as any)?.name || (li as any).productName || 'Musical Product'}
+                                {(li.product as any)?.color && <span className="font-normal text-slate-600"> ({(li.product as any).color})</span>}
                               </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5">
-                                HSN/SAC- {hsn}
-                                {li.serializedItemIds && li.serializedItemIds.length > 0 && (
-                                  <span> | SN: {li.serializedItemIds.map((s: any) => s.assetId || s.manufacturerSerial || s).join(', ')}</span>
+                              <div className="text-[10px] text-slate-500 mt-0.5 space-y-0.5">
+                                <div>
+                                  HSN/SAC- {hsn}
+                                  {li.serializedItemIds && li.serializedItemIds.length > 0 && (
+                                    <span> | SN: {li.serializedItemIds.map((s: any) => s.assetId || s.manufacturerSerial || s).join(', ')}</span>
+                                  )}
+                                </div>
+                                {itemDiscount > 0 && (
+                                  <div className="inline-flex items-center gap-1 font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 text-[9.5px]">
+                                    <span>Discount Offered: −₹{formatIndianDecimal(itemDiscount)}</span>
+                                    <span className="text-emerald-500">({formatIndianDecimal(li.discount || 0)}/unit)</span>
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -426,8 +437,23 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
                   <div className="w-72 space-y-1.5 text-xs shrink-0">
                     <div className="flex justify-between text-slate-700">
                       <span>Subtotal</span>
-                      <span className="font-normal text-slate-900">₹{formatIndianDecimal(taxableAmount)}</span>
+                      <span className="font-normal text-slate-900">₹{formatIndianDecimal(discountTotal > 0 ? grossSubtotal : taxableAmount)}</span>
                     </div>
+
+                    {discountTotal > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-bold bg-emerald-50/60 px-1 py-0.5 rounded">
+                        <span>Less: Discount Offered</span>
+                        <span>−₹{formatIndianDecimal(discountTotal)}</span>
+                      </div>
+                    )}
+
+                    {discountTotal > 0 && (
+                      <div className="flex justify-between text-slate-700 pt-0.5 border-t border-slate-200">
+                        <span className="font-medium">Taxable Amount</span>
+                        <span className="font-semibold text-slate-900">₹{formatIndianDecimal(taxableAmount)}</span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between text-slate-700">
                       <span>CGST (9%)</span>
                       <span className="font-normal text-slate-900">₹{formatIndianDecimal(cgstAmount)}</span>

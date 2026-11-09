@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { api, getApiUrl } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { DashboardMetrics } from '@/lib/types';
+import { generateExecutivePdf } from '@/lib/pdfExport';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
-  BarChart3,
+  TrendingUp,
   FileSpreadsheet,
   RefreshCw,
   Mail,
@@ -16,33 +20,30 @@ import {
   AlertTriangle,
   Send,
   Boxes,
-  TrendingUp,
-  FileText,
+  ShoppingCart,
+  Music2,
+  IndianRupee,
   Calendar,
   Layers,
   ArrowUpRight,
-  ShoppingCart,
-  Truck,
-  Check,
+  ArrowDownRight,
   Sparkles,
   X,
-  Music2,
-  IndianRupee,
-  Percent,
   Search,
-  SlidersHorizontal,
   Clock,
-  ArrowDownRight,
   ShieldCheck,
-  CalendarRange,
-  Phone,
-  User,
-  Tag,
-  Coins,
-  Activity,
+  CreditCard,
+  Users,
+  AlertCircle,
+  FileText,
+  DollarSign,
+  Download,
+  Info,
+  ChevronRight,
+  PieChart as PieChartIcon,
+  Percent,
+  Check,
 } from 'lucide-react';
-import { BrandLogo } from '@/components/ui/BrandLogo';
-import { useAuth } from '@/context/AuthContext';
 import {
   BarChart,
   Bar,
@@ -59,283 +60,184 @@ import {
   Cell,
 } from 'recharts';
 
-interface PeriodicSummaryItem {
-  periodKey: string;
-  label: string;
-  startDate: string;
-  endDate: string;
-  salesRevenue: number;
-  salesCount: number;
-  itemsSold: number;
-  cogs: number;
-  grossProfit: number;
-  grossMarginPercent: number;
-  receiptsCount: number;
-  receiptsValue: number;
-  adjustmentsCount: number;
-}
+type ReportTab = 'executive' | 'sales' | 'rentals' | 'valuation' | 'reconciliation' | 'exports';
+type PeriodFilter = 'today' | 'week' | 'month' | 'last_month' | 'financial_year' | 'custom';
 
-interface PeriodicSummaryResult {
-  period: 'week' | 'month';
-  kpis: {
-    totalRevenue: number;
-    totalSalesCount: number;
-    totalUnitsSold: number;
-    averageOrderValue: number;
-    totalCogs: number;
-    totalGrossProfit: number;
-    grossMarginPercent: number;
-    totalInwardPurchases: number;
-    totalReceiptsCount: number;
-    netCashFlow: number;
-  };
-  periods: PeriodicSummaryItem[];
-  topProducts: Array<{
-    name: string;
-    sku: string;
-    quantity: number;
-    revenue: number;
-    profit?: number;
-  }>;
-}
-
-interface RentalProfitabilityItem {
-  id: string;
-  issueReference: string;
-  customerName: string;
-  customerContact?: string;
-  customerEmail?: string;
-  productName: string;
-  sku: string;
-  brand?: string;
-  category: string;
-  serializedItemId?: string;
-  assetId?: string;
-  serialNumber?: string;
-  locationName: string;
-  issueDate: string;
-  expectedReturnDate: string;
-  actualReturnDate?: string;
-  status: 'ACTIVE' | 'OVERDUE' | 'RETURNED';
-  isRental: boolean;
-  lockInPeriodMonths: number;
-  monthlyRent: number;
-  securityDeposit: number;
-  totalRentPaid: number;
-  totalRentDue: number;
-  totalScheduledRent: number;
-  purchaseCost: number;
-  maintenanceCost: number;
-  netProfit: number;
-  roiPercent: number;
-  isCapexRecovered: boolean;
-  recoveryPercent: number;
-  accessories: string[];
-  paymentsCount: number;
-  paidMonthsCount: number;
-  overdueMonthsCount: number;
-  nextPaymentDue?: {
-    billingMonth: string;
-    dueDate: string;
-    amountDue: number;
-  };
-  monthlyPayments: Array<{
-    monthIndex: number;
-    billingMonth: string;
-    dueDate: string;
-    amountDue: number;
-    amountPaid: number;
-    paidAt?: string;
-    paymentMethod?: string;
-    transactionRef?: string;
-    status: 'PAID' | 'DUE' | 'OVERDUE';
-    notes?: string;
-  }>;
-}
-
-interface RentalProfitabilityResult {
-  kpis: {
-    totalRentals: number;
-    activeRentals: number;
-    overdueRentals: number;
-    returnedRentals: number;
-    totalRentalRevenueCollected: number;
-    totalRentalDue: number;
-    totalScheduledRent: number;
-    collectionRatePercent: number;
-    totalSecurityDepositsHeld: number;
-    activeMRR: number;
-    projectedARR: number;
-    totalAssetInvestmentCost: number;
-    totalMaintenanceExpense: number;
-    netRentalProfit: number;
-    portfolioRoiPercent: number;
-    capitalRecoveredCount: number;
-  };
-  monthlyCashflow: Array<{
-    monthKey: string;
-    label: string;
-    collected: number;
-    due: number;
-    maintenance: number;
-    netProfit: number;
-  }>;
-  categoryPerformance: Array<{
-    category: string;
-    rentalsCount: number;
-    totalCollected: number;
-    totalCapex: number;
-    maintenanceCost: number;
-    netProfit: number;
-    roiPercent: number;
-  }>;
-  items: RentalProfitabilityItem[];
-}
-
-const CATEGORY_COLORS = ['#f59e0b', '#6366f1', '#10b981', '#ec4899', '#06b6d4', '#8b5cf6'];
+const PALETTE = ['#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4'];
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<'summary' | 'rentals' | 'valuation' | 'reconciliation' | 'emailReports'>('summary');
-  const [summaryPeriod, setSummaryPeriod] = useState<'week' | 'month'>('week');
-  const [summaryMetricView, setSummaryMetricView] = useState<'revenue_flow' | 'profit_margin' | 'orders_velocity'>('revenue_flow');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<ReportTab>('executive');
 
-  // Periodic summary state
-  const [periodicData, setPeriodicData] = useState<PeriodicSummaryResult | null>(null);
+  // Date Filters
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('month');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
-  // Rental profitability state
-  const [rentalData, setRentalData] = useState<RentalProfitabilityResult | null>(null);
+  // Tab Data States
+  const [dashboardData, setDashboardData] = useState<DashboardMetrics | null>(null);
+  const [periodicData, setPeriodicData] = useState<any>(null);
+  const [periodicPeriod, setPeriodicPeriod] = useState<'week' | 'month'>('month');
+  const [rentalData, setRentalData] = useState<any>(null);
   const [rentalStatusFilter, setRentalStatusFilter] = useState<'ALL' | 'ACTIVE' | 'OVERDUE' | 'RETURNED'>('ALL');
   const [rentalSearch, setRentalSearch] = useState('');
-
-  // Valuation report state
-  const [valuationData, setValuationData] = useState<{
-    items: any[];
-    totals: {
-      totalOnHand: number;
-      totalValuationCost: number;
-      totalPotentialRetail: number;
-      totalPotentialMargin: number;
-    };
-  } | null>(null);
+  const [valuationData, setValuationData] = useState<any>(null);
   const [valuationSearch, setValuationSearch] = useState('');
-
-  // Reconciliation report state
-  const [reconciliationData, setReconciliationData] = useState<{
-    timestamp: string;
-    totalProductsChecked: number;
-    mismatchesFound: number;
-    results: any[];
-  } | null>(null);
+  const [reconciliationData, setReconciliationData] = useState<any>(null);
   const [reconciliationFilter, setReconciliationFilter] = useState<'ALL' | 'MISMATCHES'>('ALL');
+  const [salesList, setSalesList] = useState<any[]>([]);
+  const [salesSearch, setSalesSearch] = useState('');
 
-  // Email report configs, recipient input & logs
-  const { user } = useAuth();
-  const [reportConfigs, setReportConfigs] = useState<any[]>([]);
+  // Email state
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatusMessage, setEmailStatusMessage] = useState('');
-  const [emailSuccess, setEmailSuccess] = useState<boolean>(true);
-  const [selectedReportType, setSelectedReportType] = useState<string>('RENTAL_PROFITABILITY_REPORT');
-  const [recipientEmail, setRecipientEmail] = useState<string>('');
-  const [reportNotes, setReportNotes] = useState<string>('');
+  const [emailSuccess, setEmailSuccess] = useState(true);
+  const [selectedReportType, setSelectedReportType] = useState('RENTAL_PROFITABILITY_REPORT');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [reportNotes, setReportNotes] = useState('');
 
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Initialize email recipient
   useEffect(() => {
     if (!recipientEmail && user?.email) {
       setRecipientEmail(user.email);
     }
   }, [user]);
 
-  const [isLoading, setIsLoading] = useState(true);
+  // Compute start/end dates
+  const { startDate, endDate, periodLabel } = useMemo(() => {
+    const now = new Date();
+    let s: Date | undefined;
+    let e: Date | undefined;
+    let label = 'This Month';
 
-  useEffect(() => {
-    fetchReportData();
-  }, [activeTab, summaryPeriod]);
+    if (periodFilter === 'today') {
+      s = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      e = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      label = 'Today';
+    } else if (periodFilter === 'week') {
+      const day = now.getDay();
+      const diffToMonday = (day === 0 ? -6 : 1) - day;
+      s = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0);
+      e = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      label = 'This Week';
+    } else if (periodFilter === 'month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      e = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      label = 'This Month';
+    } else if (periodFilter === 'last_month') {
+      s = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
+      e = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      label = 'Last Month';
+    } else if (periodFilter === 'financial_year') {
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+      s = new Date(fyStartYear, 3, 1, 0, 0, 0);
+      e = new Date(fyStartYear + 1, 2, 31, 23, 59, 59, 999);
+      label = `FY ${fyStartYear}-${fyStartYear + 1}`;
+    } else if (periodFilter === 'custom' && customStart && customEnd) {
+      s = new Date(customStart);
+      e = new Date(customEnd);
+      label = `${customStart} to ${customEnd}`;
+    }
 
-  const fetchReportData = async () => {
+    return { startDate: s, endDate: e, periodLabel: label };
+  }, [periodFilter, customStart, customEnd]);
+
+  // Fetch report data
+  const loadData = async () => {
     setIsLoading(true);
     try {
-      if (activeTab === 'summary') {
-        const res = await api.get<any>(`/reports/periodic-summary?period=${summaryPeriod}`);
-        const data = (res as any)?.data !== undefined ? (res as any).data : res;
-        setPeriodicData(data);
+      const queryParams = new URLSearchParams();
+      if (startDate) queryParams.set('startDate', startDate.toISOString());
+      if (endDate) queryParams.set('endDate', endDate.toISOString());
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+      if (activeTab === 'executive') {
+        const res = await api.get<any>(`/reports/dashboard${queryStr}`);
+        setDashboardData(res?.data ?? res);
+      } else if (activeTab === 'sales') {
+        const [dashRes, periodicRes, salesRes] = await Promise.all([
+          api.get<any>(`/reports/dashboard${queryStr}`),
+          api.get<any>(`/reports/periodic-summary?period=${periodicPeriod}`),
+          api.get<any>('/sales?limit=100'),
+        ]);
+        setDashboardData(dashRes?.data ?? dashRes);
+        setPeriodicData(periodicRes?.data ?? periodicRes);
+        const salesData = salesRes?.data ?? salesRes;
+        setSalesList(Array.isArray(salesData) ? salesData : salesData?.sales ?? []);
       } else if (activeTab === 'rentals') {
         const res = await api.get<any>('/reports/rentals-profitability');
-        const data = (res as any)?.data !== undefined ? (res as any).data : res;
-        setRentalData(data);
+        setRentalData(res?.data ?? res);
       } else if (activeTab === 'valuation') {
-        const res = await api.get<any>('/reports/valuation');
-        const data = (res as any)?.data !== undefined ? (res as any).data : res;
-        setValuationData(data);
+        const [valRes, dashRes] = await Promise.all([
+          api.get<any>('/reports/valuation'),
+          api.get<any>(`/reports/dashboard${queryStr}`),
+        ]);
+        setValuationData(valRes?.data ?? valRes);
+        setDashboardData(dashRes?.data ?? dashRes);
       } else if (activeTab === 'reconciliation') {
         const res = await api.get<any>('/reports/reconciliation');
-        const data = (res as any)?.data !== undefined ? (res as any).data : res;
-        setReconciliationData(data);
-      } else if (activeTab === 'emailReports') {
-        const [confRes, logsRes] = await Promise.all([
-          api.get<any>('/meta/report-configs'),
+        setReconciliationData(res?.data ?? res);
+      } else if (activeTab === 'exports') {
+        const [dashRes, logsRes] = await Promise.all([
+          api.get<any>(`/reports/dashboard${queryStr}`),
           api.get<any>('/reports/email-logs'),
         ]);
-        const confData = (confRes as any)?.data !== undefined ? (confRes as any).data : confRes;
-        const logsData = (logsRes as any)?.data !== undefined ? (logsRes as any).data : logsRes;
-        setReportConfigs(confData?.configs || confData || []);
-        setEmailLogs(logsData?.logs || logsData || []);
-        if (!recipientEmail && user?.email) {
-          setRecipientEmail(user.email);
-        }
+        setDashboardData(dashRes?.data ?? dashRes);
+        const logsData = logsRes?.data ?? logsRes;
+        setEmailLogs(logsData?.logs ?? logsData ?? []);
       }
     } catch (err) {
-      console.error('Failed to load report data:', err);
+      console.error('Failed to fetch reporting data:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [activeTab, periodFilter, startDate, endDate, periodicPeriod]);
+
+  // Handlers
+  const handlePdfExport = () => {
+    if (!dashboardData) return;
+    generateExecutivePdf({
+      periodLabel,
+      userName: user?.name || user?.email || 'CEO',
+      userRole: user?.role || 'Superadmin',
+      data: dashboardData,
+      category: activeTab.toUpperCase(),
+    });
   };
 
   const handleSendEmailReport = async () => {
     const target = (recipientEmail || user?.email || '').trim();
     if (!target || !target.includes('@')) {
       setEmailSuccess(false);
-      setEmailStatusMessage('Please provide a valid recipient email address.');
+      setEmailStatusMessage('Please enter a valid recipient email address.');
       return;
     }
 
     setIsSendingEmail(true);
     setEmailStatusMessage('');
     try {
-      const res = await api.post<{ success: boolean; message: string; data?: any }>('/reports/send-email-report', {
+      const res = await api.post<{ success: boolean; message: string }>('/reports/send-email-report', {
         reportType: selectedReportType,
         recipientEmail: target,
         notes: reportNotes.trim() || undefined,
       });
-
       setEmailSuccess(true);
-      setEmailStatusMessage(res.message || `Email report successfully dispatched to ${target}!`);
+      setEmailStatusMessage(res.message || `Executive report dispatched successfully to ${target}!`);
       const logsRes = await api.get<any>('/reports/email-logs');
-      const logsData = (logsRes as any)?.data !== undefined ? (logsRes as any).data : logsRes;
-      setEmailLogs(logsData?.logs || logsData || []);
+      const logsData = logsRes?.data ?? logsRes;
+      setEmailLogs(logsData?.logs ?? logsData ?? []);
     } catch (err: any) {
       setEmailSuccess(false);
-      setEmailStatusMessage(`Failed: ${err.message || 'Failed to dispatch email report via Gmail SMTP.'}`);
-    } finally {
-      setIsSendingEmail(false);
-    }
-  };
-
-  const handleSendQuickTest = async () => {
-    const target = (recipientEmail || user?.email || 'hustlerxeroindia@gmail.com').trim();
-    setIsSendingEmail(true);
-    setEmailStatusMessage('');
-    try {
-      const res = await api.post<{ success: boolean; message: string }>('/reports/email-test', {
-        recipientEmail: target,
-      });
-      setEmailSuccess(true);
-      setEmailStatusMessage(res.message || `Test email successfully sent to ${target}`);
-      const logsRes = await api.get<any>('/reports/email-logs');
-      const logsData = (logsRes as any)?.data !== undefined ? (logsRes as any).data : logsRes;
-      setEmailLogs(logsData?.logs || logsData || []);
-    } catch (err: any) {
-      setEmailSuccess(false);
-      setEmailStatusMessage(`Failed: ${err.message || 'Failed to send test email.'}`);
+      setEmailStatusMessage(`Dispatch Error: ${err.message || 'Failed to send email report via Gmail SMTP.'}`);
     } finally {
       setIsSendingEmail(false);
     }
@@ -344,7 +246,7 @@ export default function ReportsPage() {
   // Filtered Rental items
   const filteredRentals = useMemo(() => {
     if (!rentalData?.items) return [];
-    return rentalData.items.filter((item) => {
+    return rentalData.items.filter((item: any) => {
       const matchesStatus = rentalStatusFilter === 'ALL' || item.status === rentalStatusFilter;
       const q = rentalSearch.toLowerCase().trim();
       const matchesSearch =
@@ -354,7 +256,6 @@ export default function ReportsPage() {
         (item.assetId && item.assetId.toLowerCase().includes(q)) ||
         (item.serialNumber && item.serialNumber.toLowerCase().includes(q)) ||
         item.customerName.toLowerCase().includes(q) ||
-        (item.customerContact && item.customerContact.toLowerCase().includes(q)) ||
         item.category.toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
@@ -363,7 +264,7 @@ export default function ReportsPage() {
   // Filtered Valuation items
   const filteredValuation = useMemo(() => {
     if (!valuationData?.items) return [];
-    return valuationData.items.filter((item) => {
+    return valuationData.items.filter((item: any) => {
       const q = valuationSearch.toLowerCase().trim();
       return (
         !q ||
@@ -393,909 +294,684 @@ export default function ReportsPage() {
   const filteredReconciliation = useMemo(() => {
     if (!reconciliationData?.results) return [];
     if (reconciliationFilter === 'MISMATCHES') {
-      return reconciliationData.results.filter((r) => r.status !== 'MATCH' || r.variance !== 0);
+      return reconciliationData.results.filter((r: any) => r.status !== 'MATCH' || r.variance !== 0);
     }
     return reconciliationData.results;
   }, [reconciliationData, reconciliationFilter]);
 
+  // Sales by employee
+  const salesByEmployee = useMemo(() => {
+    if (!salesList || salesList.length === 0) return [];
+    const map = new Map<string, { name: string; salesCount: number; revenue: number }>();
+    for (const s of salesList) {
+      if (s.saleStatus === 'CANCELLED' || s.saleStatus === 'RETURNED') continue;
+      const empName = s.soldBy?.name || 'Store Staff';
+      const existing = map.get(empName) || { name: empName, salesCount: 0, revenue: 0 };
+      existing.salesCount += 1;
+      existing.revenue += s.grandTotal || 0;
+      map.set(empName, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+  }, [salesList]);
+
+  // Filtered sales ledger
+  const filteredSalesLedger = useMemo(() => {
+    if (!salesList) return [];
+    const q = salesSearch.toLowerCase().trim();
+    return salesList.filter((s: any) => {
+      if (!q) return true;
+      return (
+        s.invoiceNumber?.toLowerCase().includes(q) ||
+        s.customerName?.toLowerCase().includes(q) ||
+        s.soldBy?.name?.toLowerCase().includes(q) ||
+        s.paymentMethod?.toLowerCase().includes(q)
+      );
+    });
+  }, [salesList, salesSearch]);
+
+  const ef = dashboardData?.executiveFinancials;
+  const fh = dashboardData?.financialHealth;
+  const ih = dashboardData?.inventoryHealth;
+  const rp = dashboardData?.rentalPerformance;
+
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <BrandLogo size="md" variant="badge" className="shadow-xs shrink-0" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <span>Reporting & Analytics Center</span>
-              <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400 border-amber-500/30">
-                Superadmin
-              </Badge>
+      {/* Top Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Executive Business Intelligence & Reporting
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Stereobliss Retail — Live operational reports, periodic financial summaries, rental instrument profit tracking, and audit verification.
-            </p>
+            <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/10 font-bold uppercase text-[10px]">
+              CEO Suite
+            </Badge>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Authoritative, reconciled financial statements, rental capital recovery, inventory valuation, and invariant ledger audit.
+          </p>
         </div>
 
+        {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {activeTab === 'summary' && (
+          {dashboardData && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(getApiUrl(`/reports/export/periodic?period=${summaryPeriod}`), '_blank')}
-              className="gap-1.5 text-xs font-semibold"
+              onClick={handlePdfExport}
+              className="gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
             >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-              <span>Export {summaryPeriod === 'week' ? 'Weekly' : 'Monthly'} CSV</span>
-            </Button>
-          )}
-
-          {activeTab === 'rentals' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(getApiUrl('/reports/export/rentals'), '_blank')}
-              className="gap-1.5 text-xs font-semibold text-purple-600 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-purple-500" />
-              <span>Export Rental Profit CSV</span>
-            </Button>
-          )}
-
-          {activeTab === 'valuation' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(getApiUrl('/reports/export/products'), '_blank')}
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-              <span>Export Valuation CSV</span>
+              <FileText className="h-4 w-4 text-rose-500" />
+              <span>Executive PDF</span>
             </Button>
           )}
 
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(getApiUrl(`/reports/export/executive?startDate=${startDate?.toISOString() || ''}&endDate=${endDate?.toISOString() || ''}`), '_blank')}
+            className="gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+            <span>Executive CSV</span>
+          </Button>
+
+          <Button
             variant="default"
             size="sm"
-            onClick={() => setActiveTab('emailReports')}
+            onClick={() => setActiveTab('exports')}
             className="gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
           >
             <Mail className="h-4 w-4" />
-            <span>Send Email Report</span>
+            <span>Dispatch Report</span>
           </Button>
 
-          <Button variant="outline" size="sm" onClick={fetchReportData} title="Refresh Live Data">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            title="Refresh Data"
+            disabled={isLoading}
+          >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab('summary')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'summary'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <TrendingUp className="h-4 w-4" />
-          <span>Weekly & Monthly Performance</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('rentals')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'rentals'
-              ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Music2 className="h-4 w-4" />
-          <span>Rental Profit & Asset Yield</span>
-          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold border border-purple-500/20">
-            PROFIT
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('valuation')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'valuation'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <BarChart3 className="h-4 w-4" />
-          <span>Inventory Valuation</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('reconciliation')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'reconciliation'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <ShieldAlert className="h-4 w-4" />
-          <span>Ledger Audit Reconciliation</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('emailReports')}
-          className={`flex items-center gap-2 pb-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'emailReports'
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Mail className="h-4 w-4" />
-          <span>Send Email Reports</span>
-        </button>
+      {/* Primary Category Tabs Navigation */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar gap-1">
+        {[
+          { id: 'executive', label: 'Executive Summary', icon: TrendingUp },
+          { id: 'sales', label: 'Sales & Collections', icon: ShoppingCart },
+          { id: 'rentals', label: 'Rental Profitability & Asset Recovery', icon: Music2 },
+          { id: 'valuation', label: 'Inventory Valuation & Stock Health', icon: Boxes },
+          { id: 'reconciliation', label: 'Financial Reconciliation & Audit', icon: ShieldCheck },
+          { id: 'exports', label: 'Export & Dispatch Center', icon: Download },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as ReportTab)}
+              className={`flex items-center gap-2 pb-3 px-4 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-all ${
+                isActive
+                  ? 'border-amber-500 text-amber-500 dark:text-amber-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+              {tab.id === 'reconciliation' && reconciliationData && (
+                <span
+                  className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    reconciliationData.mismatchesFound === 0
+                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                      : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                  }`}
+                >
+                  {reconciliationData.mismatchesFound === 0 ? '100%' : `${reconciliationData.mismatchesFound} DISCREPANCY`}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ========================================================= */}
-      {/* TAB 1: WEEKLY & MONTHLY PERFORMANCE SUMMARY */}
-      {/* ========================================================= */}
-      {activeTab === 'summary' && (
+      {/* Global Period Selector Bar (shown for relevant tabs) */}
+      {(activeTab === 'executive' || activeTab === 'sales' || activeTab === 'valuation' || activeTab === 'exports') && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <Calendar className="h-4 w-4 text-amber-500" />
+            <span>Reporting Horizon:</span>
+            <span className="text-amber-600 dark:text-amber-400 font-bold">{periodLabel}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'week', label: 'This Week' },
+              { id: 'month', label: 'This Month' },
+              { id: 'last_month', label: 'Last Month' },
+              { id: 'financial_year', label: 'This FY' },
+              { id: 'custom', label: 'Custom' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriodFilter(p.id as PeriodFilter)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  periodFilter === p.id
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+
+            {periodFilter === 'custom' && (
+              <div className="flex items-center gap-2 ml-2">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
+                <span className="text-xs text-slate-400">to</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 1: EXECUTIVE SUMMARY */}
+      {/* ========================================================================= */}
+      {activeTab === 'executive' && (
         <div className="space-y-6">
-          {/* Controls Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-amber-500" />
-                <span>Aggregated Performance Overview</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Switch between weekly cadence and monthly financial summaries to track store performance, profit margins, and stock intake velocity.
+          {/* Executive Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Sales Revenue */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Recognized Sales Revenue</span>
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+                  <ShoppingCart className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                {ef ? formatCurrency(ef.salesRevenue.value) : '₹0'}
               </p>
+              <div className="flex items-center justify-between mt-3 text-xs">
+                <span className="text-slate-500">Prior: {ef ? formatCurrency(ef.salesRevenue.previousValue) : '₹0'}</span>
+                {ef && (
+                  <span className={`inline-flex items-center gap-1 font-bold ${ef.salesRevenue.deltaPercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {ef.salesRevenue.deltaPercent >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                    <span>{Math.abs(ef.salesRevenue.deltaPercent)}%</span>
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950 shrink-0">
-              <button
-                type="button"
-                onClick={() => setSummaryPeriod('week')}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  summaryPeriod === 'week'
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                }`}
-              >
-                Weekly View (8 Weeks)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSummaryPeriod('month')}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  summaryPeriod === 'month'
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                }`}
-              >
-                Monthly View (12 Months)
-              </button>
+            {/* Cash Collected */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Actual Cash Collected</span>
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                  <IndianRupee className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                {ef ? formatCurrency(ef.cashCollected.value) : '₹0'}
+              </p>
+              <div className="flex items-center justify-between mt-3 text-xs">
+                <span className="text-slate-500">Direct + EMI + Rent</span>
+                {ef && (
+                  <span className={`inline-flex items-center gap-1 font-bold ${ef.cashCollected.deltaPercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {ef.cashCollected.deltaPercent >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                    <span>{Math.abs(ef.cashCollected.deltaPercent)}%</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Gross Profit */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross Profit (COGS Deducted)</span>
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {ef ? formatCurrency(ef.grossProfit.value) : '₹0'}
+                </p>
+                <span className="text-xs font-bold text-amber-500">
+                  ({ef?.grossProfit.marginPercent || 0}%)
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3 text-xs">
+                <span className="text-slate-500">Prior: {ef ? formatCurrency(ef.grossProfit.previousValue) : '₹0'}</span>
+                {ef && (
+                  <span className={`inline-flex items-center gap-1 font-bold ${ef.grossProfit.deltaPercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {ef.grossProfit.deltaPercent >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                    <span>{Math.abs(ef.grossProfit.deltaPercent)}%</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Outstanding Receivables */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Outstanding Receivables</span>
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+                  <CreditCard className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-purple-600 dark:text-purple-400">
+                {ef ? formatCurrency(ef.outstandingReceivables.value) : '₹0'}
+              </p>
+              <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
+                <span>EMI Dues: {fh ? formatCurrency(fh.outstandingEmiReceivables) : '₹0'}</span>
+                <span>Rent Dues: {fh ? formatCurrency(fh.outstandingRentalReceivables) : '₹0'}</span>
+              </div>
+            </div>
+
+            {/* Inventory Valuation */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Inventory Value (Purchase Cost)</span>
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+                  <Boxes className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                {ef ? formatCurrency(ef.inventoryValuationAtCost.value) : '₹0'}
+              </p>
+              <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
+                <span>{ih ? `${ih.totalUnitsOwned} Total Units Owned` : '0 Units'}</span>
+                <span>{ih ? `${ih.totalAvailableForSale} Avail for Sale` : ''}</span>
+              </div>
+            </div>
+
+            {/* Net Rental Profit */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Net Rental Operating Profit</span>
+                <div className="p-2 rounded-xl bg-pink-500/10 text-pink-500">
+                  <Music2 className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-pink-600 dark:text-pink-400">
+                {ef ? formatCurrency(ef.netRentalProfit.value) : '₹0'}
+              </p>
+              <div className="flex items-center justify-between mt-3 text-xs">
+                <span className="text-slate-500">Fleet Payback: {rp ? `${rp.fleetCapexRecoveryPercent}%` : '0%'}</span>
+                <Badge variant="outline" className="border-pink-500/30 text-pink-500 text-[10px]">
+                  Rent - Service
+                </Badge>
+              </div>
             </div>
           </div>
 
-          {/* Metric KPI Cards with Profit & Margins */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-amber-500 shadow-sm bg-linear-to-br from-amber-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <ShoppingCart className="h-3.5 w-3.5 text-amber-500" />
-                  <span>Total Sales Revenue</span>
-                </span>
+          {/* Financial Health & Cash Movement Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <IndianRupee className="h-4 w-4 text-emerald-500" />
+                  <span>Cash Movement & Liquidity (Selected Period)</span>
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {formatCurrency(periodicData?.kpis.totalRevenue ?? 0)}
+              <CardContent className="p-5 space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Cash Inflows</span>
+                    <p className="text-lg font-black text-emerald-500 mt-1">
+                      {fh ? formatCurrency(fh.cashInflows) : '₹0'}
+                    </p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Cash Outflows</span>
+                    <p className="text-lg font-black text-rose-500 mt-1">
+                      {fh ? formatCurrency(fh.cashOutflows) : '₹0'}
+                    </p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Net Movement</span>
+                    <p className={`text-lg font-black mt-1 ${fh && fh.netCashMovement >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {fh ? formatCurrency(fh.netCashMovement) : '₹0'}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-500 mt-1 flex items-center justify-between">
-                  <span>Across {periodicData?.kpis.totalSalesCount ?? 0} customer orders</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                    Avg {periodicData?.kpis.averageOrderValue ? formatCurrency(periodicData.kpis.averageOrderValue) : '₹0'}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="border-l-4 border-l-emerald-500 shadow-sm bg-linear-to-br from-emerald-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Gross Estimated Profit</span>
-                  </span>
-                  <Badge variant="success" className="text-[10px] font-bold">
-                    {periodicData?.kpis.grossMarginPercent ?? 0}% Margin
-                  </Badge>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(periodicData?.kpis.totalGrossProfit ?? 0)}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  COGS Cost: {formatCurrency(periodicData?.kpis.totalCogs ?? 0)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-indigo-500 shadow-sm bg-linear-to-br from-indigo-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5 text-indigo-500" />
-                  <span>Stock Purchases Inflow</span>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {formatCurrency(periodicData?.kpis.totalInwardPurchases ?? 0)}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  From {periodicData?.kpis.totalReceiptsCount ?? 0} supplier dock intake receipts
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-blue-500 shadow-sm bg-linear-to-br from-blue-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <Boxes className="h-3.5 w-3.5 text-blue-500" />
-                  <span>Total Units Sold</span>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {periodicData?.kpis.totalUnitsSold ?? 0} units
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Net Flow: {formatCurrency((periodicData?.kpis.totalRevenue ?? 0) - (periodicData?.kpis.totalInwardPurchases ?? 0))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Interactive Multi-Metric Chart Card */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-amber-500" />
-                    <span>
-                      {summaryPeriod === 'week' ? 'Weekly Operational Timeline Visuals' : 'Monthly Operational Timeline Visuals'}
-                    </span>
-                  </CardTitle>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Compare sales revenue generated vs inventory intake expenditures and estimated profit margins.
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="text-slate-700 dark:text-slate-300">Customer Security Deposits Held:</span>
+                    <span className="text-amber-500 font-bold">{fh ? formatCurrency(fh.customerDepositsHeld) : '₹0'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Held in trust as Current Liability. Security deposits are strictly excluded from revenue and profit.
                   </p>
+                  <div className="flex items-center justify-between font-semibold pt-1 border-t border-amber-500/10">
+                    <span className="text-slate-700 dark:text-slate-300">Customer Refunds Payable:</span>
+                    <span className="text-rose-500 font-bold">{fh ? formatCurrency(fh.refundsPayable) : '₹0'}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4-Part Inventory & Asset Breakdown */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Boxes className="h-4 w-4 text-indigo-500" />
+                  <span>Inventory & Asset Health (Stock Reconciliation)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 text-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Total Owned</span>
+                    <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{ih?.totalUnitsOwned ?? 0}</p>
+                    <span className="text-[10px] text-slate-400">Company Fleet</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Available</span>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{ih?.totalAvailableForSale ?? 0}</p>
+                    <span className="text-[10px] text-emerald-600/70">Retail Sale</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+                    <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">On Rent</span>
+                    <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">{ih?.totalUnitsInRental ?? 0}</p>
+                    <span className="text-[10px] text-purple-600/70">With Customer</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">Maintenance</span>
+                    <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{ih?.totalUnitsInMaintenance ?? 0}</p>
+                    <span className="text-[10px] text-amber-600/70">Workshop</span>
+                  </div>
                 </div>
 
-                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSummaryMetricView('revenue_flow')}
-                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                      summaryMetricView === 'revenue_flow'
-                        ? 'bg-amber-500 text-slate-950 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Revenue vs Intake
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSummaryMetricView('profit_margin')}
-                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                      summaryMetricView === 'profit_margin'
-                        ? 'bg-amber-500 text-slate-950 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Gross Profit & Margin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSummaryMetricView('orders_velocity')}
-                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                      summaryMetricView === 'orders_velocity'
-                        ? 'bg-amber-500 text-slate-950 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Orders & Units Velocity
-                  </button>
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-slate-500">Potential Retail Valuation:</span>
+                    <p className="font-bold text-slate-900 dark:text-white mt-0.5">
+                      {ih ? formatCurrency(ih.totalPotentialRetailValuation) : '₹0'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-500">Estimated Gross Margin:</span>
+                    <p className="font-bold text-emerald-500 mt-0.5">
+                      {ih ? `${formatCurrency(ih.potentialGrossMargin)} (${ih.potentialMarginPercent}%)` : '0%'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Critical Risk Alerts Register */}
+          <Card className="shadow-sm border-l-4 border-l-rose-500">
+            <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-rose-500" />
+                <span>Executive Risk Register (Needs Immediate Attention)</span>
+              </CardTitle>
+              <Badge variant="outline" className="border-rose-500/30 text-rose-500 text-xs font-bold">
+                {dashboardData?.businessAlerts?.length ?? 0} Alerts Active
+              </Badge>
             </CardHeader>
-            <CardContent>
-              <div className="h-80 w-full pt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  {summaryMetricView === 'revenue_flow' ? (
-                    <BarChart data={periodicData?.periods || []} margin={{ top: 15, right: 15, left: 0, bottom: 25 }}>
-                      <defs>
-                        <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.9} />
-                          <stop offset="100%" stopColor="#d97706" stopOpacity={0.7} />
-                        </linearGradient>
-                        <linearGradient id="receiptsGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} />
-                          <stop offset="100%" stopColor="#4f46e5" stopOpacity={0.7} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="periodKey" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
-                      <Tooltip
-                        formatter={(val: any) => formatCurrency(Number(val) || 0)}
-                        labelFormatter={(label, items) => items?.[0]?.payload?.label || label}
-                        contentStyle={{
-                          borderRadius: '0.75rem',
-                          fontSize: '12px',
-                          background: 'rgba(15, 23, 42, 0.95)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                      <Bar dataKey="salesRevenue" name="Sales Revenue" fill="url(#salesGrad)" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="receiptsValue" name="Stock Inflow (Purchases)" fill="url(#receiptsGrad)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  ) : summaryMetricView === 'profit_margin' ? (
-                    <BarChart data={periodicData?.periods || []} margin={{ top: 15, right: 15, left: 0, bottom: 25 }}>
-                      <defs>
-                        <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.9} />
-                          <stop offset="100%" stopColor="#059669" stopOpacity={0.7} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="periodKey" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
-                      <Tooltip
-                        formatter={(val: any, name: any) =>
-                          name === 'Margin %' ? `${val}%` : formatCurrency(Number(val) || 0)
-                        }
-                        labelFormatter={(label, items) => items?.[0]?.payload?.label || label}
-                        contentStyle={{
-                          borderRadius: '0.75rem',
-                          fontSize: '12px',
-                          background: 'rgba(15, 23, 42, 0.95)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                      <Bar dataKey="grossProfit" name="Estimated Gross Profit" fill="url(#profitGrad)" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="cogs" name="COGS (Product Cost)" fill="#94a3b8" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  ) : (
-                    <BarChart data={periodicData?.periods || []} margin={{ top: 15, right: 15, left: 0, bottom: 25 }}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="periodKey" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        labelFormatter={(label, items) => items?.[0]?.payload?.label || label}
-                        contentStyle={{
-                          borderRadius: '0.75rem',
-                          fontSize: '12px',
-                          background: 'rgba(15, 23, 42, 0.95)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                      <Bar dataKey="salesCount" name="Sales Orders" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="itemsSold" name="Physical Units Sold" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </div>
+            <CardContent className="p-5">
+              {dashboardData?.businessAlerts && dashboardData.businessAlerts.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {dashboardData.businessAlerts.map((alert, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-start justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={alert.severity === 'critical' ? 'danger' : 'warning'}
+                            className="text-[10px] font-extrabold uppercase py-0"
+                          >
+                            {alert.severity}
+                          </Badge>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{alert.title}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{alert.message}</p>
+                        {alert.financialExposure > 0 && (
+                          <p className="text-xs font-black text-rose-500">
+                            Exposure: {formatCurrency(alert.financialExposure)}
+                          </p>
+                        )}
+                      </div>
+                      <Link
+                        href={alert.deepLink}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 text-slate-950 hover:bg-amber-600 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        {alert.actionText || 'Resolve →'}
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-xs text-emerald-500 font-semibold flex items-center justify-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>No operational risks active. All store and rental accounts are fully verified.</span>
+                </div>
+              )}
             </CardContent>
           </Card>
+        </div>
+      )}
 
-          {/* Detailed Period-by-Period Table & Top Products */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-2 shadow-sm">
+      {/* ========================================================================= */}
+      {/* TAB 2: SALES & COLLECTIONS */}
+      {/* ========================================================================= */}
+      {activeTab === 'sales' && (
+        <div className="space-y-6">
+          {/* Sales KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Sales Invoiced</span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {ef ? formatCurrency(ef.salesRevenue.value) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Excludes cancelled & returned orders</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cash Realized from Sales</span>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {ef ? formatCurrency(ef.cashCollected.value) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Direct Sales + EMI receipts</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Outstanding EMI Receivables</span>
+              <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+                {fh ? formatCurrency(fh.outstandingEmiReceivables) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Remaining customer installment dues</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross Profit on Sales</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                  {ef ? formatCurrency(ef.grossProfit.value) : '₹0'}
+                </p>
+                <span className="text-xs font-bold text-amber-500">({ef?.grossProfit.marginPercent || 0}%)</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Revenue minus line-item COGS</p>
+            </div>
+          </div>
+
+          {/* Sales Performance by Employee & Top Products */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="shadow-sm">
               <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>Detailed {summaryPeriod === 'week' ? 'Weekly' : 'Monthly'} Breakdown</span>
-                  <Badge variant="outline" className="text-xs">
-                    {periodicData?.periods.length ?? 0} periods tracked
-                  </Badge>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4 text-amber-500" />
+                  <span>Sales Volume by Staff Member</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="responsive-table-wrapper">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                        <th className="py-3 px-4">Period Range</th>
-                        <th className="py-3 px-4 text-center">Orders</th>
-                        <th className="py-3 px-4 text-right">Revenue (₹)</th>
-                        <th className="py-3 px-4 text-right">Gross Profit (₹)</th>
-                        <th className="py-3 px-4 text-center">Margin %</th>
-                        <th className="py-3 px-4 text-center">Units</th>
-                        <th className="py-3 px-4 text-right">Inward Stock (₹)</th>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase">
+                        <th className="py-2.5 px-4">Staff Member</th>
+                        <th className="py-2.5 px-4 text-center">Orders</th>
+                        <th className="py-2.5 px-4 text-right">Total Revenue</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                      {(periodicData?.periods || []).map((p, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 dark:text-white">{p.label}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {p.startDate.slice(0, 10)} to {p.endDate.slice(0, 10)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                            {p.salesCount}
-                          </td>
-                          <td className="py-3 px-4 text-right font-black text-amber-600 dark:text-amber-400">
-                            {formatCurrency(p.salesRevenue)}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                            {formatCurrency(p.grossProfit)}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              p.grossMarginPercent > 20
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : p.grossMarginPercent > 0
-                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                            }`}>
-                              {p.grossMarginPercent}%
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">
-                            {p.itemsSold}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                            {formatCurrency(p.receiptsValue)}
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                      {salesByEmployee.map((emp, i) => (
+                        <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                          <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-white">{emp.name}</td>
+                          <td className="py-2.5 px-4 text-center">{emp.salesCount}</td>
+                          <td className="py-2.5 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(emp.revenue)}
                           </td>
                         </tr>
                       ))}
+                      {salesByEmployee.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-slate-400">No recorded sales transactions.</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Top Selling Products */}
             <Card className="shadow-sm">
               <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>Top Selling Products</span>
-                  <span className="text-xs text-slate-400">By Revenue</span>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Boxes className="h-4 w-4 text-blue-500" />
+                  <span>Top-Selling Products (Velocity & Margin)</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                {(!periodicData?.topProducts || periodicData.topProducts.length === 0) ? (
-                  <div className="py-12 text-center text-xs text-slate-400">
-                    No sales recorded in this period timeframe.
-                  </div>
-                ) : (
-                  periodicData.topProducts.map((tp, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between"
-                    >
-                      <div className="space-y-0.5 max-w-[65%]">
-                        <div className="font-bold text-xs text-slate-900 dark:text-white line-clamp-1">
-                          {idx + 1}. {tp.name}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">SKU: {tp.sku}</div>
-                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                          {tp.quantity} unit(s) sold
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-black text-amber-500">
-                          {formatCurrency(tp.revenue)}
-                        </div>
-                        {tp.profit !== undefined && (
-                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                            +{formatCurrency(tp.profit)} est. profit
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 2: RENTAL PROFITABILITY & ASSET FLEET YIELD */}
-      {/* ========================================================= */}
-      {activeTab === 'rentals' && (
-        <div className="space-y-6">
-          {/* Header Description & Search Filters */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Music2 className="h-4 w-4 text-purple-500" />
-                <span>Rental Fleet Profitability & Capex Recovery Engine</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Track revenue collected per rented instrument against its original purchase cost, maintenance expenses, and gross profit ROI.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <div className="relative">
-                <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Filter instrument, renter, serial..."
-                  value={rentalSearch}
-                  onChange={(e) => setRentalSearch(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/30"
-                />
-              </div>
-
-              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950 text-xs">
-                {(['ALL', 'ACTIVE', 'OVERDUE', 'RETURNED'] as const).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => setRentalStatusFilter(st)}
-                    className={`px-3 py-1 font-semibold rounded-lg transition-all ${
-                      rentalStatusFilter === st
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                    }`}
-                  >
-                    {st === 'ALL' ? 'All Fleet' : st.charAt(0) + st.slice(1).toLowerCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Rental Fleet Hero KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-purple-500 shadow-sm bg-linear-to-br from-purple-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <IndianRupee className="h-3.5 w-3.5 text-purple-500" />
-                    <span>Total Rent Collected</span>
-                  </span>
-                  <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/30">
-                    {rentalData?.kpis.collectionRatePercent ?? 100}% Paid
-                  </Badge>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-purple-600 dark:text-purple-400">
-                  {formatCurrency(rentalData?.kpis.totalRentalRevenueCollected ?? 0)}
-                </div>
-                <div className="text-xs text-slate-500 mt-1 flex items-center justify-between">
-                  <span>Balance Due: <strong className="text-amber-500">{formatCurrency(rentalData?.kpis.totalRentalDue ?? 0)}</strong></span>
-                  <span>{rentalData?.kpis.totalRentals ?? 0} agreements</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-500 shadow-sm bg-linear-to-br from-emerald-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Coins className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Net Rental Profit</span>
-                  </span>
-                  <Badge variant="success" className="text-[10px]">
-                    Net Margin
-                  </Badge>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(rentalData?.kpis.netRentalProfit ?? 0)}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  After {formatCurrency(rentalData?.kpis.totalMaintenanceExpense ?? 0)} maintenance repairs
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500 shadow-sm bg-linear-to-br from-amber-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Percent className="h-3.5 w-3.5 text-amber-500" />
-                    <span>Portfolio Capex ROI</span>
-                  </span>
-                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30">
-                    {rentalData?.kpis.capitalRecoveredCount ?? 0} Paid Off
-                  </Badge>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {rentalData?.kpis.portfolioRoiPercent ?? 0}%
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Of {formatCurrency(rentalData?.kpis.totalAssetInvestmentCost ?? 0)} instrument capex
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-blue-500 shadow-sm bg-linear-to-br from-blue-500/5 to-transparent">
-              <CardHeader className="pb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Activity className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Monthly Recurring (MRR)</span>
-                  </span>
-                  <Badge variant="default" className="text-[9px] bg-blue-600">
-                    Active
-                  </Badge>
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                  {formatCurrency(rentalData?.kpis.activeMRR ?? 0)}/mo
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Projected ARR: <strong>{formatCurrency(rentalData?.kpis.projectedARR ?? 0)}</strong> &bull; {rentalData?.kpis.activeRentals ?? 0} active
+              <CardContent className="p-0">
+                <div className="responsive-table-wrapper">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase">
+                        <th className="py-2.5 px-4">Product</th>
+                        <th className="py-2.5 px-4 text-center">Qty Sold</th>
+                        <th className="py-2.5 px-4 text-right">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                      {(periodicData?.topProducts || []).map((prod: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                          <td className="py-2.5 px-4">
+                            <p className="font-bold text-slate-900 dark:text-white">{prod.name}</p>
+                            <p className="font-mono text-[10px] text-slate-400">{prod.sku}</p>
+                          </td>
+                          <td className="py-2.5 px-4 text-center font-bold">{prod.quantity}</td>
+                          <td className="py-2.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(prod.revenue)}
+                          </td>
+                        </tr>
+                      ))}
+                      {(!periodicData?.topProducts || periodicData.topProducts.length === 0) && (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-slate-400">No top products recorded.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Visual Charts: Cashflow Timeline & Capex Recovery by Category */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chart 1: Monthly Rental Cash Flow */}
-            <Card className="lg:col-span-2 shadow-sm">
-              <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-purple-500" />
-                    <span>Monthly Rental Income & Receivables Cashflow</span>
-                  </span>
-                  <span className="text-xs font-normal text-slate-500">Values in INR (₹)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-72 w-full pt-4">
-                  {(!rentalData?.monthlyCashflow || rentalData.monthlyCashflow.length === 0) ? (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                      No monthly payment records logged yet.
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={rentalData.monthlyCashflow} margin={{ top: 10, right: 15, left: 0, bottom: 20 }}>
-                        <defs>
-                          <linearGradient id="rentalCollectedGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9} />
-                            <stop offset="100%" stopColor="#6d28d9" stopOpacity={0.7} />
-                          </linearGradient>
-                          <linearGradient id="rentalDueGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
-                            <stop offset="100%" stopColor="#d97706" stopOpacity={0.6} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
-                        <Tooltip
-                          formatter={(val: any) => formatCurrency(Number(val) || 0)}
-                          contentStyle={{
-                            borderRadius: '0.75rem',
-                            fontSize: '12px',
-                            background: 'rgba(15, 23, 42, 0.95)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            color: '#fff',
-                          }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                        <Bar dataKey="collected" name="Rent Collected" fill="url(#rentalCollectedGrad)" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="due" name="Rent Due / Receivables" fill="url(#rentalDueGrad)" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Chart 2: Category Rental Performance & Yield */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>Category Rental Yield</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    By Department
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                {(!rentalData?.categoryPerformance || rentalData.categoryPerformance.length === 0) ? (
-                  <div className="py-12 text-center text-xs text-slate-400">
-                    No rental categories recorded.
-                  </div>
-                ) : (
-                  rentalData.categoryPerformance.map((cp, idx) => (
-                    <div
-                      key={cp.category}
-                      className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
-                          />
-                          <span>{cp.category}</span>
-                        </span>
-                        <span className="font-black text-purple-600 dark:text-purple-400">
-                          {formatCurrency(cp.totalCollected)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500">
-                        <span>{cp.rentalsCount} rental agreement(s)</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          {cp.roiPercent}% ROI
-                        </span>
-                      </div>
-                      {/* Progress bar */}
-                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.min(100, cp.roiPercent)}%`,
-                            backgroundColor: cp.roiPercent >= 100 ? '#10b981' : '#8b5cf6',
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Detailed Rental Instrument Profitability Table */}
+          {/* Sales Transactions Ledger */}
           <Card className="shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Instrument-by-Instrument Profit & Capex Recovery Ledger</span>
-                    <Badge variant="outline" className="text-xs">
-                      {filteredRentals.length} instruments listed
-                    </Badge>
-                  </CardTitle>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Individual ROI tracking of every rented asset, customer details, capex cost, maintenance expenses, and net profit.
-                  </p>
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Recent Sales & Collections Ledger</CardTitle>
+                <p className="text-xs text-slate-500">Live invoices with payment method and settlement status</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search invoices, customers..."
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
+                  />
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(getApiUrl('/reports/export/sales'), '_blank')}
+                  className="gap-1 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>CSV</span>
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="responsive-table-wrapper">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Instrument / Serial</th>
-                      <th className="py-3 px-4">Customer / Renter</th>
-                      <th className="py-3 px-4 text-right">Asset Cost</th>
-                      <th className="py-3 px-4 text-center">Monthly Rent</th>
-                      <th className="py-3 px-4 text-right">Rent Paid (₹)</th>
-                      <th className="py-3 px-4 text-right">Rent Due (₹)</th>
-                      <th className="py-3 px-4 text-right">Maintenance</th>
-                      <th className="py-3 px-4 text-right">Net Profit</th>
-                      <th className="py-3 px-4 text-center">Capex ROI %</th>
-                      <th className="py-3 px-4 text-center">Status</th>
+              <div className="responsive-table-wrapper max-h-96 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-4">Invoice #</th>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-4">Customer</th>
+                      <th className="py-2.5 px-4">Payment Method</th>
+                      <th className="py-2.5 px-4 text-right">Grand Total</th>
+                      <th className="py-2.5 px-4 text-center">Status</th>
+                      <th className="py-2.5 px-4">Salesperson</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {filteredRentals.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="py-12 text-center text-slate-400">
-                          <Music2 className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                          <p className="font-semibold text-slate-600 dark:text-slate-400">No rental records matched your filters.</p>
-                          <p className="text-xs text-slate-400 mt-0.5">Try clearing the search query or status filter.</p>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {filteredSalesLedger.map((s: any) => (
+                      <tr key={s._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                        <td className="py-2.5 px-4 font-mono font-bold text-amber-500">{s.invoiceNumber}</td>
+                        <td className="py-2.5 px-4 text-slate-500">{formatDate(s.createdAt)}</td>
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-white">{s.customerName}</td>
+                        <td className="py-2.5 px-4">
+                          <Badge variant="outline" className="text-[10px] font-bold">
+                            {s.paymentMethod} {s.isEmi ? '(EMI)' : ''}
+                          </Badge>
                         </td>
+                        <td className="py-2.5 px-4 text-right font-black text-slate-900 dark:text-white">
+                          {formatCurrency(s.grandTotal)}
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <Badge
+                            variant={s.paymentStatus === 'PAID' ? 'success' : s.paymentStatus === 'PARTIAL' ? 'warning' : 'danger'}
+                            className="text-[10px] font-bold"
+                          >
+                            {s.paymentStatus}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-4 text-slate-500">{s.soldBy?.name || 'Staff'}</td>
                       </tr>
-                    ) : (
-                      filteredRentals.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 dark:text-white line-clamp-1">
-                              {item.productName}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[11px] font-mono text-amber-500">{item.sku}</span>
-                              {(item.assetId || item.serialNumber) && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">
-                                  {item.assetId || item.serialNumber}
-                                </Badge>
-                              )}
-                              <span className="text-[10px] text-slate-400">&bull; {item.category}</span>
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1">
-                              <User className="h-3 w-3 text-slate-400" />
-                              <span>{item.customerName}</span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                              {item.customerContact && <span>{item.customerContact}</span>}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
-                            {formatCurrency(item.purchaseCost)}
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
-                            <span className="font-bold text-slate-800 dark:text-slate-200">
-                              {formatCurrency(item.monthlyRent)}
-                            </span>
-                            <div className="text-[10px] text-slate-400">
-                              {item.paidMonthsCount}/{item.lockInPeriodMonths} mos
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
-                            {formatCurrency(item.totalRentPaid)}
-                          </td>
-
-                          <td className="py-3 px-4 text-right font-bold text-amber-500">
-                            {item.totalRentDue > 0 ? formatCurrency(item.totalRentDue) : '₹0'}
-                          </td>
-
-                          <td className="py-3 px-4 text-right text-rose-500 font-medium">
-                            {item.maintenanceCost > 0 ? `-${formatCurrency(item.maintenanceCost)}` : '₹0'}
-                          </td>
-
-                          <td className="py-3 px-4 text-right">
-                            <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-black bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                              {formatCurrency(item.netProfit)}
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <Badge
-                                variant={item.roiPercent >= 100 ? 'success' : item.roiPercent >= 50 ? 'default' : 'warning'}
-                                className="text-[10px] font-bold"
-                              >
-                                {item.roiPercent}% ROI
-                              </Badge>
-                              {item.isCapexRecovered && (
-                                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                                  Pure Profit
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
-                            <Badge
-                              variant={
-                                item.status === 'ACTIVE'
-                                  ? 'success'
-                                  : item.status === 'OVERDUE'
-                                  ? 'danger'
-                                  : 'outline'
-                              }
-                              className="text-[10px]"
-                            >
-                              {item.status}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))
+                    ))}
+                    {filteredSalesLedger.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400">No matching sales records.</td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -1305,171 +981,282 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* TAB 3: INVENTORY VALUATION */}
-      {/* ========================================================= */}
-      {activeTab === 'valuation' && (
+      {/* ========================================================================= */}
+      {/* TAB 3: RENTAL PROFITABILITY & ASSET RECOVERY */}
+      {/* ========================================================================= */}
+      {activeTab === 'rentals' && (
         <div className="space-y-6">
-          {/* Summary KPI Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Card className="border-l-4 border-l-amber-500 shadow-sm">
-              <CardHeader className="pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Total Valuation at Purchase Cost
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-                  {formatCurrency(valuationData?.totals?.totalValuationCost ?? 0)}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Total physical units: {valuationData?.totals?.totalOnHand ?? 0}
-                </p>
-              </CardContent>
-            </Card>
+          {/* Rental Fleet KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rent Income Collected</span>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {rentalData ? formatCurrency(rentalData.kpis.totalRentalRevenueCollected) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Excludes security deposits held</p>
+            </div>
 
-            <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-              <CardHeader className="pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Total Potential Retail Value
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-                  {formatCurrency(valuationData?.totals?.totalPotentialRetail ?? 0)}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Expected revenue at default retail MSRP
-                </p>
-              </CardContent>
-            </Card>
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Net Operating Rental Profit</span>
+              <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+                {rentalData ? formatCurrency(rentalData.kpis.netRentalProfit) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Rent Collected - Maint Expenses</p>
+            </div>
 
-            <Card className="border-l-4 border-l-indigo-500 shadow-sm">
-              <CardHeader className="pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Estimated Gross Margin
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
-                  {formatCurrency(valuationData?.totals?.totalPotentialMargin ?? 0)}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Potential profit upon 100% catalog sell-through
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fleet Capex Recovery Rate</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-2xl font-black text-amber-500">
+                  {rentalData ? `${rentalData.kpis.portfolioRoiPercent}%` : '0%'}
                 </p>
-              </CardContent>
-            </Card>
+                <span className="text-xs text-slate-400">of ₹{rentalData ? rentalData.kpis.totalAssetInvestmentCost?.toLocaleString('en-IN') : 0} Capex</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {rentalData?.kpis.capitalRecoveredCount ?? 0} Assets Fully Recouped
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rental Receivables & Dues</span>
+              <p className="text-2xl font-black text-rose-500 mt-1">
+                {rentalData ? formatCurrency(rentalData.kpis.totalRentalDue) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Security Deposits Held: {rentalData ? formatCurrency(rentalData.kpis.totalSecurityDepositsHeld) : '₹0'}
+              </p>
+            </div>
           </div>
 
-          {/* Visual: Valuation Breakdown by Category */}
-          {valuationByCategory.length > 0 && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>Category Inventory Asset Valuation (Cost vs Retail)</span>
-                  <span className="text-xs text-slate-400">Values in INR (₹)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 w-full pt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={valuationByCategory} margin={{ top: 10, right: 15, left: 0, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="category" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
-                      <Tooltip
-                        formatter={(val: any) => formatCurrency(Number(val) || 0)}
-                        contentStyle={{
-                          borderRadius: '0.75rem',
-                          fontSize: '12px',
-                          background: 'rgba(15, 23, 42, 0.95)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                      <Bar dataKey="costValue" name="Asset Valuation (Cost)" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="retailValue" name="Potential Retail Value" fill="#10b981" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Detailed Valuation Table */}
+          {/* Instrument Level Fleet Breakdown */}
           <Card className="shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-base">Product-by-Product Asset Valuation</CardTitle>
-                  <span className="text-xs text-slate-500">
-                    ({filteredValuation.length} products listed)
-                  </span>
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Rental Fleet Asset Performance & Payback</CardTitle>
+                <p className="text-xs text-slate-500">Track capital recovery and net yield per issued instrument</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search instrument, customer, ref..."
+                    value={rentalSearch}
+                    onChange={(e) => setRentalSearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
+                  />
                 </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-1 text-xs">
+                  {['ALL', 'ACTIVE', 'OVERDUE', 'RETURNED'].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setRentalStatusFilter(st as any)}
+                      className={`px-2.5 py-1 rounded font-bold transition-all ${
+                        rentalStatusFilter === st
+                          ? 'bg-purple-500 text-white shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(getApiUrl('/reports/export/rentals'), '_blank')}
+                  className="gap-1 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5 text-purple-500" />
+                  <span>CSV</span>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="responsive-table-wrapper max-h-96 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-4">Agreement Ref</th>
+                      <th className="py-2.5 px-4">Instrument & Serial</th>
+                      <th className="py-2.5 px-4">Customer</th>
+                      <th className="py-2.5 px-4 text-center">Status</th>
+                      <th className="py-2.5 px-4 text-right">Monthly Rent</th>
+                      <th className="py-2.5 px-4 text-right">Rent Collected</th>
+                      <th className="py-2.5 px-4 text-right">Capex Cost</th>
+                      <th className="py-2.5 px-4 text-right">Net Profit</th>
+                      <th className="py-2.5 px-4 text-center">Recovery %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {filteredRentals.map((r: any) => (
+                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                        <td className="py-2.5 px-4 font-mono font-bold text-amber-500">{r.issueReference}</td>
+                        <td className="py-2.5 px-4">
+                          <p className="font-bold text-slate-900 dark:text-white">{r.productName}</p>
+                          <p className="font-mono text-[10px] text-slate-400">
+                            {r.assetId || r.serialNumber || r.sku}
+                          </p>
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-white">{r.customerName}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          <Badge
+                            variant={r.status === 'ACTIVE' ? 'success' : r.status === 'OVERDUE' ? 'danger' : 'outline'}
+                            className="text-[10px] font-bold"
+                          >
+                            {r.status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold">{formatCurrency(r.monthlyRent)}</td>
+                        <td className="py-2.5 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(r.totalRentPaid)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-slate-500">{formatCurrency(r.purchaseCost)}</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-purple-600 dark:text-purple-400">
+                          {formatCurrency(r.netProfit)}
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`text-[11px] font-black ${r.isCapexRecovered ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {r.recoveryPercent}%
+                            </span>
+                            <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${r.isCapexRecovered ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                style={{ width: `${Math.min(100, r.recoveryPercent)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredRentals.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="py-6 text-center text-slate-400">No matching rental agreements.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: INVENTORY VALUATION & STOCK HEALTH */}
+      {/* ========================================================================= */}
+      {activeTab === 'valuation' && (
+        <div className="space-y-6">
+          {/* Valuation KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Inventory Value (At Cost)</span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {valuationData ? formatCurrency(valuationData.totals.totalValuationCost) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Based on purchase cost</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Potential Retail Valuation</span>
+              <p className="text-2xl font-black text-amber-500 mt-1">
+                {valuationData ? formatCurrency(valuationData.totals.totalPotentialRetail) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">At default retail selling price</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Estimated Gross Margin</span>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {valuationData ? formatCurrency(valuationData.totals.totalPotentialMargin) : '₹0'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Unrealized retail profit upside</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reconciled Fleet Units</span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {valuationData?.totals.totalOnHand ?? 0} Units
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                {ih ? `${ih.totalAvailableForSale} Avail | ${ih.totalUnitsInRental} Rented | ${ih.totalUnitsInMaintenance} Maint` : ''}
+              </p>
+            </div>
+          </div>
+
+          {/* Product Valuation Table */}
+          <Card className="shadow-sm">
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Product-Level Valuation & Stock Balance</CardTitle>
+                <p className="text-xs text-slate-500">Catalog cost, retail value, and operational status</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search product, SKU, category..."
                     value={valuationSearch}
                     onChange={(e) => setValuationSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500/30"
+                    className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
                   />
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(getApiUrl('/reports/export/products'), '_blank')}
+                  className="gap-1 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>CSV</span>
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="responsive-table-wrapper">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Product / SKU</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4 text-center">On Hand</th>
-                      <th className="py-3 px-4 text-center">Available</th>
-                      <th className="py-3 px-4 text-right">Unit Cost</th>
-                      <th className="py-3 px-4 text-right">Selling Price</th>
-                      <th className="py-3 px-4 text-right">Valuation (Cost)</th>
-                      <th className="py-3 px-4 text-right">Potential Retail</th>
+              <div className="responsive-table-wrapper max-h-96 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-4">Product Name</th>
+                      <th className="py-2.5 px-4">SKU</th>
+                      <th className="py-2.5 px-4">Category</th>
+                      <th className="py-2.5 px-4 text-center">On-Hand</th>
+                      <th className="py-2.5 px-4 text-center">Available</th>
+                      <th className="py-2.5 px-4 text-right">Unit Cost</th>
+                      <th className="py-2.5 px-4 text-right">Unit Retail</th>
+                      <th className="py-2.5 px-4 text-right">Total Cost Value</th>
+                      <th className="py-2.5 px-4 text-right">Potential Retail</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                    {filteredValuation.map((item) => (
-                      <tr key={item.productId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white">{item.name}</div>
-                          <div className="text-[11px] font-mono text-amber-500">{item.sku}</div>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{item.category}</td>
-                        <td className="py-3 px-4 text-center font-bold text-slate-900 dark:text-white">
-                          {item.onHand}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span
-                            className={
-                              item.available > 0
-                                ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                                : 'text-rose-500 font-semibold'
-                            }
-                          >
+                    {filteredValuation.map((item: any) => (
+                      <tr key={item.productId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-white">{item.name}</td>
+                        <td className="py-2.5 px-4 font-mono text-amber-500">{item.sku}</td>
+                        <td className="py-2.5 px-4 text-slate-500">{item.category}</td>
+                        <td className="py-2.5 px-4 text-center font-bold text-slate-900 dark:text-white">{item.onHand}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          <span className={`font-bold ${item.available > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                             {item.available}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
-                          {formatCurrency(item.unitCost)}
-                        </td>
-                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
-                          {formatCurrency(item.unitPrice)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-4 text-right text-slate-500">{formatCurrency(item.unitCost)}</td>
+                        <td className="py-2.5 px-4 text-right text-slate-500">{formatCurrency(item.unitPrice)}</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-slate-900 dark:text-white">
                           {formatCurrency(item.valuationCost)}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-amber-500">
+                        <td className="py-2.5 px-4 text-right font-black text-amber-500">
                           {formatCurrency(item.potentialRetail)}
                         </td>
                       </tr>
                     ))}
+                    {filteredValuation.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="py-6 text-center text-slate-400">No matching products found.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1478,139 +1265,291 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* TAB 4: LEDGER RECONCILIATION AUDIT */}
-      {/* ========================================================= */}
+      {/* ========================================================================= */}
+      {/* TAB 5: FINANCIAL RECONCILIATION & AUDIT */}
+      {/* ========================================================================= */}
       {activeTab === 'reconciliation' && (
         <div className="space-y-6">
-          <Card className="border-l-4 border-l-blue-500 shadow-sm">
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
+          {/* Header Banner with EXACT compliance status - NEVER FALSE 100% */}
+          <Card
+            className={`shadow-sm border-l-4 ${
+              reconciliationData?.isFullyCompliant
+                ? 'border-l-emerald-500'
+                : 'border-l-rose-500'
+            }`}
+          >
+            <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShieldCheck className="h-5 w-5 text-blue-500" />
-                    <span>Real-time Ledger Integrity Verification</span>
+                    <span>Invariant Ledger Integrity Audit</span>
                   </CardTitle>
                   <p className="text-xs text-slate-500 mt-1">
-                    Every physical change generates an immutable transaction movement in the ledger.
-                    This automated audit re-calculates all movements from Genesis and validates them against current product quantities.
+                    Recalculates all immutable stock movements from Genesis and validates them against catalog balances and physical serial registers.
                   </p>
                 </div>
+                {/* Fixed compliance badge: NEVER displays 100% when mismatches exist */}
                 <Badge
-                  variant={reconciliationData?.mismatchesFound === 0 ? 'success' : 'danger'}
-                  className="font-bold text-xs"
+                  variant={reconciliationData?.isFullyCompliant ? 'success' : 'danger'}
+                  className="font-black text-xs px-3 py-1 uppercase tracking-wider"
                 >
-                  {reconciliationData?.mismatchesFound === 0
+                  {reconciliationData?.isFullyCompliant
                     ? '100% Invariant Compliant'
-                    : `${reconciliationData?.mismatchesFound} Discrepancy Found`}
+                    : `${reconciliationData?.compliancePercentage || 0}% Compliant (${reconciliationData?.mismatchesFound || 0} Discrepancies)`}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs">
+            <CardContent className="p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <span className="text-slate-500">Last Verified:</span>
-                  <div className="font-semibold text-slate-900 dark:text-white">
-                    {reconciliationData?.timestamp
-                      ? formatDateTime(reconciliationData.timestamp)
-                      : 'Just now'}
+                  <span className="text-slate-500">Audit Timestamp:</span>
+                  <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
+                    {reconciliationData?.timestamp ? formatDateTime(reconciliationData.timestamp) : 'Just now'}
                   </div>
                 </div>
                 <div>
-                  <span className="text-slate-500">Total Products Audited:</span>
-                  <div className="font-semibold text-slate-900 dark:text-white">
+                  <span className="text-slate-500">Products Audited:</span>
+                  <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
                     {reconciliationData?.totalProductsChecked ?? 0}
                   </div>
                 </div>
                 <div>
+                  <span className="text-slate-500">Verified Compliant:</span>
+                  <div className="font-bold text-emerald-500 mt-0.5">
+                    {reconciliationData
+                      ? `${reconciliationData.totalProductsChecked - reconciliationData.mismatchesFound} Products`
+                      : '0'}
+                  </div>
+                </div>
+                <div>
                   <span className="text-slate-500">Ledger Discrepancies:</span>
-                  <div className="font-bold text-emerald-600 dark:text-emerald-400">
-                    {reconciliationData?.mismatchesFound ?? 0} Mismatches
+                  <div
+                    className={`font-black mt-0.5 ${
+                      reconciliationData?.mismatchesFound === 0 ? 'text-emerald-500' : 'text-rose-500'
+                    }`}
+                  >
+                    {reconciliationData?.mismatchesFound ?? 0} Mismatches Found
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Schedule Reconciliations (Sales Schedule & Rental Schedule) */}
+          {reconciliationData?.financialReconciliation && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Sales Schedule Reconciliation */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4 text-amber-500" />
+                    <span>Sales & Collections Schedule Reconciliation</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Total Completed Sales Transactions:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {reconciliationData.financialReconciliation.salesSchedule.totalSalesCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Recognized Sales Revenue:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.recognizedSalesRevenue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Direct Sales Liquid Cash Collected:</span>
+                    <span className="font-bold text-emerald-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.directSalesCashCollected)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">EMI Down Payments Collected:</span>
+                    <span className="font-bold text-emerald-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.emiDownPaymentsCollected)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">EMI Installments Collected:</span>
+                    <span className="font-bold text-emerald-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.emiInstallmentsCollected)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Outstanding EMI Receivables:</span>
+                    <span className="font-bold text-purple-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.outstandingEmiReceivables)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 font-bold bg-slate-50 dark:bg-slate-950 px-2 rounded-lg">
+                    <span>Unreconciled Revenue Variance:</span>
+                    <span
+                      className={
+                        reconciliationData.financialReconciliation.salesSchedule.unreconciledRevenueVariance === 0
+                          ? 'text-emerald-500'
+                          : 'text-rose-500'
+                      }
+                    >
+                      {formatCurrency(reconciliationData.financialReconciliation.salesSchedule.unreconciledRevenueVariance)} (0 Variance = Perfect Balance)
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Rental Schedule Reconciliation */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Music2 className="h-4 w-4 text-purple-500" />
+                    <span>Rental Agreements & Trust Escrow Reconciliation</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Active Rental Agreements:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {reconciliationData.financialReconciliation.rentalSchedule.activeAgreementsCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Rent Income Realized:</span>
+                    <span className="font-bold text-emerald-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.rentalSchedule.rentCollected)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Outstanding Rental Subscription Receivables:</span>
+                    <span className="font-bold text-rose-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.rentalSchedule.outstandingRentReceivables)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Customer Security Deposits Held in Trust:</span>
+                    <span className="font-bold text-amber-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.rentalSchedule.depositsHeldInTrust)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Customer Refund Liabilities Payable:</span>
+                    <span className="font-bold text-rose-500">
+                      {formatCurrency(reconciliationData.financialReconciliation.rentalSchedule.refundLiabilitiesPayable)}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-semibold mt-1">
+                    ✓ Escrow Invariant Verified: Customer deposits held are strictly isolated from operational revenue.
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Audit Results Table */}
           <Card className="shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Ledger Reconciliation Audit Log</CardTitle>
-              <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setReconciliationFilter('ALL')}
-                  className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                    reconciliationFilter === 'ALL'
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}
+            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Ledger Invariant Audit Log</CardTitle>
+                <p className="text-xs text-slate-500">Catalog on-hand vs Genesis transaction sum with corrective actions</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setReconciliationFilter('ALL')}
+                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                      reconciliationFilter === 'ALL'
+                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    All Products ({reconciliationData?.results?.length ?? 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReconciliationFilter('MISMATCHES')}
+                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                      reconciliationFilter === 'MISMATCHES'
+                        ? 'bg-rose-500 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Discrepancies Only ({reconciliationData?.mismatchesFound ?? 0})
+                  </button>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(getApiUrl('/reports/export/reconciliation'), '_blank')}
+                  className="gap-1 text-xs"
                 >
-                  All Products ({reconciliationData?.results?.length ?? 0})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReconciliationFilter('MISMATCHES')}
-                  className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                    reconciliationFilter === 'MISMATCHES'
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  Discrepancies Only ({reconciliationData?.mismatchesFound ?? 0})
-                </button>
+                  <Download className="h-3.5 w-3.5" />
+                  <span>CSV</span>
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="responsive-table-wrapper">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Product Name</th>
-                      <th className="py-3 px-4">SKU</th>
-                      <th className="py-3 px-4 text-center">Recorded Balance</th>
-                      <th className="py-3 px-4 text-center">Calculated from Ledger</th>
-                      <th className="py-3 px-4 text-center">Variance</th>
-                      <th className="py-3 px-4 text-center">Audit Status</th>
+              <div className="responsive-table-wrapper max-h-96 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-4">Product Name</th>
+                      <th className="py-2.5 px-4">SKU</th>
+                      <th className="py-2.5 px-4 text-center">Catalog On-Hand</th>
+                      <th className="py-2.5 px-4 text-center">Calculated from Ledger</th>
+                      <th className="py-2.5 px-4 text-center">Physical Count</th>
+                      <th className="py-2.5 px-4 text-center">Variance</th>
+                      <th className="py-2.5 px-4 text-center">Status</th>
+                      <th className="py-2.5 px-4">Recommended Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                    {filteredReconciliation.map((res, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                          {res.productName}
+                    {filteredReconciliation.map((res: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-white">{res.productName}</td>
+                        <td className="py-2.5 px-4 font-mono text-amber-500">{res.sku}</td>
+                        <td className="py-2.5 px-4 text-center font-bold">{res.recordedOnHand}</td>
+                        <td className="py-2.5 px-4 text-center font-bold text-indigo-500">{res.calculatedOnHand}</td>
+                        <td className="py-2.5 px-4 text-center text-slate-500">
+                          {res.serializedPhysicalCount !== undefined ? res.serializedPhysicalCount : 'N/A'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-amber-500">{res.sku}</td>
-                        <td className="py-3 px-4 text-center font-bold">{res.recordedOnHand}</td>
-                        <td className="py-3 px-4 text-center font-bold text-indigo-500">
-                          {res.calculatedOnHand}
-                        </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-2.5 px-4 text-center">
                           <span
-                            className={
-                              res.variance === 0
-                                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                                : 'text-rose-500 font-bold'
-                            }
+                            className={`font-black ${
+                              res.variance === 0 ? 'text-emerald-500' : 'text-rose-500'
+                            }`}
                           >
-                            {res.variance === 0 ? '0' : res.variance}
+                            {res.variance === 0 ? '0' : res.variance > 0 ? `+${res.variance}` : res.variance}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-2.5 px-4 text-center">
                           {res.status === 'MATCH' ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                            <span className="inline-flex items-center gap-1 text-emerald-500 text-xs font-bold">
                               <CheckCircle2 className="h-4 w-4" />
                               <span>Verified</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-semibold">
+                            <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
                               <AlertTriangle className="h-4 w-4" />
                               <span>Mismatch</span>
                             </span>
                           )}
                         </td>
+                        <td className="py-2.5 px-4 text-slate-600 dark:text-slate-300 text-[11px]">
+                          {res.recommendedAction}
+                        </td>
                       </tr>
                     ))}
+                    {filteredReconciliation.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-6 text-center text-slate-400">
+                          {reconciliationFilter === 'MISMATCHES'
+                            ? 'All products are 100% invariant compliant. Zero mismatches found.'
+                            : 'No product records found.'}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1619,15 +1558,15 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* TAB 5: SEND EMAIL REPORTS & DELIVERY LOGS */}
-      {/* ========================================================= */}
-      {activeTab === 'emailReports' && (
+      {/* ========================================================================= */}
+      {/* TAB 6: EXPORTS & DISPATCH CENTER */}
+      {/* ========================================================================= */}
+      {activeTab === 'exports' && (
         <div className="space-y-6">
           {/* Status Feedback Banner */}
           {emailStatusMessage && (
             <div
-              className={`p-4 rounded-xl border flex items-start justify-between gap-3 text-xs font-semibold transition-all ${
+              className={`p-4 rounded-xl border flex items-start justify-between gap-3 text-xs font-semibold ${
                 emailSuccess
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
                   : 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'
@@ -1650,6 +1589,171 @@ export default function ReportsPage() {
             </div>
           )}
 
+          {/* Download Center Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Executive PDF */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-rose-500/30 text-rose-500 text-[10px] uppercase font-bold">
+                    PDF Document
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Executive BI Briefing</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  High-resolution executive PDF briefing containing financial performance, cash movement, asset reconciliation, and risk register.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePdfExport}
+                className="w-full mt-4 gap-2 text-xs font-bold text-rose-500 border-rose-500/30 hover:bg-rose-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Generate PDF Briefing</span>
+              </Button>
+            </div>
+
+            {/* Executive CSV */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <FileSpreadsheet className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 text-[10px] uppercase font-bold">
+                    Executive CSV
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Executive Financials Dataset</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Reconciled KPIs with prior period comparisons, percentages, and strict accounting basis definitions.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(getApiUrl(`/reports/export/executive?startDate=${startDate?.toISOString() || ''}&endDate=${endDate?.toISOString() || ''}`), '_blank')}
+                className="w-full mt-4 gap-2 text-xs font-bold text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export Executive CSV</span>
+              </Button>
+            </div>
+
+            {/* Rental Profitability CSV */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
+                    <Music2 className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-purple-500/30 text-purple-500 text-[10px] uppercase font-bold">
+                    Rental Fleet CSV
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Rental Profitability & Capex</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Asset-level rental income, maintenance expenses, capital recovery %, and payback periods.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(getApiUrl('/reports/export/rentals'), '_blank')}
+                className="w-full mt-4 gap-2 text-xs font-bold text-purple-500 border-purple-500/30 hover:bg-purple-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export Rental CSV</span>
+              </Button>
+            </div>
+
+            {/* Inventory Valuation CSV */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-500">
+                    <Boxes className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-indigo-500/30 text-indigo-500 text-[10px] uppercase font-bold">
+                    Stock Valuation
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Inventory Valuation Dataset</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Catalog quantities on-hand, available, unit purchase cost, potential retail price, and gross margins.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(getApiUrl('/reports/export/products'), '_blank')}
+                className="w-full mt-4 gap-2 text-xs font-bold text-indigo-500 border-indigo-500/30 hover:bg-indigo-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export Valuation CSV</span>
+              </Button>
+            </div>
+
+            {/* Ledger Reconciliation CSV */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-500 text-[10px] uppercase font-bold">
+                    Audit Log
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Ledger Reconciliation Audit</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Full product audit log with recorded balances, calculated sums, variances, and corrective actions.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(getApiUrl('/reports/export/reconciliation'), '_blank')}
+                className="w-full mt-4 gap-2 text-xs font-bold text-blue-500 border-blue-500/30 hover:bg-blue-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export Audit CSV</span>
+              </Button>
+            </div>
+
+            {/* Sales & Orders CSV */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
+                    <ShoppingCart className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="border-amber-500/30 text-amber-500 text-[10px] uppercase font-bold">
+                    Sales Ledger
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Sales & Collections Ledger</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Completed customer sales, invoice numbers, payment methods, customer names, and salesperson attribution.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(getApiUrl('/reports/export/sales'), '_blank')}
+                className="w-full mt-4 gap-2 text-xs font-bold text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export Sales CSV</span>
+              </Button>
+            </div>
+          </div>
+
           {/* Interactive Send Email Report Console */}
           <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
             <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
@@ -1657,300 +1761,74 @@ export default function ReportsPage() {
                 <div>
                   <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-white">
                     <Mail className="h-5 w-5 text-amber-500" />
-                    <span>Send Email Report</span>
+                    <span>Executive Email Dispatch Service</span>
                   </CardTitle>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Select any store report and dispatch it immediately to any recipient email via verified Gmail SMTP.
+                    Dispatch verified financial statements and operational reports directly to executive recipients via Gmail SMTP.
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 w-fit">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Gmail SMTP Active (hustlerxeroindia@gmail.com)</span>
+                  <span>SMTP Active (hustlerxeroindia@gmail.com)</span>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-6">
-              {/* Step 1: Recipient Email Input */}
+              {/* Recipient */}
               <div className="space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <Send className="h-3.5 w-3.5 text-amber-500" />
-                    <span>Recipient Email Address *</span>
-                  </label>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <span className="text-slate-400">Quick Fill:</span>
-                    {user?.email && (
-                      <button
-                        type="button"
-                        onClick={() => setRecipientEmail(user.email)}
-                        className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10 hover:text-amber-600 transition-colors font-medium"
-                      >
-                        My Email ({user.email})
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setRecipientEmail('hustlerxeroindia@gmail.com')}
-                      className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10 hover:text-amber-600 transition-colors font-medium"
-                    >
-                      Store Admin (Gmail)
-                    </button>
-                    {recipientEmail && (
-                      <button
-                        type="button"
-                        onClick={() => setRecipientEmail('')}
-                        className="text-slate-400 hover:text-rose-500 px-1 font-medium"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="email"
-                    placeholder="Enter recipient email address (e.g. manager@domain.com, user@gmail.com)"
-                    value={recipientEmail}
-                    onChange={(e) => setRecipientEmail(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
-                  />
-                </div>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Recipient Email Address *</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="Enter recipient email (e.g. ceo@stereobliss.com)"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
               </div>
 
-              {/* Step 2: Choose Report Type */}
+              {/* Report Type */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                   <span>Select Report Type</span>
                 </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {[
-                    {
-                      id: 'RENTAL_PROFITABILITY_REPORT',
-                      title: 'Rental Profitability & Fleet Yield',
-                      badge: 'New & Priority',
-                      icon: Music2,
-                      color: 'text-purple-500',
-                      description: 'Total rent collected, net rental profit, capex cost recovery %, and active fleet metrics.',
-                    },
-                    {
-                      id: 'DAILY_STOCK_SUMMARY',
-                      title: 'Daily Stock Summary',
-                      badge: 'Core Stock',
-                      icon: Boxes,
-                      color: 'text-amber-500',
-                      description: 'On-hand stock, units available for sale, valuation at purchase cost, and low stock items list.',
-                    },
-                    {
-                      id: 'WEEKLY_SALES_SUMMARY',
-                      title: 'Weekly Sales Performance',
-                      badge: 'Revenue',
-                      icon: ShoppingCart,
-                      color: 'text-emerald-500',
-                      description: 'Last 7 days revenue in ₹, completed customer sales orders, and average order value.',
-                    },
-                    {
-                      id: 'OVERDUE_USAGE_REMINDER',
-                      title: 'Overdue Rentals & Loans',
-                      badge: 'Operations',
-                      icon: AlertTriangle,
-                      color: 'text-rose-500',
-                      description: 'Active instrument loans and student rentals that have passed their expected return date.',
-                    },
-                    {
-                      id: 'LOW_STOCK_ALERT',
-                      title: 'Low Stock Buffer Alert',
-                      badge: 'Reorder Needed',
-                      icon: ShieldAlert,
-                      color: 'text-red-500',
-                      description: 'Products at or below minimum safety thresholds with SKU codes and safety buffer levels.',
-                    },
-                    {
-                      id: 'VALUATION_REPORT',
-                      title: 'Inventory Valuation Report',
-                      badge: 'Financial Worth',
-                      icon: BarChart3,
-                      color: 'text-indigo-500',
-                      description: 'Full cost valuation, projected retail valuation, potential gross margin, and category breakdown.',
-                    },
-                    {
-                      id: 'TEST_EMAIL',
-                      title: 'Gmail Diagnostic Ping',
-                      badge: 'Verification',
-                      icon: Send,
-                      color: 'text-cyan-500',
-                      description: 'Instant test email confirming Gmail App Password authentication and live SMTP dispatch.',
-                    },
-                  ].map((rpt) => {
-                    const isSelected = selectedReportType === rpt.id;
-                    const Icon = rpt.icon;
-                    return (
-                      <div
-                        key={rpt.id}
-                        onClick={() => setSelectedReportType(rpt.id)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'border-amber-500 bg-amber-500/10 dark:bg-amber-500/10 ring-2 ring-amber-500/20'
-                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900/60'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Icon className={`h-4 w-4 ${rpt.color} shrink-0`} />
-                            <h4 className="font-bold text-xs text-slate-900 dark:text-white">
-                              {rpt.title}
-                            </h4>
-                          </div>
-                          <Badge
-                            variant={isSelected ? 'default' : 'outline'}
-                            className="text-[9px] px-1.5 py-0"
-                          >
-                            {rpt.badge}
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 line-clamp-2">
-                          {rpt.description}
-                        </p>
-                      </div>
-                    );
-                  })}
+                    { id: 'RENTAL_PROFITABILITY_REPORT', title: 'Rental Profitability & Fleet Yield', desc: 'Rent collected, capex recovery %, active fleet performance' },
+                    { id: 'DAILY_STOCK_SUMMARY', title: 'Daily Stock & Asset Summary', desc: 'Units on hand, available for sale, valuation at cost' },
+                    { id: 'WEEKLY_SALES_SUMMARY', title: 'Weekly Sales Performance', desc: 'Recognized revenue, completed orders, payment methods' },
+                  ].map((rep) => (
+                    <button
+                      key={rep.id}
+                      type="button"
+                      onClick={() => setSelectedReportType(rep.id)}
+                      className={`p-3.5 rounded-xl border text-left transition-all ${
+                        selectedReportType === rep.id
+                          ? 'border-amber-500 bg-amber-500/10 text-slate-900 dark:text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="text-xs font-bold">{rep.title}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">{rep.desc}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Step 3: Optional Remarks / Notes */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Custom Remarks / Note for Recipient (Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Prepared for Pune store manager weekly audit..."
-                  value={reportNotes}
-                  onChange={(e) => setReportNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-slate-100 dark:border-slate-800">
-                <Button
-                  size="default"
-                  variant="default"
-                  isLoading={isSendingEmail}
-                  onClick={handleSendEmailReport}
-                  className="font-bold gap-2 text-xs sm:text-sm bg-amber-500 hover:bg-amber-600 text-slate-950 px-5 shadow-xs"
-                >
-                  <Send className="h-4 w-4" />
-                  <span>
-                    Send {selectedReportType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </span>
-                </Button>
-
-                <Button
-                  size="default"
-                  variant="outline"
-                  isLoading={isSendingEmail}
-                  onClick={handleSendQuickTest}
-                  className="gap-1.5 text-xs font-semibold"
-                >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <span>Send Diagnostic Test Email</span>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Email Delivery Audit Trail */}
-          <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base text-slate-900 dark:text-white">Email Delivery Audit Trail</CardTitle>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Complete timestamped log of transactional report dispatches and provider message IDs.
-                </p>
-              </div>
+              {/* Action Button */}
               <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchReportData}
-                className="gap-1.5 text-xs font-medium"
-                title="Refresh delivery logs"
+                variant="default"
+                size="default"
+                onClick={handleSendEmailReport}
+                disabled={isSendingEmail}
+                className="gap-2 font-bold bg-amber-500 hover:bg-amber-600 text-slate-950"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh Logs</span>
+                <Send className="h-4 w-4" />
+                <span>{isSendingEmail ? 'Dispatching...' : 'Dispatch Email Report Now'}</span>
               </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="responsive-table-wrapper">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Dispatched At</th>
-                      <th className="py-3 px-4">Report Type</th>
-                      <th className="py-3 px-4">Recipients</th>
-                      <th className="py-3 px-4">Subject</th>
-                      <th className="py-3 px-4 text-center">Status</th>
-                      <th className="py-3 px-4">Provider Ref</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                    {emailLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
-                          <Mail className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                          <p className="font-semibold text-slate-600 dark:text-slate-400">No email dispatches recorded yet.</p>
-                          <p className="text-xs text-slate-400 mt-0.5">Use the form above to send your first report to any email address.</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      emailLogs.map((log) => (
-                        <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
-                            {formatDateTime(log.sentAt || log.createdAt)}
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge variant="outline" className="text-[10px] font-mono">
-                              {log.reportType}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-semibold">
-                            {log.recipients?.join(', ')}
-                          </td>
-                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 max-w-xs">
-                            <div className="truncate font-medium">{log.subject}</div>
-                            {log.errorDetails && (
-                              <div className="text-[10px] text-rose-500 truncate mt-0.5" title={log.errorDetails}>
-                                Error: {log.errorDetails}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
-                            <Badge
-                              variant={
-                                log.status === 'SENT'
-                                  ? 'success'
-                                  : log.status === 'PENDING'
-                                  ? 'warning'
-                                  : 'danger'
-                              }
-                              className="text-[10px]"
-                            >
-                              {log.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 font-mono text-[11px] text-slate-400 max-w-[150px] truncate">
-                            {log.providerReference || '—'}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </CardContent>
           </Card>
         </div>
