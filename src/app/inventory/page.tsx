@@ -707,22 +707,69 @@ export default function InventoryPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Input
-                label="Purchase Cost (₹) *"
-                type="number"
-                min="0"
-                required
-                value={editProdCost}
-                onChange={(e) => setEditProdCost(e.target.value)}
-              />
-              <Input
-                label="Selling Price (₹) *"
-                type="number"
-                min="0"
-                required
-                value={editProdPrice}
-                onChange={(e) => setEditProdPrice(e.target.value)}
-              />
+              {/* Purchase Cost with GST-inclusive breakdown */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Purchase Cost (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={editProdCost}
+                  onChange={(e) => setEditProdCost(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                />
+                {parseFloat(editProdCost) > 0 && (() => {
+                  const incl = parseFloat(editProdCost);
+                  const base = incl / 1.18;
+                  const half = (incl - base) / 2;
+                  return (
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                      <span className="text-slate-500 dark:text-slate-400">Base: </span>
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">₹{base.toFixed(2)}</span>
+                      <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                      <span className="text-slate-500">CGST 9%: </span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">₹{half.toFixed(2)}</span>
+                      <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                      <span className="text-slate-500">SGST 9%: </span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">₹{half.toFixed(2)}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Selling Price with GST-inclusive breakdown */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Selling Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={editProdPrice}
+                  onChange={(e) => setEditProdPrice(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                />
+                {parseFloat(editProdPrice) > 0 && (() => {
+                  const incl = parseFloat(editProdPrice);
+                  const base = incl / 1.18;
+                  const half = (incl - base) / 2;
+                  return (
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                      <span className="text-slate-500 dark:text-slate-400">Base: </span>
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">₹{base.toFixed(2)}</span>
+                      <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                      <span className="text-slate-500">CGST 9%: </span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{half.toFixed(2)}</span>
+                      <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                      <span className="text-slate-500">SGST 9%: </span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{half.toFixed(2)}</span>
+                    </div>
+                  );
+                })()}
+              </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
                   HSN / SAC Code *

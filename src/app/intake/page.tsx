@@ -826,6 +826,25 @@ export default function IntakePage() {
                           onChange={(e) => handleUnitCostChange(idx, parseFloat(e.target.value) || 0)}
                           className="w-full h-9 px-2 text-xs font-semibold text-right rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
                         />
+                        {/* GST-inclusive breakdown — appears as soon as a cost is entered */}
+                        {(line.unitCost || 0) > 0 && (() => {
+                          const incl  = line.unitCost;
+                          const base  = incl / 1.18;
+                          const gst   = incl - base;
+                          const half  = gst / 2;
+                          return (
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed px-0.5">
+                              <span className="text-slate-500 dark:text-slate-400">Base: </span>
+                              <span className="font-semibold text-slate-600 dark:text-slate-300">₹{base.toFixed(2)}</span>
+                              <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                              <span className="text-slate-500 dark:text-slate-400">CGST 9%: </span>
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">₹{half.toFixed(2)}</span>
+                              <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                              <span className="text-slate-500 dark:text-slate-400">SGST 9%: </span>
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">₹{half.toFixed(2)}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Selling Price (Retail MRP) */}
@@ -843,6 +862,25 @@ export default function IntakePage() {
                           onChange={(e) => handleSellingPriceChange(idx, parseFloat(e.target.value) || 0)}
                           className="w-full h-9 px-2 text-xs font-bold text-right rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-emerald-600 dark:text-emerald-400"
                         />
+                        {/* GST-inclusive breakdown — appears as soon as a selling price is entered */}
+                        {(line.sellingPrice || 0) > 0 && (() => {
+                          const incl  = line.sellingPrice;
+                          const base  = incl / 1.18;
+                          const gst   = incl - base;
+                          const half  = gst / 2;
+                          return (
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed px-0.5">
+                              <span className="text-slate-500 dark:text-slate-400">Base: </span>
+                              <span className="font-semibold text-slate-600 dark:text-slate-300">₹{base.toFixed(2)}</span>
+                              <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                              <span className="text-slate-500 dark:text-slate-400">CGST 9%: </span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{half.toFixed(2)}</span>
+                              <span className="mx-1 text-slate-300 dark:text-slate-600">|</span>
+                              <span className="text-slate-500 dark:text-slate-400">SGST 9%: </span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{half.toFixed(2)}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Line Total & Remove */}
