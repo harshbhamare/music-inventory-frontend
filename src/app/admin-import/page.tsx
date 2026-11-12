@@ -150,7 +150,7 @@ function PreviewCard({ label, count, icon, color = 'slate' }: {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminImportPage() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isManager } = useAuth();
 
   const [step, setStep]                   = useState<Step>('upload');
   const [file, setFile]                   = useState<File | null>(null);
@@ -166,14 +166,14 @@ export default function AdminImportPage() {
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
 
   // ── Access guard ────────────────────────────────────────────────────────────
-  if (!isSuperAdmin()) {
+  if (!isSuperAdmin() && !isManager()) {
     return (
       <div className="flex flex-col items-center justify-center p-16 text-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500">
           <ShieldAlert className="h-8 w-8" />
         </div>
-        <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Superadmin Access Required</h2>
-        <p className="text-sm text-slate-500 max-w-sm">Historical data import is restricted to the Superadmin account to prevent accidental data modification.</p>
+        <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Admin Access Required</h2>
+        <p className="text-sm text-slate-500 max-w-sm">Historical data import is restricted to Administrator and Manager accounts to prevent accidental data modification.</p>
       </div>
     );
   }
@@ -250,10 +250,12 @@ export default function AdminImportPage() {
       const form = new FormData();
       form.append('file', file);
 
+      const token = getToken();
       const res = await fetch(getApiUrl('/import/validate'), {
         method: 'POST',
         body: form,
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error?.message || 'Validation failed');
@@ -276,10 +278,12 @@ export default function AdminImportPage() {
       form.append('file', file);
       if (forceImport) form.append('forceImport', 'true');
 
+      const token = getToken();
       const res = await fetch(getApiUrl('/import/execute'), {
         method: 'POST',
         body: form,
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
       });
       const json = await res.json();
 
