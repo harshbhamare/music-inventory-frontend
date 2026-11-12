@@ -295,14 +295,20 @@ export default function SalesPage() {
     setCartItems(updated);
   };
 
-  // Cart calculations
+  // Cart calculations — prices are GST-inclusive (18% already inside the entered price)
+  // grandTotal = what the customer pays = sum of (unitPrice × qty − discount) exactly as entered
+  // taxableAmount = grandTotal ÷ 1.18  (base extracted from inclusive price)
+  // cgstAmount = taxableAmount × 9%
+  // sgstAmount = taxableAmount × 9%
+  const grandTotal = Math.round(
+    Math.max(0, cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity - (i.discount || 0) * i.quantity, 0))
+  );
   const subtotal = cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const discountTotal = cartItems.reduce((acc, i) => acc + (i.discount || 0) * i.quantity, 0);
-  const taxableAmount = Math.max(0, subtotal - discountTotal);
+  const taxableAmount = Math.round((grandTotal / 1.18) * 100) / 100;
   const cgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
   const sgstAmount = Math.round(taxableAmount * 0.09 * 100) / 100;
   const totalGst = Math.round((cgstAmount + sgstAmount) * 100) / 100;
-  const grandTotal = Math.round(taxableAmount + totalGst);
 
   // EMI computations
   const effectiveDownPayment = Math.round(Math.min(grandTotal, Math.max(0, downPayment)));
@@ -1498,13 +1504,13 @@ export default function SalesPage() {
 
                 {/* GST Summary */}
                 <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-500"><span>Subtotal:</span><span>{formatCurrency(subtotal)}</span></div>
+                  <div className="flex justify-between text-slate-500"><span>Incl. Price Total:</span><span>{formatCurrency(subtotal)}</span></div>
                   {discountTotal > 0 && <div className="flex justify-between text-emerald-500 font-semibold"><span>Discount:</span><span>−{formatCurrency(discountTotal)}</span></div>}
-                  <div className="flex justify-between text-slate-600 dark:text-slate-300"><span>Taxable:</span><span>{formatCurrency(taxableAmount)}</span></div>
-                  <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>CGST 9%:</span><span>+{formatCurrency(cgstAmount)}</span></div>
-                  <div className="flex justify-between text-amber-600 dark:text-amber-400"><span>SGST 9%:</span><span>+{formatCurrency(sgstAmount)}</span></div>
+                  <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px] border-t border-slate-200 dark:border-slate-700 pt-1"><span>Base (excl. GST):</span><span>{formatCurrency(taxableAmount)}</span></div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400 text-[11px]"><span>CGST 9% (incl.):</span><span>{formatCurrency(cgstAmount)}</span></div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400 text-[11px]"><span>SGST 9% (incl.):</span><span>{formatCurrency(sgstAmount)}</span></div>
                   <div className="flex justify-between font-extrabold text-slate-900 dark:text-white text-sm pt-1.5 border-t border-slate-200 dark:border-slate-700">
-                    <span>Grand Total:</span><span className="text-amber-500">{formatCurrency(grandTotal)}</span>
+                    <span>Grand Total (GST Incl.):</span><span className="text-amber-500">{formatCurrency(grandTotal)}</span>
                   </div>
                   {saleType === 'EMI' && (
                     <div className="flex justify-between font-bold text-amber-600 dark:text-amber-400 pt-0.5">
@@ -1683,7 +1689,7 @@ export default function SalesPage() {
               {/* Financial Totals Row */}
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                 <div>
-                  <span className="text-slate-500 block">Gross Subtotal:</span>
+                  <span className="text-slate-500 block">Incl. Price Total:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(subtotal)}</span>
                 </div>
                 <div>
@@ -1693,11 +1699,11 @@ export default function SalesPage() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Taxable Base:</span>
+                  <span className="text-slate-500 block">Base (excl. GST):</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(taxableAmount)}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-slate-500 block">Grand Total:</span>
+                  <span className="text-slate-500 block">Grand Total (GST Incl.):</span>
                   <span className="font-extrabold text-amber-500 text-sm">{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
@@ -2616,22 +2622,22 @@ export default function SalesPage() {
               {(() => {
                 const sub = editLineItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
                 const disc = editLineItems.reduce((acc, i) => acc + i.discount * i.quantity, 0);
-                const taxBase = Math.max(0, sub - disc);
+                const grand = Math.round(Math.max(0, sub - disc));
+                const taxBase = Math.round((grand / 1.18) * 100) / 100;
                 const cgst = Math.round(taxBase * 0.09 * 100) / 100;
                 const sgst = Math.round(taxBase * 0.09 * 100) / 100;
-                const grand = Math.round(taxBase + cgst + sgst);
                 return (
                   <div className="flex justify-end gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
                     <div>
-                      <span className="text-slate-500">Taxable: </span>
+                      <span className="text-slate-500">Base (excl. GST): </span>
                       <strong className="font-mono">{formatCurrency(taxBase)}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-500">GST (18%): </span>
-                      <strong className="font-mono">{formatCurrency((cgst + sgst))}</strong>
+                      <span className="text-slate-500">GST 18% (incl.): </span>
+                      <strong className="font-mono">{formatCurrency(cgst + sgst)}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-500">Recalculated Grand Total: </span>
+                      <span className="text-slate-500">Grand Total (GST Incl.): </span>
                       <strong className="text-amber-500 text-sm font-extrabold font-mono">
                         {formatCurrency(grand)}
                       </strong>

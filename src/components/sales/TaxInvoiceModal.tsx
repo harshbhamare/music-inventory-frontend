@@ -80,7 +80,9 @@ export function TaxInvoiceModal({ isOpen, onClose, sale }: TaxInvoiceModalProps)
 
   const grossSubtotal = sale.subtotal || (sale.lineItems || []).reduce((acc, li) => acc + (li.unitPrice || 0) * (li.quantity || 1), 0);
   const discountTotal = sale.discountTotal ?? (sale.lineItems || []).reduce((acc, li) => acc + (li.discount || 0) * (li.quantity || 1), 0);
-  const taxableAmount = sale.taxableAmount ?? Math.max(0, grossSubtotal - discountTotal);
+  // unitPrice is GST-inclusive. taxableAmount is base extracted from inclusive price.
+  const grandTotalFallback = Math.max(0, grossSubtotal - discountTotal);
+  const taxableAmount = sale.taxableAmount ?? Math.round((grandTotalFallback / 1.18) * 100) / 100;
   const cgstAmount = sale.cgstAmount ?? Math.round(taxableAmount * 0.09 * 100) / 100;
   const sgstAmount = sale.sgstAmount ?? Math.round(taxableAmount * 0.09 * 100) / 100;
 
