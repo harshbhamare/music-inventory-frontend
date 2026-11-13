@@ -119,7 +119,7 @@ export default function InventoryPage() {
   const [newProdCategory, setNewProdCategory] = useState('');
   const [newProdCost, setNewProdCost] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
-  const [newProdThreshold, setNewProdThreshold] = useState('5');
+  const [newProdThreshold, setNewProdThreshold] = useState('');
   const [newProdUnit, setNewProdUnit] = useState('pcs');
   const [newProdHsn, setNewProdHsn] = useState('9202');
   const [formError, setFormError] = useState('');
@@ -143,7 +143,7 @@ export default function InventoryPage() {
   const [editProdCategory, setEditProdCategory] = useState('');
   const [editProdCost, setEditProdCost] = useState('');
   const [editProdPrice, setEditProdPrice] = useState('');
-  const [editProdThreshold, setEditProdThreshold] = useState('5');
+  const [editProdThreshold, setEditProdThreshold] = useState('');
   const [editProdHsn, setEditProdHsn] = useState('9202');
   const [isEditingSaving, setIsEditingSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -227,7 +227,7 @@ export default function InventoryPage() {
     );
     setEditProdCost(String(p.purchaseCost || ''));
     setEditProdPrice(String(p.defaultSellingPrice || ''));
-    setEditProdThreshold(String(p.minStockThreshold || 5));
+    setEditProdThreshold(String(p.minStockThreshold || ''));
     setEditProdHsn(p.hsnCode || '9202');
     setEditError('');
   };
@@ -295,7 +295,7 @@ export default function InventoryPage() {
     setNewProdColor('');
     setNewProdCost('');
     setNewProdPrice('');
-    setNewProdThreshold('5');
+    setNewProdThreshold('');
     setNewProdUnit('pcs');
     setNewProdHsn('9202');
     if (categories.length > 0 && !newProdCategory) {
@@ -615,7 +615,8 @@ export default function InventoryPage() {
               type="number"
               min="0"
               required
-              value={adjustQuantity}
+              placeholder="Enter actual count"
+              value={adjustQuantity === 0 ? '' : adjustQuantity}
               onChange={(e) => setAdjustQuantity(parseInt(e.target.value, 10) || 0)}
               className="w-full h-11 px-3 text-lg font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-center"
             />
@@ -733,7 +734,8 @@ export default function InventoryPage() {
                   type="number"
                   min="0"
                   required
-                  value={editProdCost}
+                  placeholder="e.g. 10000"
+                  value={editProdCost || ''}
                   onChange={(e) => setEditProdCost(e.target.value)}
                   className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
                 />
@@ -765,7 +767,8 @@ export default function InventoryPage() {
                   type="number"
                   min="0"
                   required
-                  value={editProdPrice}
+                  placeholder="e.g. 12000"
+                  value={editProdPrice || ''}
                   onChange={(e) => setEditProdPrice(e.target.value)}
                   className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
                 />
@@ -804,6 +807,7 @@ export default function InventoryPage() {
                 label="Low Stock Threshold"
                 type="number"
                 min="1"
+                placeholder="e.g. 5"
                 value={editProdThreshold}
                 onChange={(e) => setEditProdThreshold(e.target.value)}
               />
@@ -1071,6 +1075,7 @@ export default function InventoryPage() {
                 <input
                   type="number"
                   min="1"
+                  placeholder="e.g. 5"
                   value={newProdThreshold}
                   onChange={(e) => setNewProdThreshold(e.target.value)}
                   className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium"

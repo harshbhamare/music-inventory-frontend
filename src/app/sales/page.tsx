@@ -157,7 +157,7 @@ export default function SalesPage() {
   const [editNotes, setEditNotes] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
   const [editDownPayment, setEditDownPayment] = useState<number>(0);
-  const [editEmiTenureMonths, setEditEmiTenureMonths] = useState<number>(6);
+  const [editEmiTenureMonths, setEditEmiTenureMonths] = useState<number>(0);
   const [editLineItems, setEditLineItems] = useState<
     Array<{
       product: string;
@@ -789,7 +789,7 @@ export default function SalesPage() {
     setEditNotes(sale.notes || '');
     setEditRemarks(sale.remarks || '');
     setEditDownPayment(Math.round(sale.downPayment || 0));
-    setEditEmiTenureMonths(sale.emiTenureMonths || 6);
+    setEditEmiTenureMonths(sale.emiTenureMonths || 0);
 
     const items = (sale.lineItems || []).map((li: any) => ({
       product: (li.product as any)?._id || li.product,
@@ -1566,19 +1566,19 @@ export default function SalesPage() {
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <label className="text-[10px] text-slate-500">Qty</label>
-                            <input type="number" min="1" max={item.product.availableForSale} value={item.quantity}
+                            <input type="number" min="1" max={item.product.availableForSale} placeholder="Qty" value={item.quantity || ''}
                               onChange={(e) => handleCartItemChange(idx, 'quantity', parseInt(e.target.value, 10) || 1)}
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-center font-bold" />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-500">Unit Price (₹)</label>
-                            <input type="number" min="0" value={item.unitPrice}
+                            <input type="number" min="0" placeholder="Price" value={item.unitPrice || ''}
                               onChange={(e) => handleCartItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right font-semibold" />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-500">Discount (₹)</label>
-                            <input type="number" min="0" value={item.discount}
+                            <input type="number" min="0" placeholder="0" value={item.discount || ''}
                               onChange={(e) => handleCartItemChange(idx, 'discount', parseFloat(e.target.value) || 0)}
                               className="w-full h-7 px-2 rounded border border-slate-300 dark:border-slate-800 bg-transparent text-right text-emerald-500 font-semibold" />
                           </div>
@@ -1645,7 +1645,8 @@ export default function SalesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-400 mb-1">Down Payment (₹) *</label>
-                      <input type="number" min="0" max={grandTotal} value={downPayment}
+                      <input type="number" min="0" max={grandTotal} value={downPayment || ''}
+                        placeholder="e.g. 5000"
                         onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
                         className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right" />
                       <span className="text-[10px] text-slate-400 block mt-1">Paid at POS checkout</span>
@@ -2245,7 +2246,8 @@ export default function SalesPage() {
                       min="0"
                       step="any"
                       required
-                      value={emiPaymentAmount}
+                      value={emiPaymentAmount || ''}
+                      placeholder="Enter amount"
                       onChange={(e) => setEmiPaymentAmount(Math.round(parseFloat(e.target.value) || 0))}
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
                     />
@@ -2648,7 +2650,7 @@ export default function SalesPage() {
                           min="0"
                           step="any"
                           placeholder="0"
-                          value={li.unitPrice}
+                          value={li.unitPrice || ''}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].unitPrice = parseFloat(e.target.value) || 0;
@@ -2666,7 +2668,7 @@ export default function SalesPage() {
                           min="0"
                           step="any"
                           placeholder="0"
-                          value={li.discount}
+                          value={li.discount || ''}
                           onChange={(e) => {
                             const updated = [...editLineItems];
                             updated[idx].discount = parseFloat(e.target.value) || 0;
@@ -2748,7 +2750,8 @@ export default function SalesPage() {
                       type="number"
                       min="0"
                       step="any"
-                      value={editDownPayment}
+                      value={editDownPayment || ''}
+                      placeholder="e.g. 5000"
                       onChange={(e) => setEditDownPayment(Math.round(parseFloat(e.target.value) || 0))}
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-right font-mono text-emerald-600"
                     />
@@ -2761,8 +2764,9 @@ export default function SalesPage() {
                       type="number"
                       min="1"
                       max="36"
-                      value={editEmiTenureMonths}
-                      onChange={(e) => setEditEmiTenureMonths(parseInt(e.target.value) || 6)}
+                      placeholder="e.g. 12"
+                      value={editEmiTenureMonths === 0 ? '' : editEmiTenureMonths}
+                      onChange={(e) => setEditEmiTenureMonths(parseInt(e.target.value) || 0)}
                       className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-center font-mono"
                     />
                   </div>
@@ -2893,7 +2897,8 @@ export default function SalesPage() {
                 min="0"
                 step="any"
                 required
-                value={adjustAmountDue}
+                value={adjustAmountDue || ''}
+                placeholder="Enter amount due"
                 onChange={(e) => setAdjustAmountDue(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
                 className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white"
               />
@@ -2977,7 +2982,8 @@ export default function SalesPage() {
                   min="0"
                   step="any"
                   required
-                  value={editEmiAmountPaid}
+                  value={editEmiAmountPaid || ''}
+                  placeholder="Enter paid amount"
                   onChange={(e) => setEditEmiAmountPaid(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-emerald-500 text-right"
                 />
@@ -2992,7 +2998,8 @@ export default function SalesPage() {
                   min="0"
                   step="any"
                   required
-                  value={editEmiAmountDue}
+                  value={editEmiAmountDue || ''}
+                  placeholder="Enter amount due"
                   onChange={(e) => setEditEmiAmountDue(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-amber-500 text-right"
                 />
@@ -3070,7 +3077,8 @@ export default function SalesPage() {
               min="0"
               step="any"
               required
-              value={newEmiMonthAmount}
+              value={newEmiMonthAmount || ''}
+              placeholder="e.g. 1500"
               onChange={(e) => setNewEmiMonthAmount(Math.max(0, Math.round(parseFloat(e.target.value) || 0)))}
               className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono font-bold text-amber-500 text-right"
             />

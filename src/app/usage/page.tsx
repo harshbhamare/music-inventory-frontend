@@ -844,7 +844,7 @@ export default function UsagePage() {
   const [editCustomerPhone, setEditCustomerPhone] = useState('');
   const [editCustomerEmail, setEditCustomerEmail] = useState('');
   const [editLockInPeriodMonths, setEditLockInPeriodMonths] = useState<number>(3);
-  const [editMonthlyRent, setEditMonthlyRent] = useState<number>(1500);
+  const [editMonthlyRent, setEditMonthlyRent] = useState<number>(0);
   const [editSecurityDeposit, setEditSecurityDeposit] = useState<number>(0);
   const [editAgreementNotes, setEditAgreementNotes] = useState('');
   const [editPayAllNow, setEditPayAllNow] = useState(false);
@@ -862,7 +862,7 @@ export default function UsagePage() {
     // Ensure lock-in tenure is at least the current length of scheduled monthly payments
     const currentScheduleLength = (usage.monthlyPayments || []).length;
     setEditLockInPeriodMonths(Math.max(usage.lockInPeriodMonths || 3, currentScheduleLength));
-    setEditMonthlyRent(usage.monthlyRent || 1500);
+    setEditMonthlyRent(usage.monthlyRent || 0);
     setEditSecurityDeposit(usage.securityDeposit || 0);
     setEditAgreementNotes(usage.notes || '');
     setEditPayAllNow(false);
@@ -2245,7 +2245,8 @@ export default function UsagePage() {
                             type="number"
                             min="1"
                             required
-                            value={paymentAmount}
+                            value={paymentAmount || ''}
+                            placeholder="Enter amount"
                             onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
                             className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
                           />
@@ -2547,7 +2548,8 @@ export default function UsagePage() {
                   type="number"
                   min="0"
                   required
-                  value={editAmountDue}
+                  value={editAmountDue || ''}
+                  placeholder="Enter amount due"
                   onChange={(e) => setEditAmountDue(parseFloat(e.target.value) || 0)}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
                 />
@@ -2561,7 +2563,8 @@ export default function UsagePage() {
                   type="number"
                   min="0"
                   required
-                  value={editAmountPaid}
+                  value={editAmountPaid || ''}
+                  placeholder="Enter paid amount"
                   onChange={(e) => setEditAmountPaid(parseFloat(e.target.value) || 0)}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-emerald-500 text-right"
                 />
@@ -2696,7 +2699,8 @@ export default function UsagePage() {
                 type="number"
                 min="0"
                 required
-                value={adjustAmountDue}
+                value={adjustAmountDue || ''}
+                placeholder="Enter new rent amount"
                 onChange={(e) => setAdjustAmountDue(parseFloat(e.target.value) || 0)}
                 className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
               />
@@ -3093,13 +3097,13 @@ export default function UsagePage() {
                         type="number"
                         min="0"
                         max={depositBal}
-                        value={refundDeductionAmount}
+                        value={refundDeductionAmount || ''}
+                        placeholder="0 — leave blank if full refund"
                         onChange={(e) =>
                           setRefundDeductionAmount(
                             Math.min(depositBal, Math.max(0, parseFloat(e.target.value) || 0))
                           )
                         }
-                        placeholder="0"
                         className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-right font-mono font-bold text-rose-500"
                       />
                     </div>
@@ -3488,7 +3492,8 @@ export default function UsagePage() {
                     type="number"
                     min="0"
                     required
-                    value={editMonthlyRent}
+                    placeholder="e.g. 1500"
+                    value={editMonthlyRent || ''}
                     onChange={(e) => setEditMonthlyRent(parseFloat(e.target.value) || 0)}
                     className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-amber-500 text-right"
                   />
@@ -3501,7 +3506,8 @@ export default function UsagePage() {
                   <input
                     type="number"
                     min="0"
-                    value={editSecurityDeposit}
+                    placeholder="e.g. 5000"
+                    value={editSecurityDeposit || ''}
                     onChange={(e) => setEditSecurityDeposit(parseFloat(e.target.value) || 0)}
                     className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-indigo-400 text-right"
                   />

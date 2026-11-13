@@ -65,8 +65,8 @@ export default function NewRentalPage() {
   });
 
   const [lockInPeriodMonths, setLockInPeriodMonths] = useState<number>(3);
-  const [monthlyRent, setMonthlyRent] = useState<number>(1500);
-  const [securityDeposit, setSecurityDeposit] = useState<number>(5000);
+  const [monthlyRent, setMonthlyRent] = useState<number>(0);
+  const [securityDeposit, setSecurityDeposit] = useState<number>(0);
   const [depositMode, setDepositMode] = useState<boolean>(false);
   const [depositPaymentMethod, setDepositPaymentMethod] = useState<'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER'>('UPI');
   const [depositTransactionRef, setDepositTransactionRef] = useState<string>('');
@@ -561,7 +561,8 @@ export default function NewRentalPage() {
                     type="number"
                     min="0"
                     required
-                    value={monthlyRent}
+                    placeholder="e.g. 1500"
+                    value={monthlyRent || ''}
                     onChange={(e) => setMonthlyRent(parseFloat(e.target.value) || 0)}
                     className="w-full h-10 px-3 text-sm font-bold font-mono text-amber-500 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-right"
                   />
@@ -574,7 +575,8 @@ export default function NewRentalPage() {
                   <input
                     type="number"
                     min="0"
-                    value={securityDeposit}
+                    placeholder="e.g. 5000"
+                    value={securityDeposit || ''}
                     onChange={(e) => setSecurityDeposit(parseFloat(e.target.value) || 0)}
                     className="w-full h-10 px-3 text-sm font-bold font-mono text-indigo-500 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-right"
                   />

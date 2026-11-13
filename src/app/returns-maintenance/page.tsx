@@ -48,7 +48,7 @@ export default function ReturnsMaintenancePage() {
   const [releaseRecord, setReleaseRecord] = useState<MaintenanceRecord | null>(null);
   const [releaseDisposition, setReleaseDisposition] = useState<'AVAILABLE' | 'QUARANTINED' | 'RETIRED'>('AVAILABLE');
   const [repairDetails, setRepairDetails] = useState('');
-  const [finalCost, setFinalCost] = useState('0');
+  const [finalCost, setFinalCost] = useState('');
   const [releaseError, setReleaseError] = useState('');
   const [isReleasing, setIsReleasing] = useState(false);
 
@@ -57,7 +57,7 @@ export default function ReturnsMaintenancePage() {
   const [adjReason, setAdjReason] = useState('');
   const [adjProductId, setAdjProductId] = useState('');
   const [adjSerialId, setAdjSerialId] = useState('');
-  const [adjDelta, setAdjDelta] = useState(-1);
+  const [adjDelta, setAdjDelta] = useState(0);
   const [adjError, setAdjError] = useState('');
   const [adjSuccess, setAdjSuccess] = useState('');
   const [isSubmittingAdj, setIsSubmittingAdj] = useState(false);
@@ -137,7 +137,7 @@ export default function ReturnsMaintenancePage() {
 
       setReleaseRecord(null);
       setRepairDetails('');
-      setFinalCost('0');
+      setFinalCost('');
       fetchData();
     } catch (err: any) {
       setReleaseError(err.message || 'Failed to release maintenance record.');
@@ -339,7 +339,7 @@ export default function ReturnsMaintenancePage() {
                                 variant="default"
                                 onClick={() => {
                                   setReleaseRecord(rec);
-                                  setFinalCost(String(rec.cost || 0));
+                                  setFinalCost(rec.cost ? String(rec.cost) : '');
                                 }}
                                 className="h-7 text-[11px] font-bold"
                               >
@@ -552,7 +552,8 @@ export default function ReturnsMaintenancePage() {
                 label="Quantity Delta (e.g. -1 for loss, +2 for found stock) *"
                 type="number"
                 required
-                value={adjDelta}
+                placeholder="e.g. -1"
+                value={adjDelta === 0 ? '' : adjDelta}
                 onChange={(e) => setAdjDelta(parseInt(e.target.value, 10) || 0)}
               />
 
@@ -615,6 +616,7 @@ export default function ReturnsMaintenancePage() {
               label="Actual Repair Cost (₹)"
               type="number"
               min="0"
+              placeholder="e.g. 1500"
               value={finalCost}
               onChange={(e) => setFinalCost(e.target.value)}
             />

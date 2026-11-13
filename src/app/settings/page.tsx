@@ -91,8 +91,8 @@ export default function SettingsPage() {
   const [stateName, setStateName] = useState('Maharashtra');
   const [stateCode, setStateCode] = useState('27');
   const [currencySymbol, setCurrencySymbol] = useState('₹');
-  const [threshold, setThreshold] = useState('3');
-  const [lowStockDefault, setLowStockDefault] = useState('5');
+  const [threshold, setThreshold] = useState('');
+  const [lowStockDefault, setLowStockDefault] = useState('');
   const [timeZone, setTimeZone] = useState('Asia/Kolkata');
 
   useEffect(() => {
@@ -137,8 +137,8 @@ export default function SettingsPage() {
         setStateName(s.stateName || 'Maharashtra');
         setStateCode(s.stateCode || '27');
         setCurrencySymbol(s.currencySymbol || '₹');
-        setThreshold(String(s.managerApprovalThresholdValue ?? 3));
-        setLowStockDefault(String(s.lowStockAlertThresholdDefault ?? 5));
+        setThreshold(s.managerApprovalThresholdValue != null ? String(s.managerApprovalThresholdValue) : '');
+        setLowStockDefault(s.lowStockAlertThresholdDefault != null ? String(s.lowStockAlertThresholdDefault) : '');
         setTimeZone(s.timeZone || 'Asia/Kolkata');
       }
 
@@ -738,6 +738,7 @@ export default function SettingsPage() {
                 label="Superadmin Approval Threshold (Units)"
                 type="number"
                 min="1"
+                placeholder="e.g. 3"
                 disabled={!canManageSettings()}
                 helperText="Manual count adjustments exceeding this need Superadmin sign-off"
                 value={threshold}
@@ -748,6 +749,7 @@ export default function SettingsPage() {
                 label="Default Low Stock Safety Threshold"
                 type="number"
                 min="1"
+                placeholder="e.g. 5"
                 disabled={!canManageSettings()}
                 helperText="Trigger alert when available units drop to or below this"
                 value={lowStockDefault}

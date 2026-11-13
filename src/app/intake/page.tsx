@@ -806,7 +806,8 @@ export default function IntakePage() {
                           type="number"
                           min="1"
                           required
-                          value={line.quantity}
+                          placeholder="e.g. 5"
+                          value={line.quantity || ''}
                           onChange={(e) => handleQuantityChange(idx, parseInt(e.target.value, 10) || 1)}
                           className="w-full h-9 px-2 text-xs font-bold text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-amber-500"
                         />
@@ -822,7 +823,8 @@ export default function IntakePage() {
                           min="0"
                           step="0.01"
                           required
-                          value={line.unitCost}
+                          placeholder="Purchase cost"
+                          value={line.unitCost || ''}
                           onChange={(e) => handleUnitCostChange(idx, parseFloat(e.target.value) || 0)}
                           className="w-full h-9 px-2 text-xs font-semibold text-right rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950"
                         />
@@ -858,7 +860,7 @@ export default function IntakePage() {
                           step="0.01"
                           required
                           placeholder="Retail MRP"
-                          value={line.sellingPrice}
+                          value={line.sellingPrice || ''}
                           onChange={(e) => handleSellingPriceChange(idx, parseFloat(e.target.value) || 0)}
                           className="w-full h-9 px-2 text-xs font-bold text-right rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-emerald-600 dark:text-emerald-400"
                         />
@@ -1208,7 +1210,8 @@ export default function IntakePage() {
                     <input
                       type="number"
                       min="0"
-                      value={line.quantityReceived}
+                      placeholder="e.g. 10"
+                      value={line.quantityReceived || ''}
                       onChange={(e) =>
                         handleLegacyReceiveQuantityChange(idx, parseInt(e.target.value, 10) || 0)
                       }
