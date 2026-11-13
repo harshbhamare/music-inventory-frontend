@@ -496,7 +496,14 @@ export default function InventoryPage() {
                         </td>
                         <td className="py-3 px-4 text-center">
                           {(() => {
-                            const avail = p.availableForSale ?? 0;
+                            const avail = Math.max(0, p.availableForSale ?? 0);
+                            const onHandRaw = Math.max(0, sq.onHand || 0);
+                            // Never-stocked catalog products: show neutral dash instead of red "0"
+                            if (onHandRaw === 0) {
+                              return (
+                                <span className="text-xs text-slate-400 dark:text-slate-500 italic">—</span>
+                              );
+                            }
                             const isOut = avail === 0;
                             const isLow = p.isLowStock && !isOut;
                             if (isOut) {
@@ -530,11 +537,11 @@ export default function InventoryPage() {
                               title="Click to directly adjust counted on-hand stock"
                               className="font-mono font-bold text-xs px-2.5 py-1 rounded-md border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 hover:border-amber-500 hover:text-amber-500 transition-colors"
                             >
-                              {sq.onHand} {p.unitOfMeasure || 'pcs'}
+                              {Math.max(0, sq.onHand)} {p.unitOfMeasure || 'pcs'}
                             </button>
                           ) : (
                             <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
-                              {sq.onHand} {p.unitOfMeasure || 'pcs'}
+                              {Math.max(0, sq.onHand)} {p.unitOfMeasure || 'pcs'}
                             </span>
                           )}
                         </td>
