@@ -43,6 +43,7 @@ import {
   Zap,
   ArrowRight,
   X,
+  MoreVertical,
 } from 'lucide-react';
 import { TaxInvoiceModal, downloadInvoicePdf } from '@/components/sales/TaxInvoiceModal';
 
@@ -202,6 +203,14 @@ export default function SalesPage() {
     }>
   >([]);
 
+  // ── Delete Sale Modal state ───────────────────────────────────────────────
+  const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // ── Kebab (three-dots) menu open state ─────────────────────────────────────
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
     try {
@@ -296,6 +305,30 @@ export default function SalesPage() {
       setReturnError(err.message || 'Failed to process the return.');
     } finally {
       setIsReturning(false);
+    }
+  };
+
+  // ── Open Delete modal ─────────────────────────────────────────────────────
+  const openDeleteModal = (sale: Sale) => {
+    setOpenMenuId(null);
+    setDeletingSale(sale);
+    setDeleteError('');
+  };
+
+  // ── Submit delete ──────────────────────────────────────────────────────────
+  const handleDeleteSale = async () => {
+    if (!deletingSale) return;
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/sales/${deletingSale._id}`);
+      setSales((prev) => prev.filter((s) => s._id !== deletingSale._id));
+      setDeletingSale(null);
+      fetchSales();
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete the sale.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1157,27 +1190,25 @@ export default function SalesPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold uppercase tracking-wider">
-                  <th className="py-3 px-4">Invoice No</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Sale Type</th>
-                  <th className="py-3 px-4">Status &amp; Dues</th>
-                  <th className="py-3 px-4">Items Sold</th>
-                  <th className="py-3 px-4 text-right">Grand Total</th>
-                  <th className="py-3 px-4">Sold By</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
+                  <th className="py-3 px-3">Invoice</th>
+                  <th className="py-3 px-3">Customer</th>
+                  <th className="py-3 px-3">Type &amp; Status</th>
+                  <th className="py-3 px-3">Items Sold</th>
+                  <th className="py-3 px-3 text-right">Total</th>
+                  <th className="py-3 px-3">Staff / Date</th>
+                  <th className="py-3 px-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       Loading sales transactions...
                     </td>
                   </tr>
                 ) : sales.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-500">
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
                       {searchQuery || saleFilter !== 'ALL' ? 'No sales match the current filter.' : 'No sales recorded yet.'}
                     </td>
                   </tr>
@@ -1186,66 +1217,52 @@ export default function SalesPage() {
                     const isEmi = sale.isEmi || sale.saleType === 'EMI';
                     const emiDue = sale.totalEmiDue ?? 0;
                     const isEmiFullySettled = isEmi && emiDue <= 0;
+                    const isProcessed = sale.saleStatus === 'CANCELLED' || sale.saleStatus === 'RETURNED';
 
                     return (
                       <tr key={sale._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                        <td className="py-3 px-4 font-mono font-bold text-amber-500">
+                        <td className="py-2.5 px-3 font-mono font-bold text-amber-500 whitespace-nowrap">
                           {sale.invoiceNumber}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-3">
                           <div className="font-semibold text-slate-900 dark:text-white">
                             {sale.customerName}
                           </div>
                           <div className="text-[11px] text-slate-400 flex items-center gap-1">
                             <span>{sale.customerPhone || 'No Phone'}</span>
-                            {sale.customerEmail && (
-                              <>
-                                <span>&bull;</span>
-                                <span className="truncate max-w-[120px]">{sale.customerEmail}</span>
-                              </>
-                            )}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
-                          {isEmi ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                <CreditCard className="h-3 w-3" />
-                                <span>EMI Plan ({sale.emiTenureMonths || 6} Mo)</span>
-                              </span>
-                              <div className="text-[10px] text-slate-400">
-                                Down: {formatCurrency(sale.downPayment || 0)}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              <span>Direct Sale</span>
-                              <span className="text-slate-400">({sale.paymentMethod})</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-3">
                           <div className="space-y-1">
-                            <Badge
-                              variant={sale.saleStatus === 'CONFIRMED' ? 'success' : 'secondary'}
-                              className="text-[10px]"
-                            >
-                              {sale.saleStatus}
-                            </Badge>
-                            {isEmi && (
-                              <div className="text-[10px]">
-                                {isEmiFullySettled ? (
-                                  <span className="text-emerald-500 font-bold">EMI Fully Paid</span>
-                                ) : (
-                                  <span className="text-rose-500 font-bold">
-                                    Due: {formatCurrency(emiDue)}
-                                  </span>
-                                )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isEmi ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                                  <CreditCard className="h-3 w-3" />
+                                  EMI ({sale.emiTenureMonths || 6}mo)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                  Direct
+                                </span>
+                              )}
+                              <Badge
+                                variant={sale.saleStatus === 'CONFIRMED' ? 'success' : 'secondary'}
+                                className="text-[9px] px-1.5 py-0"
+                              >
+                                {sale.saleStatus}
+                              </Badge>
+                            </div>
+                            {isEmi && !isEmiFullySettled && (
+                              <div className="text-[10px] text-rose-500 font-bold">
+                                Due: {formatCurrency(emiDue)}
                               </div>
+                            )}
+                            {isEmi && isEmiFullySettled && (
+                              <div className="text-[10px] text-emerald-500 font-bold">Fully Paid</div>
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-3">
                           <div className="space-y-0.5">
                             {sale.lineItems?.map((li, idx) => {
                               const pName = (li.product as any)?.name || (li as any).productName || 'Musical Product';
@@ -1269,34 +1286,33 @@ export default function SalesPage() {
                             })}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-right font-extrabold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-3 text-right font-extrabold text-slate-900 dark:text-white whitespace-nowrap">
                           {formatCurrency(sale.grandTotal)}
                         </td>
-                        <td className="py-3 px-4 text-slate-500">{sale.soldBy?.name || 'Staff'}</td>
-                        <td className="py-3 px-4 text-slate-500">{formatDate(sale.createdAt)}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center justify-center gap-2">
+                        <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                          <div className="font-medium text-xs">{sale.soldBy?.name || 'Staff'}</div>
+                          <div className="text-[10px] text-slate-400">{formatDate(sale.createdAt)}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center justify-center gap-1.5">
 
-                            {/* ── Primary actions: Invoice + PDF ── */}
-                            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs divide-x divide-slate-200 dark:divide-slate-700">
-                              {/* Tax Invoice */}
+                            {/* ── Primary: Invoice + PDF (always visible) ── */}
+                            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs divide-x divide-slate-200 dark:divide-slate-700 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => setActiveInvoice(sale)}
                                 title="View Tax Invoice"
-                                className="group relative flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a6eb7] hover:bg-[#155a96] text-white text-[11px] font-bold transition-colors"
+                                className="flex items-center gap-1 px-2 py-1.5 bg-[#1a6eb7] hover:bg-[#155a96] text-white text-[11px] font-bold transition-colors"
                               >
                                 <Receipt className="h-3.5 w-3.5 shrink-0" />
-                                <span>Invoice</span>
+                                <span className="hidden sm:inline">Invoice</span>
                               </button>
-
-                              {/* Save PDF */}
                               <button
                                 type="button"
                                 disabled={downloadingId === sale._id}
                                 onClick={() => handleQuickDownloadPdf(sale)}
                                 title="Download PDF"
-                                className="flex items-center justify-center w-8 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors disabled:opacity-40"
+                                className="flex items-center justify-center w-7 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors disabled:opacity-40"
                               >
                                 {downloadingId === sale._id ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
@@ -1306,80 +1322,97 @@ export default function SalesPage() {
                               </button>
                             </div>
 
-                            {/* ── EMI Ledger (only for EMI sales) ── */}
+                            {/* ── EMI Ledger (EMI sales only, inline) ── */}
                             {isEmi && (
                               <button
                                 type="button"
                                 onClick={() => openEmiLedger(sale)}
-                                title="EMI Ledger — month-by-month installment tracker"
-                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors shadow-xs ${
+                                title="EMI Ledger"
+                                className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-bold transition-colors shadow-xs shrink-0 ${
                                   isEmiFullySettled
                                     ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
                                     : 'border-amber-400/50 dark:border-amber-600/40 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40'
                                 }`}
                               >
                                 <CalendarCheck className="h-3.5 w-3.5 shrink-0" />
-                                <span>EMI</span>
                                 {isEmiFullySettled ? (
                                   <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                                 ) : (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-extrabold min-w-[14px] h-[14px] px-1 leading-none">
-                                    !
-                                  </span>
+                                  <span className="inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-extrabold min-w-[14px] h-[14px] px-1 leading-none">!</span>
                                 )}
                               </button>
                             )}
 
-                            {/* ── Edit (manager/admin only) ── */}
+                            {/* ── Kebab menu (manager/admin) ── */}
                             {canEditBills && (
-                              <button
-                                type="button"
-                                onClick={() => openEditSaleModal(sale)}
-                                title="Edit bill details"
-                                className="flex items-center justify-center w-7 h-7 rounded-lg border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors shadow-xs"
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="relative shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenMenuId(openMenuId === sale._id ? null : sale._id)}
+                                  title="More actions"
+                                  className="flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors shadow-xs"
+                                >
+                                  <MoreVertical className="h-3.5 w-3.5" />
+                                </button>
+                                {openMenuId === sale._id && (
+                                  <>
+                                    {/* Click-away overlay */}
+                                    <div
+                                      className="fixed inset-0 z-40"
+                                      onClick={() => setOpenMenuId(null)}
+                                    />
+                                    {/* Dropdown menu */}
+                                    <div className="absolute right-0 top-8 z-50 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg py-1 text-xs">
+                                      {/* Edit */}
+                                      <button
+                                        type="button"
+                                        onClick={() => { setOpenMenuId(null); openEditSaleModal(sale); }}
+                                        className="flex items-center gap-2 w-full px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium"
+                                      >
+                                        <Edit className="h-3.5 w-3.5 text-blue-500" />
+                                        Edit Bill
+                                      </button>
+                                      {/* Return */}
+                                      {sale.saleStatus === 'CONFIRMED' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setOpenMenuId(null); openReturnModal(sale); }}
+                                          className="flex items-center gap-2 w-full px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium"
+                                        >
+                                          <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+                                          Process Return
+                                        </button>
+                                      )}
+                                      {/* Cancel */}
+                                      {sale.saleStatus === 'CONFIRMED' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setOpenMenuId(null); openCancelModal(sale); }}
+                                          className="flex items-center gap-2 w-full px-3 py-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium"
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                          Cancel Sale
+                                        </button>
+                                      )}
+                                      {/* Delete (SuperAdmin only, only on processed sales) */}
+                                      {isSuperAdmin() && isProcessed && (
+                                        <>
+                                          <div className="border-t border-slate-200 dark:border-slate-700 my-1" />
+                                          <button
+                                            type="button"
+                                            onClick={() => openDeleteModal(sale)}
+                                            className="flex items-center gap-2 w-full px-3 py-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Delete Record
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             )}
-
-                            {/* ── Return (manager/admin, only on CONFIRMED sales) ── */}
-                            {canEditBills && sale.saleStatus === 'CONFIRMED' && (
-                              <button
-                                type="button"
-                                onClick={() => openReturnModal(sale)}
-                                title="Process customer return"
-                                className="flex items-center gap-1 px-2 py-1 h-7 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors shadow-xs text-[11px] font-bold"
-                              >
-                                <RotateCcw className="h-3 w-3 shrink-0" />
-                                <span>Return</span>
-                              </button>
-                            )}
-
-                            {/* ── Cancel (manager/admin, only on CONFIRMED sales) ── */}
-                            {canEditBills && sale.saleStatus === 'CONFIRMED' && (
-                              <button
-                                type="button"
-                                onClick={() => openCancelModal(sale)}
-                                title="Cancel this sale"
-                                className="flex items-center gap-1 px-2 py-1 h-7 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/40 transition-colors shadow-xs text-[11px] font-bold"
-                              >
-                                <X className="h-3 w-3 shrink-0" />
-                                <span>Cancel</span>
-                              </button>
-                            )}
-
-                            {/* ── Status badge for already cancelled/returned ── */}
-                            {(sale.saleStatus === 'CANCELLED' || sale.saleStatus === 'RETURNED') && (
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                                sale.saleStatus === 'CANCELLED'
-                                  ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/50'
-                                  : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/50'
-                              }`}>
-                                {sale.saleStatus === 'CANCELLED' ? <X className="h-2.5 w-2.5" /> : <RotateCcw className="h-2.5 w-2.5" />}
-                                {sale.saleStatus}
-                              </span>
-                            )}
-
                           </div>
                         </td>
                       </tr>
@@ -3475,6 +3508,66 @@ export default function SalesPage() {
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Confirm Return
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Delete Sale Modal (SuperAdmin only) ──────────────────────────── */}
+      <Modal
+        isOpen={!!deletingSale}
+        onClose={() => setDeletingSale(null)}
+        title={`Delete Sale — ${deletingSale?.invoiceNumber || ''}`}
+        description="This will permanently remove the sale record from the database. This action cannot be undone."
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          {deleteError && (
+            <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs font-semibold text-rose-500">
+              {deleteError}
+            </div>
+          )}
+
+          <div className="rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Invoice:</span>
+              <span className="font-mono font-bold text-amber-500">{deletingSale?.invoiceNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Customer:</span>
+              <span className="font-semibold">{deletingSale?.customerName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Status:</span>
+              <span className="font-semibold">{deletingSale?.saleStatus}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Amount:</span>
+              <span className="font-bold">{formatCurrency(deletingSale?.grandTotal ?? 0)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 p-3">
+            <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-rose-600 dark:text-rose-400">
+              This sale is already {deletingSale?.saleStatus?.toLowerCase()} and stock has been restored.
+              Deleting removes the invoice record, associated returns, and audit trail permanently.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="outline" size="sm" onClick={() => setDeletingSale(null)}>
+              Go Back
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              isLoading={isDeleting}
+              onClick={handleDeleteSale}
+              className="gap-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold border-0"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Permanently Delete
             </Button>
           </div>
         </div>
