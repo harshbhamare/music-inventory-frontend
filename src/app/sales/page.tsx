@@ -178,6 +178,30 @@ export default function SalesPage() {
   const [pagination, setPagination] = useState<{ total: number; totalPages: number } | null>(null);
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Cancel Sale Modal state ───────────────────────────────────────────────
+  const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  // ── Return Sale Modal state ───────────────────────────────────────────────
+  const [returningSale, setReturningSale] = useState<Sale | null>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [isReturning, setIsReturning] = useState(false);
+  const [returnError, setReturnError] = useState('');
+  // Per-line-item return details
+  const [returnItems, setReturnItems] = useState<
+    Array<{
+      product: string;
+      productName: string;
+      maxQty: number;
+      quantity: number;
+      refundAmount: number;
+      disposition: 'RETURN_TO_AVAILABLE' | 'QUARANTINE_INSPECTION' | 'MAINTENANCE';
+      condition: string;
+    }>
+  >([]);
+
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
     try {
@@ -187,6 +211,91 @@ export default function SalesPage() {
       window.open(getApiUrl(`/sales/${sale._id}/pdf`), '_blank');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  // ── Open Cancel modal ─────────────────────────────────────────────────────
+  const openCancelModal = (sale: Sale) => {
+    setCancellingSale(sale);
+    setCancelReason('');
+    setCancelError('');
+  };
+
+  // ── Submit cancel ─────────────────────────────────────────────────────────
+  const handleCancelSale = async () => {
+    if (!cancellingSale) return;
+    if (!cancelReason.trim()) {
+      setCancelError('Please provide a reason for cancellation.');
+      return;
+    }
+    setIsCancelling(true);
+    setCancelError('');
+    try {
+      const res = await api.patch<{ success: boolean; data: { sale: Sale } }>(
+        `/sales/${cancellingSale._id}/cancel`,
+        { reason: cancelReason.trim() }
+      );
+      const updated: Sale | undefined = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
+      if (updated && updated._id) {
+        setSales((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
+      }
+      setCancellingSale(null);
+      fetchSales();
+    } catch (err: any) {
+      setCancelError(err.message || 'Failed to cancel the sale.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  // ── Open Return modal ─────────────────────────────────────────────────────
+  const openReturnModal = (sale: Sale) => {
+    setReturningSale(sale);
+    setReturnReason('');
+    setReturnError('');
+    // Pre-populate one entry per line item
+    const items = (sale.lineItems || []).map((li: any) => ({
+      product: (li.product as any)?._id || li.product,
+      productName: (li.product as any)?.name || 'Product',
+      maxQty: li.quantity || 1,
+      quantity: li.quantity || 1,
+      refundAmount: li.total || 0,
+      disposition: 'RETURN_TO_AVAILABLE' as const,
+      condition: 'GOOD',
+    }));
+    setReturnItems(items);
+  };
+
+  // ── Submit return ─────────────────────────────────────────────────────────
+  const handleReturnSale = async () => {
+    if (!returningSale) return;
+    if (!returnReason.trim()) {
+      setReturnError('Please provide a reason for the return.');
+      return;
+    }
+    if (returnItems.some((it) => it.quantity < 1)) {
+      setReturnError('Each returned item must have quantity ≥ 1.');
+      return;
+    }
+    setIsReturning(true);
+    setReturnError('');
+    try {
+      await api.post(`/sales/${returningSale._id}/return`, {
+        reason: returnReason.trim(),
+        items: returnItems.map((it) => ({
+          product: it.product,
+          quantity: it.quantity,
+          refundAmount: it.refundAmount,
+          disposition: it.disposition,
+          condition: it.condition,
+        })),
+      });
+      setReturningSale(null);
+      fetchSales();
+    } catch (err: any) {
+      setReturnError(err.message || 'Failed to process the return.');
+    } finally {
+      setIsReturning(false);
     }
   };
 
@@ -1231,6 +1340,44 @@ export default function SalesPage() {
                               >
                                 <Edit className="h-3.5 w-3.5" />
                               </button>
+                            )}
+
+                            {/* ── Return (manager/admin, only on CONFIRMED sales) ── */}
+                            {canEditBills && sale.saleStatus === 'CONFIRMED' && (
+                              <button
+                                type="button"
+                                onClick={() => openReturnModal(sale)}
+                                title="Process customer return"
+                                className="flex items-center gap-1 px-2 py-1 h-7 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors shadow-xs text-[11px] font-bold"
+                              >
+                                <RotateCcw className="h-3 w-3 shrink-0" />
+                                <span>Return</span>
+                              </button>
+                            )}
+
+                            {/* ── Cancel (manager/admin, only on CONFIRMED sales) ── */}
+                            {canEditBills && sale.saleStatus === 'CONFIRMED' && (
+                              <button
+                                type="button"
+                                onClick={() => openCancelModal(sale)}
+                                title="Cancel this sale"
+                                className="flex items-center gap-1 px-2 py-1 h-7 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/40 transition-colors shadow-xs text-[11px] font-bold"
+                              >
+                                <X className="h-3 w-3 shrink-0" />
+                                <span>Cancel</span>
+                              </button>
+                            )}
+
+                            {/* ── Status badge for already cancelled/returned ── */}
+                            {(sale.saleStatus === 'CANCELLED' || sale.saleStatus === 'RETURNED') && (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                sale.saleStatus === 'CANCELLED'
+                                  ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/50'
+                                  : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/50'
+                              }`}>
+                                {sale.saleStatus === 'CANCELLED' ? <X className="h-2.5 w-2.5" /> : <RotateCcw className="h-2.5 w-2.5" />}
+                                {sale.saleStatus}
+                              </span>
                             )}
 
                           </div>
@@ -3126,6 +3273,212 @@ export default function SalesPage() {
         onClose={() => setActiveInvoice(null)}
         sale={activeInvoice}
       />
+
+      {/* ── Cancel Sale Modal ────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!cancellingSale}
+        onClose={() => setCancellingSale(null)}
+        title={`Cancel Sale — ${cancellingSale?.invoiceNumber || ''}`}
+        description="Cancelling this sale will restore all deducted stock and void any unpaid EMI instalments. This action cannot be undone."
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          {cancelError && (
+            <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs font-semibold text-rose-500">
+              {cancelError}
+            </div>
+          )}
+
+          {/* Sale summary */}
+          <div className="rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Customer:</span>
+              <span className="font-semibold">{cancellingSale?.customerName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Grand Total:</span>
+              <span className="font-bold text-amber-500">{formatCurrency(cancellingSale?.grandTotal ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Items:</span>
+              <span className="font-semibold">{(cancellingSale?.lineItems || []).map((li: any) => `${(li.product as any)?.name || 'Product'} ×${li.quantity}`).join(', ')}</span>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <div className="flex items-start gap-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 p-3">
+            <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-rose-600 dark:text-rose-400">
+              Stock will be restored immediately. If payment was collected, issue a manual refund separately.
+            </p>
+          </div>
+
+          {/* Reason */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+              Cancellation Reason *
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Customer changed mind, duplicate entry, data entry error"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="outline" size="sm" onClick={() => setCancellingSale(null)}>
+              Go Back
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              isLoading={isCancelling}
+              onClick={handleCancelSale}
+              className="gap-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold border-0"
+            >
+              <X className="h-3.5 w-3.5" />
+              Confirm Cancellation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Return Sale Modal ────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!returningSale}
+        onClose={() => setReturningSale(null)}
+        title={`Customer Return — ${returningSale?.invoiceNumber || ''}`}
+        description="Specify the items being returned and their condition. Stock will be restored according to the disposition you choose."
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          {returnError && (
+            <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs font-semibold text-rose-500">
+              {returnError}
+            </div>
+          )}
+
+          {/* Return reason */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+              Return Reason *
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Defective product, customer dissatisfied, wrong item delivered"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              className="w-full h-10 px-3 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400"
+            />
+          </div>
+
+          {/* Per-item return details */}
+          <div className="space-y-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Returned Items
+            </span>
+            {returnItems.map((item, idx) => (
+              <div key={idx} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="font-semibold text-sm text-slate-900 dark:text-white">{item.productName}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {/* Qty */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Return Qty (max {item.maxQty})
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={item.maxQty}
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const updated = [...returnItems];
+                        updated[idx].quantity = Math.min(item.maxQty, Math.max(1, parseInt(e.target.value) || 1));
+                        setReturnItems(updated);
+                      }}
+                      className="w-full h-8 px-2 text-xs font-bold text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  {/* Refund amount */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Refund (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={item.refundAmount || ''}
+                      onChange={(e) => {
+                        const updated = [...returnItems];
+                        updated[idx].refundAmount = parseFloat(e.target.value) || 0;
+                        setReturnItems(updated);
+                      }}
+                      className="w-full h-8 px-2 text-xs font-bold text-right rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  {/* Condition */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Condition
+                    </label>
+                    <select
+                      value={item.condition}
+                      onChange={(e) => {
+                        const updated = [...returnItems];
+                        updated[idx].condition = e.target.value;
+                        setReturnItems(updated);
+                      }}
+                      className="w-full h-8 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    >
+                      <option value="GOOD">Good</option>
+                      <option value="FAIR">Fair</option>
+                      <option value="DAMAGED">Damaged</option>
+                    </select>
+                  </div>
+                  {/* Disposition */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Return To
+                    </label>
+                    <select
+                      value={item.disposition}
+                      onChange={(e) => {
+                        const updated = [...returnItems];
+                        updated[idx].disposition = e.target.value as typeof item.disposition;
+                        setReturnItems(updated);
+                      }}
+                      className="w-full h-8 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    >
+                      <option value="RETURN_TO_AVAILABLE">Back to Stock</option>
+                      <option value="QUARANTINE_INSPECTION">Quarantine / Inspect</option>
+                      <option value="MAINTENANCE">Send to Maintenance</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="outline" size="sm" onClick={() => setReturningSale(null)}>
+              Go Back
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              isLoading={isReturning}
+              onClick={handleReturnSale}
+              className="gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border-0"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Confirm Return
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
