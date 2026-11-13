@@ -169,45 +169,14 @@ export default function SalesPage() {
     }>
   >([]);
 
-  // Filter state for the sales list
+  // Filter + pagination state for the sales list
   type SaleFilterType = 'ALL' | 'EMI_DUE' | 'EMI_PAID' | 'DIRECT';
   const [saleFilter, setSaleFilter] = useState<SaleFilterType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredSales = useMemo(() => {
-    let result = sales;
-
-    // Apply tab filter
-    if (saleFilter === 'EMI_DUE') {
-      result = result.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) > 0);
-    } else if (saleFilter === 'EMI_PAID') {
-      result = result.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) <= 0);
-    } else if (saleFilter === 'DIRECT') {
-      result = result.filter((s) => !s.isEmi && s.saleType !== 'EMI');
-    }
-
-    // Apply search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (s) =>
-          s.invoiceNumber?.toLowerCase().includes(q) ||
-          s.customerName?.toLowerCase().includes(q) ||
-          s.customerPhone?.includes(q) ||
-          s.customerEmail?.toLowerCase().includes(q)
-      );
-    }
-
-    return result;
-  }, [sales, saleFilter, searchQuery]);
-
-  // Counts for filter tab badges
-  const filterCounts = useMemo(() => ({
-    ALL: sales.length,
-    EMI_DUE: sales.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) > 0).length,
-    EMI_PAID: sales.filter((s) => (s.isEmi || s.saleType === 'EMI') && (s.totalEmiDue ?? 0) <= 0).length,
-    DIRECT: sales.filter((s) => !s.isEmi && s.saleType !== 'EMI').length,
-  }), [sales]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const [pagination, setPagination] = useState<{ total: number; totalPages: number } | null>(null);
+  const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
@@ -222,20 +191,45 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
-    fetchSales();
+    fetchSales(1);
     fetchInventoryForSale();
   }, []);
 
-  const fetchSales = async () => {
+  // Re-fetch when filter tab changes (always reset to page 1)
+  useEffect(() => {
+    fetchSales(1);
+  }, [saleFilter]);
+
+  const fetchSales = async (page = currentPage, search = searchQuery) => {
     setIsLoading(true);
     try {
-      const res = await api.get<{ sales: Sale[] }>('/sales');
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', String(PAGE_SIZE));
+      if (search.trim()) params.set('search', search.trim());
+      // Server-side filter tab translation
+      if (saleFilter === 'DIRECT') params.set('saleType', 'DIRECT');
+      else if (saleFilter === 'EMI_DUE') { params.set('saleType', 'EMI'); params.set('emiStatus', 'DUE'); }
+      else if (saleFilter === 'EMI_PAID') { params.set('saleType', 'EMI'); params.set('emiStatus', 'PAID'); }
+
+      const res = await api.get<{ sales: Sale[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/sales?${params.toString()}`);
       setSales(res.sales || []);
+      setPagination(res.pagination ?? null);
+      setCurrentPage(page);
     } catch (err) {
       console.error('Failed to load sales:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Debounced search — fires 400 ms after the user stops typing
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      fetchSales(1, value);
+    }, 400);
   };
 
   const fetchInventoryForSale = async () => {
@@ -1000,25 +994,28 @@ export default function SalesPage() {
               ] as const
             ).map((tab) => {
               const isActive = saleFilter === tab.key;
-              const count = filterCounts[tab.key];
+              // Show total count for active tab (from pagination), dash for inactive
+              const count = isActive && pagination ? pagination.total : null;
               return (
                 <button
                   key={tab.key}
                   type="button"
-                  onClick={() => setSaleFilter(tab.key)}
+                  onClick={() => { setSaleFilter(tab.key); }}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${isActive ? tab.activeClass : tab.inactiveClass}`}
                 >
                   {tab.icon}
                   <span>{tab.label}</span>
-                  <span
-                    className={`min-w-[18px] text-center px-1 py-0 rounded-full text-[10px] font-bold ${
-                      isActive
-                        ? (tab as any).activeBadgeClass ?? 'bg-white/20 text-white'
-                        : (tab as any).badgeClass ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    {count}
-                  </span>
+                  {count !== null && (
+                    <span
+                      className={`min-w-[18px] text-center px-1 py-0 rounded-full text-[10px] font-bold ${
+                        isActive
+                          ? (tab as any).activeBadgeClass ?? 'bg-white/20 text-white'
+                          : (tab as any).badgeClass ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1031,13 +1028,13 @@ export default function SalesPage() {
               type="text"
               placeholder="Search invoice, customer, phone…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
+                onClick={() => { setSearchQuery(''); fetchSales(1, ''); }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 âœ•
@@ -1069,14 +1066,14 @@ export default function SalesPage() {
                       Loading sales transactions...
                     </td>
                   </tr>
-                ) : filteredSales.length === 0 ? (
+                ) : sales.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-500">
-                      {sales.length === 0 ? 'No sales recorded yet.' : 'No sales match the current filter.'}
+                      {searchQuery || saleFilter !== 'ALL' ? 'No sales match the current filter.' : 'No sales recorded yet.'}
                     </td>
                   </tr>
                 ) : (
-                  filteredSales.map((sale) => {
+                  sales.map((sale) => {
                     const isEmi = sale.isEmi || sale.saleType === 'EMI';
                     const emiDue = sale.totalEmiDue ?? 0;
                     const isEmiFullySettled = isEmi && emiDue <= 0;
@@ -1246,6 +1243,95 @@ export default function SalesPage() {
             </table>
           </div>
         </CardContent>
+
+        {/* ── Pagination bar ── */}
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
+            {/* Left: record count */}
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Showing{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, pagination.total)}
+              </span>{' '}
+              of{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-200">{pagination.total}</span>{' '}
+              sales
+            </p>
+
+            {/* Right: page buttons */}
+            <div className="flex items-center gap-1">
+              {/* Prev */}
+              <button
+                type="button"
+                disabled={currentPage === 1 || isLoading}
+                onClick={() => fetchSales(currentPage - 1)}
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                title="Previous page"
+              >
+                ‹
+              </button>
+
+              {/* Page number pills */}
+              {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                .filter(p => {
+                  // Always show first, last, current, and neighbours
+                  return (
+                    p === 1 ||
+                    p === pagination.totalPages ||
+                    Math.abs(p - currentPage) <= 1
+                  );
+                })
+                .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) {
+                    acc.push('…');
+                  }
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === '…' ? (
+                    <span key={`ellipsis-${i}`} className="h-7 w-7 flex items-center justify-center text-slate-400 text-xs">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => fetchSales(p as number)}
+                      className={`h-7 min-w-[28px] px-1.5 flex items-center justify-center rounded-md border text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
+                        p === currentPage
+                          ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+              {/* Next */}
+              <button
+                type="button"
+                disabled={currentPage === pagination.totalPages || isLoading}
+                onClick={() => fetchSales(currentPage + 1)}
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                title="Next page"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Single page record count (no pagination needed) */}
+        {pagination && pagination.totalPages <= 1 && pagination.total > 0 && (
+          <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {pagination.total} record{pagination.total !== 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
       </Card>
 
       {/* POS New Customer Sale Modal */}
