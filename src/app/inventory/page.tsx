@@ -495,15 +495,32 @@ export default function InventoryPage() {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span
-                            className={`text-sm font-extrabold px-2 py-0.5 rounded ${
-                              p.isLowStock
-                                ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
-                                : 'text-emerald-500 font-bold'
-                            }`}
-                          >
-                            {p.availableForSale ?? 0} {p.unitOfMeasure || 'pcs'}
-                          </span>
+                          {(() => {
+                            const avail = p.availableForSale ?? 0;
+                            const isOut = avail === 0;
+                            const isLow = p.isLowStock && !isOut;
+                            if (isOut) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0" />
+                                  0 {p.unitOfMeasure || 'pcs'}
+                                </span>
+                              );
+                            }
+                            if (isLow) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                                  {avail} {p.unitOfMeasure || 'pcs'}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                {avail} {p.unitOfMeasure || 'pcs'}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4 text-center">
                           {canManageCatalogue() ? (
