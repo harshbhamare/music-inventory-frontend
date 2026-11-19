@@ -534,6 +534,25 @@ export interface DashboardMetrics {
   };
   recentMovements: StockMovement[];
   salesTrend: Array<{ _id: string; revenue: number; count: number }>;
+  emiOverview?: {
+    instrumentsOnEmi: number;
+    totalEmiContractValue: number;
+    totalEmiCollected: number;
+    totalEmiPending: number;
+    collectedPercent: number;
+    totalInstallments: number;
+    paidInstallments: number;
+    remainingInstallments: number;
+  };
+  recentSales?: Array<{
+    invoiceNumber: string;
+    customerName: string;
+    grandTotal: number;
+    saleStatus: string;
+    paymentStatus: string;
+    createdAt: string;
+    productName: string;
+  }>;
 }
 
 export interface RentalDueItem {

@@ -211,6 +211,14 @@ export default function SalesPage() {
   // ── Kebab (three-dots) menu open state ─────────────────────────────────────
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // ── Tab counts (fetched once, refreshed after mutations) ───────────────────
+  const [saleCounts, setSaleCounts] = useState<{ ALL: number; EMI_DUE: number; EMI_PAID: number; DIRECT: number }>({
+    ALL: 0,
+    EMI_DUE: 0,
+    EMI_PAID: 0,
+    DIRECT: 0,
+  });
+
   const handleQuickDownloadPdf = async (sale: Sale) => {
     setDownloadingId(sale._id);
     try {
@@ -250,6 +258,7 @@ export default function SalesPage() {
       }
       setCancellingSale(null);
       fetchSales();
+      fetchSaleCounts();
     } catch (err: any) {
       setCancelError(err.message || 'Failed to cancel the sale.');
     } finally {
@@ -301,6 +310,7 @@ export default function SalesPage() {
       });
       setReturningSale(null);
       fetchSales();
+      fetchSaleCounts();
     } catch (err: any) {
       setReturnError(err.message || 'Failed to process the return.');
     } finally {
@@ -325,6 +335,7 @@ export default function SalesPage() {
       setSales((prev) => prev.filter((s) => s._id !== deletingSale._id));
       setDeletingSale(null);
       fetchSales();
+      fetchSaleCounts();
     } catch (err: any) {
       setDeleteError(err.message || 'Failed to delete the sale.');
     } finally {
@@ -334,6 +345,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     fetchSales(1);
+    fetchSaleCounts();
     fetchInventoryForSale();
   }, []);
 
@@ -362,6 +374,22 @@ export default function SalesPage() {
       console.error('Failed to load sales:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch ALL sales (lightweight, just for tab counts) — called on mount and after mutations
+  const fetchSaleCounts = async () => {
+    try {
+      const res = await api.get<{ sales: Sale[]; pagination: { total: number } }>(`/sales?limit=10000`);
+      const all = res.sales || [];
+      setSaleCounts({
+        ALL: all.length,
+        EMI_DUE: all.filter((s: any) => s.isEmi && (s.totalEmiDue ?? 0) > 0).length,
+        EMI_PAID: all.filter((s: any) => s.isEmi && (s.totalEmiDue ?? 0) <= 0).length,
+        DIRECT: all.filter((s: any) => !s.isEmi).length,
+      });
+    } catch {
+      // silently ignore — counts are non-critical
     }
   };
 
@@ -670,6 +698,7 @@ export default function SalesPage() {
       setEmiTenureMonths(6);
       setPosTab('items');
       fetchSales();
+      fetchSaleCounts();
       const created = (res as any)?.sale || (res as any)?.data?.sale || (res as any);
       if (created && created._id) {
         setActiveInvoice(created);
@@ -779,6 +808,7 @@ export default function SalesPage() {
         setEmiReminderFeedback(`EMI payment of ${formatCurrency(emiPaymentAmount)} recorded successfully.`);
       }
       fetchSales();
+      fetchSaleCounts();
 
       // Recalculate next due installment
       const nextDue = (updated.emiPayments || []).find((p) => p.status !== 'PAID');
@@ -1136,8 +1166,7 @@ export default function SalesPage() {
               ] as const
             ).map((tab) => {
               const isActive = saleFilter === tab.key;
-              // Show total count for active tab (from pagination), dash for inactive
-              const count = isActive && pagination ? pagination.total : null;
+              const count = saleCounts[tab.key] ?? 0;
               return (
                 <button
                   key={tab.key}
@@ -1147,17 +1176,15 @@ export default function SalesPage() {
                 >
                   {tab.icon}
                   <span>{tab.label}</span>
-                  {count !== null && (
-                    <span
-                      className={`min-w-[18px] text-center px-1 py-0 rounded-full text-[10px] font-bold ${
-                        isActive
-                          ? (tab as any).activeBadgeClass ?? 'bg-white/20 text-white'
-                          : (tab as any).badgeClass ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  )}
+                  <span
+                    className={`min-w-[18px] text-center px-1 py-0 rounded-full text-[10px] font-bold ${
+                      isActive
+                        ? (tab as any).activeBadgeClass ?? 'bg-white/20 text-white'
+                        : (tab as any).badgeClass ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {count}
+                  </span>
                 </button>
               );
             })}

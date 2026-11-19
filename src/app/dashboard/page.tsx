@@ -1,929 +1,732 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { DashboardMetrics, RentalDuesSummary, RentalDueItem, BusinessAlert } from '@/lib/types';
+import { DashboardMetrics, RentalDuesSummary } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
+  ShoppingCart,
   TrendingUp,
-  TrendingDown,
-  Music2,
-  CreditCard,
+  Layers,
   Package,
-  AlertTriangle,
+  Calendar,
+  ChevronDown,
   RefreshCw,
-  ArrowUpRight,
   ArrowDownRight,
+  ArrowUpRight,
+  CreditCard,
   CheckCircle2,
   Clock,
-  ShoppingCart,
-  Truck,
-  Wrench,
-  Send,
-  ChevronRight,
-  IndianRupee,
-  Shield,
-  BarChart2,
-  Users,
-  Info,
-  Calendar,
-  Layers,
-  HelpCircle,
   AlertCircle,
-  FileSpreadsheet,
+  AlertTriangle,
+  ChevronRight,
+  Box,
+  Music2,
+  BarChart2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { Card, CardContent } from '@/components/ui/Card';
 import {
   ResponsiveContainer,
-  ComposedChart,
-  BarChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 
-export type PeriodFilter = 'today' | 'this_week' | 'this_month' | 'last_month' | 'this_fy' | 'custom';
+// ─── Period helpers ──────────────────────────────────────────────────────────
+export type PeriodKey = 'today' | 'this_week' | 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'custom';
 
+function computeDateRange(period: PeriodKey, customFrom: string, customTo: string): { startDate?: string; endDate?: string } {
+  const now = new Date();
+  if (period === 'today') {
+    const d = new Date(now); d.setHours(0, 0, 0, 0);
+    return { startDate: d.toISOString(), endDate: now.toISOString() };
+  }
+  if (period === 'this_week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    d.setHours(0, 0, 0, 0);
+    return { startDate: d.toISOString(), endDate: now.toISOString() };
+  }
+  if (period === 'this_month') {
+    const d = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    return { startDate: d.toISOString(), endDate: now.toISOString() };
+  }
+  if (period === 'last_month') {
+    const s = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+    const e = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    return { startDate: s.toISOString(), endDate: e.toISOString() };
+  }
+  if (period === 'this_quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    const s = new Date(now.getFullYear(), q * 3, 1, 0, 0, 0, 0);
+    return { startDate: s.toISOString(), endDate: now.toISOString() };
+  }
+  if (period === 'this_year') {
+    const s = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    return { startDate: s.toISOString(), endDate: now.toISOString() };
+  }
+  if (period === 'custom' && customFrom) {
+    const s = new Date(customFrom); s.setHours(0, 0, 0, 0);
+    const e = customTo ? new Date(customTo) : new Date(); e.setHours(23, 59, 59, 999);
+    return { startDate: s.toISOString(), endDate: e.toISOString() };
+  }
+  return {};
+}
+
+function periodLabel(period: PeriodKey, customFrom: string, customTo: string, repPeriod?: { current?: { label: string } }): string {
+  if (repPeriod?.current?.label) return repPeriod.current.label;
+  const map: Record<PeriodKey, string> = {
+    today: 'Today', this_week: 'This Week', this_month: 'This Month',
+    last_month: 'Last Month', this_quarter: 'This Quarter', this_year: 'This Year', custom: `${customFrom} – ${customTo}`,
+  };
+  return map[period] || 'This Month';
+}
+
+// ─── Tiny donut built purely with SVG (no recharts needed, avoids SSR issues) ─
+function DonutChart({ pct }: { pct: number }) {
+  const r = 54; const cx = 64; const cy = 64;
+  const circum = 2 * Math.PI * r;
+  const filled = Math.min(100, Math.max(0, pct));
+  const dash = (filled / 100) * circum;
+  return (
+    <svg width={128} height={128} viewBox="0 0 128 128">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth={14} />
+      <circle
+        cx={cx} cy={cy} r={r} fill="none"
+        stroke="#22c55e" strokeWidth={14}
+        strokeDasharray={`${dash} ${circum - dash}`}
+        strokeLinecap="round"
+        strokeDashoffset={circum / 4}
+        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+      />
+      <text x={cx} y={cy - 6} textAnchor="middle" fill="#f1f5f9" fontSize={18} fontWeight="800">{filled}%</text>
+      <text x={cx} y={cy + 12} textAnchor="middle" fill="#94a3b8" fontSize={9} fontWeight="600">Collected</text>
+    </svg>
+  );
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [duesSummary, setDuesSummary] = useState<RentalDuesSummary | null>(null);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activePeriod, setActivePeriod] = useState<PeriodFilter>('this_month');
-  const [customStart, setCustomStart] = useState<string>('');
-  const [customEnd, setCustomEnd] = useState<string>('');
-  const [showCustomPicker, setShowCustomPicker] = useState<boolean>(false);
-  const [infoModalMetric, setInfoModalMetric] = useState<{ title: string; definition: string; formula: string } | null>(null);
 
+  // Period picker
+  const [activePeriod, setActivePeriod] = useState<PeriodKey>('this_month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingFrom, setPendingFrom] = useState('');
+  const [pendingTo, setPendingTo] = useState('');
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Close picker on outside click
   useEffect(() => {
-    fetchDashboardData();
-  }, [activePeriod]);
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
-  const computeDateRange = (): { startDate?: string; endDate?: string } => {
-    const now = new Date();
-    if (activePeriod === 'today') {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      return { startDate: d.toISOString(), endDate: now.toISOString() };
-    }
-    if (activePeriod === 'this_week') {
-      const d = new Date(now);
-      const day = d.getDay();
-      const diffToMonday = (day + 6) % 7;
-      d.setDate(d.getDate() - diffToMonday);
-      d.setHours(0, 0, 0, 0);
-      return { startDate: d.toISOString(), endDate: now.toISOString() };
-    }
-    if (activePeriod === 'this_month') {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      return { startDate: d.toISOString(), endDate: now.toISOString() };
-    }
-    if (activePeriod === 'last_month') {
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-      return { startDate: start.toISOString(), endDate: end.toISOString() };
-    }
-    if (activePeriod === 'this_fy') {
-      // Indian Financial Year: April 1 to March 31
-      const currentYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-      const start = new Date(currentYear, 3, 1, 0, 0, 0, 0);
-      return { startDate: start.toISOString(), endDate: now.toISOString() };
-    }
-    if (activePeriod === 'custom' && customStart) {
-      const s = new Date(customStart);
-      s.setHours(0, 0, 0, 0);
-      const e = customEnd ? new Date(customEnd) : new Date();
-      e.setHours(23, 59, 59, 999);
-      return { startDate: s.toISOString(), endDate: e.toISOString() };
-    }
-    return {};
-  };
+  useEffect(() => { fetchAll(); }, [activePeriod, customFrom, customTo]);
 
-  const fetchDashboardData = async () => {
+  const fetchAll = async () => {
     setIsLoading(true);
     try {
-      const { startDate, endDate } = computeDateRange();
-      const queryParams = new URLSearchParams();
-      if (startDate) queryParams.set('startDate', startDate);
-      if (endDate) queryParams.set('endDate', endDate);
+      const { startDate, endDate } = computeDateRange(activePeriod, customFrom, customTo);
+      const qs = new URLSearchParams();
+      if (startDate) qs.set('startDate', startDate);
+      if (endDate) qs.set('endDate', endDate);
+      const qstr = qs.toString() ? `?${qs.toString()}` : '';
 
-      const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
-
-      const [metricsRes, duesRes] = await Promise.all([
-        api.get<DashboardMetrics>(`/reports/dashboard${qs}`),
+      const [metricsRes, duesRes, invRes] = await Promise.all([
+        api.get<DashboardMetrics>(`/reports/dashboard${qstr}`),
         api.get<{ data: RentalDuesSummary }>('/usage/dues-summary').catch(() => null),
+        api.get<{ items: any[] }>('/reports/valuation').catch(() => null),
       ]);
 
-      const data = (metricsRes as any)?.data !== undefined ? (metricsRes as any).data : metricsRes;
+      const data = (metricsRes as any)?.data ?? metricsRes;
       setMetrics(data);
       if (duesRes?.data) setDuesSummary(duesRes.data);
+      if (invRes?.items) setInventory(invRes.items.filter((p: any) => (p.available ?? p.onHand ?? 0) > 0).slice(0, 6));
+      else if ((invRes as any)?.data?.items) setInventory((invRes as any).data.items.filter((p: any) => (p.available ?? p.onHand ?? 0) > 0).slice(0, 6));
     } catch (err) {
-      console.error('[DASHBOARD_ERROR]', err);
+      console.error('[DASHBOARD]', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleApplyCustomRange = () => {
-    if (!customStart) return;
-    setActivePeriod('custom');
-    fetchDashboardData();
-  };
-
+  // ── Derived values (all from verified backend fields) ─────────────────────
   const ef = metrics?.executiveFinancials;
-  const fh = metrics?.financialHealth;
   const ih = metrics?.inventoryHealth;
   const rp = metrics?.rentalPerformance;
-  const alerts = metrics?.businessAlerts || [];
-  const trends = metrics?.executiveTrends?.dailyTimeline || [];
+  const emi = metrics?.emiOverview;
+  const fh = metrics?.financialHealth;
+  const alerts = metrics?.businessAlerts ?? [];
+  const recentSales = metrics?.recentSales ?? [];
   const repPeriod = metrics?.reportingPeriod;
 
-  // Fallback defaults if backend hasn't finished initial query
-  const salesRevenueVal = ef?.salesRevenue?.value ?? metrics?.kpis?.periodSalesRevenue ?? 0;
-  const cashCollectedVal = ef?.cashCollected?.value ?? metrics?.kpis?.currentCashCollected ?? salesRevenueVal;
-  const grossProfitVal = ef?.grossProfit?.value ?? metrics?.kpis?.currentGrossProfit ?? 0;
-  const grossMarginPct = ef?.grossProfit?.marginPercent ?? metrics?.kpis?.currentGrossMarginPct ?? (salesRevenueVal > 0 ? Number(((grossProfitVal / salesRevenueVal) * 100).toFixed(1)) : 0);
-  const receivablesVal = ef?.outstandingReceivables?.value ?? metrics?.kpis?.totalOutstandingReceivables ?? 0;
-  const inventoryCostVal = ef?.inventoryValuationAtCost?.value ?? metrics?.kpis?.totalInventoryValuationAtCost ?? 0;
-  const netRentalProfitVal = ef?.netRentalProfit?.value ?? metrics?.kpis?.currentNetRentalProfit ?? 0;
+  const salesRevenue       = ef?.salesRevenue?.value ?? metrics?.kpis?.periodSalesRevenue ?? 0;
+  const prevSalesRevenue   = ef?.salesRevenue?.previousValue ?? 0;
+  const salesDirection     = ef?.salesRevenue?.direction ?? 'neutral';
+  const salesDeltaPct      = ef?.salesRevenue?.deltaPercent ?? 0;
 
+  const grossProfit        = ef?.grossProfit?.value ?? metrics?.kpis?.currentGrossProfit ?? 0;
+  const grossMarginPct     = ef?.grossProfit?.marginPercent ?? metrics?.kpis?.currentGrossMarginPct ?? 0;
+
+  const stockValue         = ih?.totalInventoryValuationAtCost ?? metrics?.kpis?.totalInventoryValuationAtCost ?? 0;
+  const potentialRetail    = ih?.totalPotentialRetailValuation ?? metrics?.kpis?.totalPotentialRetailValuation ?? 0;
+  const potentialProfit    = ih?.potentialGrossMargin ?? 0;
+  const potentialMarginPct = ih?.potentialMarginPercent ?? 0;
+
+  const totalUnits         = ih?.totalUnitsOwned ?? metrics?.kpis?.totalUnitsOnHand ?? 0;
+  const availableUnits     = ih?.totalAvailableForSale ?? metrics?.kpis?.totalAvailableForSale ?? 0;
+  const unitsOnEmi         = emi?.instrumentsOnEmi ?? metrics?.kpis?.activeEmiSalesCount ?? 0;
+
+  const cashCollected      = ef?.cashCollected?.value ?? metrics?.kpis?.currentCashCollected ?? 0;
+  const pendingPayments    = ef?.outstandingReceivables?.emiReceivables ?? metrics?.kpis?.totalEmiReceivables ?? 0;
+  const instrumentsSold    = currentSales().reduce((s: number, sale: any) => s + (sale.lineItems?.length ?? 0), 0);
+
+  // helper — deduplicate reference within render
+  function currentSales(): any[] { return recentSales; }
+
+  // period label for the pill
+  const displayLabel = periodLabel(activePeriod, customFrom, customTo, repPeriod);
+
+  // upcoming vs overdue from dues summary
+  const upcomingItems  = (duesSummary?.items ?? []).filter((i: any) => i.status === 'UPCOMING');
+  const overdueItems   = (duesSummary?.items ?? []).filter((i: any) => i.status === 'OVERDUE');
+  const upcomingAmount = upcomingItems.reduce((s: number, i: any) => s + (i.totalRentDue || 0), 0);
+  const overdueAmount  = overdueItems.reduce((s: number, i: any) => s + (i.totalRentDue || 0), 0);
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-8 pb-12">
-      {/* ── Top Executive Header ── */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-200/80 dark:border-slate-800/80 pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              CEO Executive Cockpit
-            </h1>
-            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider text-amber-500 border-amber-500/30">
-              Live BI Intelligence
-            </Badge>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            StereoBliss Retail & Instrument Fleet — Real-time performance, cash collections, inventory health & business risks.
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#0b0f1a] text-white">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-5">
 
-        {/* ── Reporting Period Controls ── */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/80 p-1 text-xs shadow-inner">
+        {/* ── Header row ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight">Sales Dashboard</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Sales, inventory, EMI collections and business performance at a glance.</p>
+          </div>
+
+          {/* Period picker pill */}
+          <div className="relative" ref={pickerRef}>
             <button
               type="button"
-              onClick={() => { setActivePeriod('today'); setShowCustomPicker(false); }}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'today' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
+              onClick={() => { setPendingFrom(customFrom); setPendingTo(customTo); setPickerOpen(v => !v); }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
             >
-              Today
+              <Calendar className="h-4 w-4" />
+              <span>{displayLabel}</span>
+              <ChevronDown className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => { setActivePeriod('this_week'); setShowCustomPicker(false); }}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'this_week' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
-            >
-              This Week
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActivePeriod('this_month'); setShowCustomPicker(false); }}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'this_month' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
-            >
-              This Month
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActivePeriod('last_month'); setShowCustomPicker(false); }}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'last_month' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
-            >
-              Last Month
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActivePeriod('this_fy'); setShowCustomPicker(false); }}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'this_fy' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
-            >
-              This FY
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCustomPicker(!showCustomPicker)}
-              className={`px-3 py-1.5 font-bold rounded-lg transition-all ${activePeriod === 'custom' || showCustomPicker ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}
-            >
-              Custom Range
-            </button>
-          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchDashboardData}
-            title="Refresh Metrics"
-            className="h-9 px-3 gap-1.5 text-xs font-semibold"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
-            <span>Refresh</span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open('/api/reports/export/executive', '_blank')}
-            className="h-9 px-3 gap-1.5 text-xs font-semibold border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span>Export CSV</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Custom Date Range Flyout ── */}
-      {showCustomPicker && (
-        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 backdrop-blur-sm animate-in fade-in duration-200">
-          <Calendar className="h-5 w-5 text-amber-500 shrink-0" />
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">From:</span>
-            <input
-              type="date"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">To:</span>
-            <input
-              type="date"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
-          <Button size="sm" onClick={handleApplyCustomRange} className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs h-8">
-            Apply Period
-          </Button>
-        </div>
-      )}
-
-      {/* ── Active Period Summary Pill ── */}
-      {repPeriod && (
-        <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Selected Reporting Window:</span>
-            <span className="font-bold text-amber-600 dark:text-amber-400">{repPeriod.current.label}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500">Benchmark Comparison:</span>
-            <span className="font-medium text-slate-700 dark:text-slate-300">{repPeriod.previous.label}</span>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* SECTION 1: EXECUTIVE FINANCIAL OVERVIEW (6 PRIMARY METRIC CARDS) */}
-      {/* ========================================================================= */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-            <IndianRupee className="h-4 w-4 text-amber-500" />
-            <span>Executive Financial Overview</span>
-          </h2>
-          <span className="text-xs text-slate-500">Updated from verified database records</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {/* 1. SALES REVENUE */}
-          <Card className="relative overflow-hidden border-t-4 border-t-amber-500 bg-gradient-to-b from-amber-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Sales Revenue</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Sales Revenue',
-                      definition: 'Recognized net revenue from confirmed sales transactions, strictly excluding cancelled orders and customer returns.',
-                      formula: '∑ grandTotal (Confirmed Sales in Selected Period)',
-                    })
-                  }
-                  className="text-slate-400 hover:text-amber-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                {formatCurrency(salesRevenueVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-500">vs prev period</span>
-                {ef?.salesRevenue?.direction === 'up' ? (
-                  <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold">
-                    <ArrowUpRight className="h-3.5 w-3.5" />+{ef.salesRevenue.deltaPercent}%
-                  </span>
-                ) : ef?.salesRevenue?.direction === 'down' ? (
-                  <span className="inline-flex items-center gap-0.5 text-rose-600 dark:text-rose-400 font-bold">
-                    <ArrowDownRight className="h-3.5 w-3.5" />-{ef.salesRevenue.deltaPercent}%
-                  </span>
-                ) : (
-                  <span className="text-slate-400 font-medium">0.0%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 2. CASH COLLECTED */}
-          <Card className="relative overflow-hidden border-t-4 border-t-emerald-500 bg-gradient-to-b from-emerald-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Cash Collected</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Cash Collected',
-                      definition: 'Actual liquid funds received during the period across direct POS payments, EMI down payments/installments, and monthly rental payments.',
-                      formula: 'Direct POS Cash + EMI Down Payments + EMI Installments Paid + Rental Payments Collected',
-                    })
-                  }
-                  className="text-slate-400 hover:text-emerald-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
-                {formatCurrency(cashCollectedVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-500">Realized Collections</span>
-                {ef?.cashCollected?.direction === 'up' ? (
-                  <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold">
-                    <ArrowUpRight className="h-3.5 w-3.5" />+{ef.cashCollected.deltaPercent}%
-                  </span>
-                ) : (
-                  <span className="text-slate-400 font-medium">Verified Inflow</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. GROSS PROFIT */}
-          <Card className="relative overflow-hidden border-t-4 border-t-indigo-500 bg-gradient-to-b from-indigo-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Gross Profit</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Gross Profit',
-                      definition: 'Recognized Sales Revenue minus direct Cost of Goods Sold (COGS) based on inventory purchase cost.',
-                      formula: 'Sales Revenue - COGS (Purchase Cost of Items Sold)',
-                    })
-                  }
-                  className="text-slate-400 hover:text-indigo-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-indigo-600 dark:text-indigo-400">
-                {formatCurrency(grossProfitVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-500">Gross Margin</span>
-                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">
-                  {grossMarginPct}%
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 4. OUTSTANDING RECEIVABLES */}
-          <Card className="relative overflow-hidden border-t-4 border-t-rose-500 bg-gradient-to-b from-rose-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Receivables</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Outstanding Receivables',
-                      definition: 'Total outstanding credit balances owed by customers, including pending EMI installments and unpaid rental dues.',
-                      formula: 'Total EMI Receivables + Total Unpaid Rental Monthly Dues',
-                    })
-                  }
-                  className="text-slate-400 hover:text-rose-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400">
-                {formatCurrency(receivablesVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span>EMI: {formatCurrency(ef?.outstandingReceivables?.emiReceivables ?? fh?.outstandingEmiReceivables ?? 0)}</span>
-                <span>Rent: {formatCurrency(ef?.outstandingReceivables?.rentalReceivables ?? fh?.outstandingRentalReceivables ?? 0)}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 5. INVENTORY VALUE (PURCHASE COST) */}
-          <Card className="relative overflow-hidden border-t-4 border-t-cyan-500 bg-gradient-to-b from-cyan-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Inventory Value</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Inventory Value at Cost',
-                      definition: 'Current asset valuation of all physical products and rental assets owned by the business at purchase cost.',
-                      formula: '∑ (Units On Hand × Purchase Cost)',
-                    })
-                  }
-                  className="text-slate-400 hover:text-cyan-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-cyan-600 dark:text-cyan-400">
-                {formatCurrency(inventoryCostVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span>Owned: {ih?.totalUnitsOwned ?? metrics?.kpis?.totalUnitsOnHand ?? 0} units</span>
-                <span className="text-slate-700 dark:text-slate-300 font-semibold">Retail: {formatCurrency(ih?.totalPotentialRetailValuation ?? 0)}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 6. NET RENTAL PROFIT */}
-          <Card className="relative overflow-hidden border-t-4 border-t-purple-500 bg-gradient-to-b from-purple-500/[0.04] to-transparent shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Net Rental Profit</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setInfoModalMetric({
-                      title: 'Net Rental Profit (Operational)',
-                      definition: 'Rental revenue collected during the selected period minus attributable routine maintenance and servicing expenses.',
-                      formula: 'Rental Revenue Collected - Incurred Maintenance Expenses',
-                    })
-                  }
-                  className="text-slate-400 hover:text-purple-500 transition-colors"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="text-2xl font-extrabold tracking-tight text-purple-600 dark:text-purple-400">
-                {formatCurrency(netRentalProfitVal)}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span>Recovery:</span>
-                <span className="font-extrabold text-purple-600 dark:text-purple-400">
-                  {rp?.fleetCapexRecoveryPercent ?? 0}% Recouped
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* SECTION 2: PRIORITIZED BUSINESS ALERTS ("NEEDS ATTENTION") */}
-      {/* ========================================================================= */}
-      {alerts.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-rose-500 animate-pulse" />
-              <span>Needs Attention — Critical Risk & Action Register</span>
-            </h2>
-            <Badge variant="danger" className="text-xs font-bold">
-              {alerts.length} Action Items
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {alerts.map((alert) => {
-              const borderMap = {
-                critical: 'border-l-rose-500 bg-rose-500/[0.03]',
-                high: 'border-l-amber-500 bg-amber-500/[0.03]',
-                medium: 'border-l-amber-400 bg-amber-400/[0.02]',
-                low: 'border-l-blue-400 bg-blue-400/[0.02]',
-              };
-              const badgeVariant = alert.severity === 'critical' ? 'danger' : alert.severity === 'high' ? 'warning' : 'secondary';
-
-              return (
-                <Card key={alert.id} className={`border-l-4 ${borderMap[alert.severity]} p-3.5 flex flex-col justify-between shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all`}>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <AlertCircle className={`h-4 w-4 ${alert.severity === 'critical' ? 'text-rose-500' : 'text-amber-500'}`} />
-                        <span>{alert.title}</span>
-                      </span>
-                      <Badge variant={badgeVariant as any} className="text-[10px] uppercase font-bold py-0 px-2">
-                        {alert.severity}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
-                      {alert.message}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    {alert.financialExposure > 0 ? (
-                      <span className="font-bold text-rose-600 dark:text-rose-400">
-                        Exposure: {formatCurrency(alert.financialExposure)}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 text-[11px] font-medium">Impact: Operational</span>
-                    )}
-
-                    <Link href={alert.deepLink}>
-                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5 gap-1 font-semibold hover:border-amber-500 hover:text-amber-500">
-                        <span>{alert.actionText}</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ========================================================================= */}
-      {/* SECTION 3: FINANCIAL HEALTH & NET CASH MOVEMENT */}
-      {/* ========================================================================= */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 shadow-sm">
-          <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-              <span>Financial Health & Net Period Cash Movement</span>
-            </CardTitle>
-            <span className="text-xs text-slate-500 font-medium">Period liquid cash reconciliation</span>
-          </CardHeader>
-          <CardContent className="p-5 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">Total Inflows</span>
-                <div className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-1">
-                  {formatCurrency(fh?.cashInflows ?? cashCollectedVal)}
+            {pickerOpen && (
+              <div className="absolute right-0 top-11 z-50 w-[420px] rounded-2xl border border-slate-700 bg-[#131929] shadow-2xl p-5 flex gap-6">
+                {/* Quick range */}
+                <div className="flex-1 space-y-1.5">
+                  <p className="text-[11px] font-bold uppercase text-slate-400 mb-2">Quick Range</p>
+                  {([
+                    ['today',        'Today'],
+                    ['this_week',    'This Week'],
+                    ['this_month',   'This Month'],
+                    ['last_month',   'Last Month'],
+                    ['this_quarter', 'This Quarter'],
+                    ['this_year',    'This Year'],
+                  ] as [PeriodKey, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => { setActivePeriod(key); setPickerOpen(false); }}
+                      className={`w-full text-left text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                        activePeriod === key && key !== 'custom'
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <div className="text-[11px] text-emerald-800 dark:text-emerald-400/80 mt-1">
-                  POS Sales + EMI + Rental collections
-                </div>
-              </div>
 
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
-                <span className="text-xs text-rose-700 dark:text-rose-400 font-semibold">Total Outflows</span>
-                <div className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-1">
-                  {formatCurrency(fh?.cashOutflows ?? 0)}
-                </div>
-                <div className="text-[11px] text-rose-800 dark:text-rose-400/80 mt-1">
-                  Inward stock receipts + servicing repairs
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">Net Cash Movement</span>
-                <div className={`text-xl font-extrabold mt-1 ${(fh?.netCashMovement ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                  {formatCurrency(fh?.netCashMovement ?? 0)}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Net period liquid surplus / deficit
-                </div>
-              </div>
-            </div>
-
-            {/* Obligations & Customer Trust Liabilities */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 space-y-3">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Shield className="h-4 w-4 text-amber-500" />
-                  <span>Customer Trust Liabilities & Pending Obligations</span>
-                </span>
-                <span className="text-[11px] font-normal text-slate-500">Separated from Revenue by Accounting Standard</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="flex justify-between items-center p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                {/* Custom duration */}
+                <div className="flex-1 space-y-3">
+                  <p className="text-[11px] font-bold uppercase text-slate-400 mb-2">Custom Duration</p>
                   <div>
-                    <div className="font-semibold text-slate-900 dark:text-white">Customer Security Deposits Held</div>
-                    <div className="text-[10px] text-slate-500">Refundable trust liability for active rentals</div>
+                    <label className="text-[11px] text-slate-400 font-semibold block mb-1">From</label>
+                    <input
+                      type="date"
+                      value={pendingFrom}
+                      onChange={e => setPendingFrom(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
                   </div>
-                  <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
-                    {formatCurrency(fh?.customerDepositsHeld ?? rp?.totalSecurityDepositsHeld ?? 0)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
                   <div>
-                    <div className="font-semibold text-slate-900 dark:text-white">Customer Refunds Payable</div>
-                    <div className="text-[10px] text-slate-500">Completed loans pending deposit disbursement</div>
+                    <label className="text-[11px] text-slate-400 font-semibold block mb-1">To</label>
+                    <input
+                      type="date"
+                      value={pendingTo}
+                      onChange={e => setPendingTo(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
                   </div>
-                  <span className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
-                    {formatCurrency(fh?.refundsPayable ?? rp?.pendingRefundsTotal ?? 0)}
-                  </span>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(false)}
+                      className="flex-1 py-1.5 text-xs font-bold rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pendingFrom) {
+                          setCustomFrom(pendingFrom);
+                          setCustomTo(pendingTo || pendingFrom);
+                          setActivePeriod('custom');
+                        }
+                        setPickerOpen(false);
+                      }}
+                      className="flex-1 py-1.5 text-xs font-bold rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Visual 4-Part Stock Reconciliation ── */}
-        <Card className="shadow-sm">
-          <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Package className="h-4 w-4 text-amber-500" />
-              <span>Inventory & Fleet Reconciliation</span>
-            </CardTitle>
-            <Badge variant="outline" className="text-[10px]">
-              {ih?.totalUnitsOwned ?? 0} Units Owned
-            </Badge>
-          </CardHeader>
-          <CardContent className="p-5 space-y-4 text-xs">
-            {/* Visual segmented bar */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-                <span>Stock Allocation</span>
-                <span>{ih?.totalUnitsOwned ?? 0} Total Units</span>
-              </div>
-              <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
-                <div
-                  title="Available for Sale"
-                  style={{ width: `${Math.round(((ih?.totalAvailableForSale ?? 0) / Math.max(1, ih?.totalUnitsOwned ?? 1)) * 100)}%` }}
-                  className="bg-emerald-500 h-full transition-all"
-                />
-                <div
-                  title="Currently on Rent"
-                  style={{ width: `${Math.round(((ih?.totalUnitsInRental ?? 0) / Math.max(1, ih?.totalUnitsOwned ?? 1)) * 100)}%` }}
-                  className="bg-purple-500 h-full transition-all"
-                />
-                <div
-                  title="Under Maintenance"
-                  style={{ width: `${Math.round(((ih?.totalUnitsInMaintenance ?? 0) / Math.max(1, ih?.totalUnitsOwned ?? 1)) * 100)}%` }}
-                  className="bg-rose-500 h-full transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Breakdown table */}
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex justify-between items-center py-1">
-                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  <span>Available for Retail Sale</span>
-                </span>
-                <span className="font-extrabold text-slate-900 dark:text-white">{ih?.totalAvailableForSale ?? 0} pcs</span>
-              </div>
-
-              <div className="flex justify-between items-center py-1">
-                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                  <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-                  <span>Currently on Rent (Active Loans)</span>
-                </span>
-                <span className="font-extrabold text-slate-900 dark:text-white">{ih?.totalUnitsInRental ?? 0} pcs</span>
-              </div>
-
-              <div className="flex justify-between items-center py-1">
-                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                  <span>Under Maintenance (Workshop)</span>
-                </span>
-                <span className="font-extrabold text-slate-900 dark:text-white">{ih?.totalUnitsInMaintenance ?? 0} pcs</span>
-              </div>
-            </div>
-
-            {/* Valuation & Potential Margin summary */}
-            <div className="p-3 rounded-lg bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-1.5 mt-3">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-400">Potential Retail Value:</span>
-                <span className="font-extrabold text-slate-900 dark:text-white">{formatCurrency(ih?.totalPotentialRetailValuation ?? 0)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-400">Est. Gross Margin on Stock:</span>
-                <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(ih?.potentialGrossMargin ?? 0)} ({ih?.potentialMarginPercent ?? 0}%)
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* SECTION 4: RENTAL BUSINESS PERFORMANCE & CAPITAL RECOVERY */}
-      {/* ========================================================================= */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-            <Music2 className="h-4 w-4 text-purple-500" />
-            <span>Rental Business Performance & Fleet Capital Recovery</span>
-          </h2>
-          <Link href="/reports?tab=rentals">
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-purple-500 hover:text-purple-600 gap-1 font-semibold">
-              <span>Full Rental Analysis</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+            )}
+          </div>
         </div>
 
-        <Card className="shadow-sm">
-          <CardContent className="p-5 space-y-6">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Active Agreements</span>
-                <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">
-                  {rp?.activeAgreements ?? 0}
-                </div>
-                <span className="text-[11px] text-slate-400">{rp?.instrumentsOnRent ?? 0} instruments out</span>
-              </div>
+        {/* ── ROW 1: 4 KPI cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Rental Income Collected</span>
-                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                  {formatCurrency(rp?.rentalIncomeCollected ?? 0)}
-                </div>
-                <span className="text-[11px] text-slate-400">All-time: {formatCurrency(rp?.allTimeRentalCollected ?? 0)}</span>
+          {/* Sales Revenue */}
+          <div className="rounded-2xl bg-[#1a2235] border border-slate-800 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                <ShoppingCart className="h-5 w-5 text-blue-400" />
               </div>
+              <span className="text-sm font-semibold text-slate-400">Sales Revenue</span>
+            </div>
+            <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(salesRevenue)}</div>
+            <div className="mt-2 flex items-center gap-1 text-xs font-semibold">
+              {salesDirection === 'up' ? (
+                <><ArrowUpRight className="h-3.5 w-3.5 text-emerald-400" /><span className="text-emerald-400">{salesDeltaPct}%</span></>
+              ) : salesDirection === 'down' ? (
+                <><ArrowDownRight className="h-3.5 w-3.5 text-rose-400" /><span className="text-rose-400">{salesDeltaPct}%</span></>
+              ) : (
+                <span className="text-slate-500">—</span>
+              )}
+              <span className="text-slate-500">vs prev period</span>
+            </div>
+          </div>
 
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Payments Due / Overdue</span>
-                <div className="text-lg font-bold text-rose-600 dark:text-rose-400 mt-1">
-                  {formatCurrency(rp?.totalRentalDue ?? 0)}
-                </div>
-                <span className="text-[11px] text-rose-500 font-semibold">{formatCurrency(rp?.totalRentalOverdue ?? 0)} overdue</span>
+          {/* Gross Profit */}
+          <div className="rounded-2xl bg-[#0f2318] border border-emerald-900/60 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <BarChart2 className="h-5 w-5 text-emerald-400" />
               </div>
+              <span className="text-sm font-semibold text-slate-400">Gross Profit</span>
+            </div>
+            <div className={`text-3xl font-black tracking-tight ${grossProfit >= 0 ? 'text-white' : 'text-rose-400'}`}>
+              {formatCurrency(grossProfit)}
+            </div>
+            <div className="mt-2 text-xs font-bold text-emerald-400">{grossMarginPct}% margin</div>
+          </div>
 
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Deposits Held</span>
-                <div className="text-lg font-bold text-amber-500 mt-1">
-                  {formatCurrency(rp?.totalSecurityDepositsHeld ?? 0)}
-                </div>
-                <span className="text-[11px] text-slate-400">Trust liability</span>
+          {/* Total Stock Value */}
+          <div className="rounded-2xl bg-[#1f1a0e] border border-amber-900/60 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <Layers className="h-5 w-5 text-amber-400" />
               </div>
+              <span className="text-sm font-semibold text-slate-400">Total Stock Value</span>
+            </div>
+            <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stockValue)}</div>
+            <div className="mt-2 text-xs text-slate-500 font-medium">Investment in inventory</div>
+          </div>
 
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Available for Deductions</span>
-                <div className="text-lg font-bold text-indigo-500 mt-1">
-                  {formatCurrency(rp?.depositsAvailableForDeduction ?? 0)}
-                </div>
-                <span className="text-[11px] text-slate-400">Deposit-mode pools</span>
+          {/* Total Instruments */}
+          <div className="rounded-2xl bg-[#180f2a] border border-purple-900/60 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/20 flex items-center justify-center shrink-0">
+                <Box className="h-5 w-5 text-purple-400" />
               </div>
+              <span className="text-sm font-semibold text-slate-400">Total Instruments</span>
+            </div>
+            <div className="text-3xl font-black text-white tracking-tight">{totalUnits}</div>
+            <div className="mt-2 flex items-center gap-2 text-xs font-semibold">
+              <span className="text-emerald-400">{availableUnits} Available</span>
+              {unitsOnEmi > 0 && <><span className="text-slate-600">•</span><span className="text-amber-400">{unitsOnEmi} on EMI</span></>}
+            </div>
+          </div>
+        </div>
 
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <span className="text-slate-500">Fleet Capex Recovery</span>
-                <div className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-1">
-                  {rp?.fleetCapexRecoveryPercent ?? 0}%
+        {/* ── ROW 2: Inventory table + Stock Summary ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+          {/* Inventory (Available for Sale) */}
+          <div className="xl:col-span-2 rounded-2xl bg-[#1a2235] border border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">Inventory (Available for Sale)</span>
+              </div>
+              <Link href="/inventory" className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                View Stock <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-800">
+                    <th className="py-2.5 px-5 text-left">Instrument / Model</th>
+                    <th className="py-2.5 px-3 text-left">Inv. No.</th>
+                    <th className="py-2.5 px-3 text-center">Qty</th>
+                    <th className="py-2.5 px-3 text-right">Buying Price</th>
+                    <th className="py-2.5 px-3 text-right">Selling Price</th>
+                    <th className="py-2.5 px-3 text-right">Profit / Unit</th>
+                    <th className="py-2.5 px-3 text-right">Margin</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {isLoading ? (
+                    <tr><td colSpan={7} className="py-8 text-center text-slate-500">Loading inventory…</td></tr>
+                  ) : inventory.length === 0 ? (
+                    <tr><td colSpan={7} className="py-8 text-center text-slate-500">No stock available for sale</td></tr>
+                  ) : (
+                    inventory.map((p: any, i: number) => {
+                      const buy  = p.unitCost ?? 0;
+                      const sell = p.unitPrice ?? 0;
+                      const profit = sell - buy;
+                      const margin = sell > 0 ? ((profit / sell) * 100).toFixed(1) : '0.0';
+                      const qty = p.available ?? p.onHand ?? 0;
+                      return (
+                        <tr key={p.productId ?? i} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-7 w-7 rounded-lg bg-slate-700 flex items-center justify-center shrink-0">
+                                <Music2 className="h-3.5 w-3.5 text-slate-400" />
+                              </div>
+                              <span className="font-semibold text-slate-200">{p.name}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-amber-400">{p.sku ?? '—'}</td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-300">{qty}</td>
+                          <td className="py-3 px-3 text-right text-slate-400">{formatCurrency(buy)}</td>
+                          <td className="py-3 px-3 text-right text-slate-200 font-semibold">{formatCurrency(sell)}</td>
+                          <td className="py-3 px-3 text-right font-bold text-emerald-400">{formatCurrency(profit)}</td>
+                          <td className="py-3 px-3 text-right font-bold text-slate-300">{margin}%</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Stock Summary */}
+          <div className="rounded-2xl bg-[#1a2235] border border-slate-800 p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-amber-400" />
+              <span className="font-bold text-sm text-white">Stock Summary</span>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2.5 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <div className="h-6 w-6 rounded bg-amber-500/15 flex items-center justify-center">
+                    <Layers className="h-3 w-3 text-amber-400" />
+                  </div>
+                  Purchase Value
                 </div>
-                <span className="text-[11px] text-slate-400">{rp?.unrecoveredCapexCount ?? 0} unrecouped assets</span>
+                <span className="font-bold text-white">{formatCurrency(stockValue)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2.5 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <div className="h-6 w-6 rounded bg-blue-500/15 flex items-center justify-center">
+                    <ShoppingCart className="h-3 w-3 text-blue-400" />
+                  </div>
+                  Potential Retail Value
+                </div>
+                <span className="font-bold text-white">{formatCurrency(potentialRetail)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <div className="h-6 w-6 rounded bg-emerald-500/15 flex items-center justify-center">
+                    <TrendingUp className="h-3 w-3 text-emerald-400" />
+                  </div>
+                  Potential Profit
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-emerald-400">{formatCurrency(potentialProfit)}</span>
+                  <span className="text-xs text-slate-500 ml-1">({potentialMarginPct}%)</span>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Fleet Capex Payback Progress Bar */}
-            <div className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/20 space-y-2">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-purple-900 dark:text-purple-300">
-                  Fleet Capital Recovery Progress: {formatCurrency(rp?.allTimeNetRentalProfit ?? 0)} generated vs {formatCurrency(rp?.totalFleetCapex ?? 0)} total fleet acquisition cost
-                </span>
-                <span className="font-extrabold text-purple-600 dark:text-purple-400">
-                  {rp?.fleetCapexRecoveryPercent ?? 0}% Recouped
-                </span>
+        {/* ── ROW 3: Sales Overview | EMI Overview | Right column ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+          {/* Sales Overview */}
+          <div className="rounded-2xl bg-[#1a2235] border border-slate-800 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">Sales Overview</span>
               </div>
-              <div className="h-2.5 w-full bg-purple-200 dark:bg-purple-950 rounded-full overflow-hidden">
-                <div
-                  style={{ width: `${Math.min(100, rp?.fleetCapexRecoveryPercent ?? 0)}%` }}
-                  className="bg-purple-600 h-full rounded-full transition-all duration-500"
-                />
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-500">
-                <span>Break-even achieved when all-time rental revenue exceeds asset purchase capex + servicing costs.</span>
-                <span>{rp?.approachingDeadlinesCount ?? 0} agreement(s) approaching return deadline</span>
-              </div>
+              <Link href="/sales" className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                View All Sales <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
-          </CardContent>
-        </Card>
-      </section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 5: EXECUTIVE TREND VISUALIZATIONS */}
-      {/* ========================================================================= */}
-      {trends.length > 0 && (
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Chart 1: Sales Revenue vs Cash Collections */}
-          <Card className="shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-amber-500" />
-                <span>Sales Revenue vs. Liquid Cash Collections</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
-                    <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} />
-                    <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                      formatter={(val: any) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                    <Bar dataKey="salesRevenue" name="Recognized Revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                    <Line type="monotone" dataKey="cashCollected" name="Cash Collected" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Chart 2: Gross Profit & Rental Collections */}
-          <Card className="shadow-sm">
-            <CardHeader className="p-4 border-b border-slate-100 dark:border-slate-800">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-indigo-500" />
-                <span>Gross Profit & Monthly Rental Cash Generation</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
-                    <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} />
-                    <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                      formatter={(val: any) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                    <Bar dataKey="grossProfit" name="Gross Profit" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                    <Line type="monotone" dataKey="rentalCollections" name="Rental Cash" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      {/* ── Metric Definition Info Modal ── */}
-      {infoModalMetric && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 text-amber-500" />
-                <span>{infoModalMetric.title}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setInfoModalMetric(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-3 text-xs">
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="font-semibold text-slate-500">Definition:</span>
-                <p className="text-slate-800 dark:text-slate-200 mt-0.5 leading-relaxed font-medium">
-                  {infoModalMetric.definition}
-                </p>
+                <div className="text-xl font-black text-white">{formatCurrency(salesRevenue)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Sales Revenue</div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 font-mono text-[11px] text-amber-600 dark:text-amber-400 border border-slate-200 dark:border-slate-800">
-                <span className="font-sans font-bold text-slate-500 block mb-1">Authoritative Formula:</span>
-                {infoModalMetric.formula}
+              <div>
+                <div className="text-xl font-black text-white">{metrics?.kpis?.periodSalesCount ?? 0}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Instruments Sold</div>
+              </div>
+              <div>
+                <div className="text-xl font-black text-white">{formatCurrency(cashCollected)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Amount Collected</div>
+              </div>
+              <div>
+                <div className="text-xl font-black text-rose-400">{formatCurrency(pendingPayments)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Pending Payments</div>
               </div>
             </div>
-            <div className="pt-2 flex justify-end">
-              <Button size="sm" onClick={() => setInfoModalMetric(null)} className="text-xs bg-slate-800 hover:bg-slate-700 text-white">
-                Close
-              </Button>
+
+            {/* Recent Sales mini-table */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold uppercase text-slate-500 pb-1">Recent Sales</div>
+              {recentSales.length === 0 ? (
+                <div className="text-xs text-slate-600 py-3 text-center">No sales in this period</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-5 text-[10px] font-bold uppercase text-slate-600 px-1 pb-1">
+                    <span>Invoice</span><span>Date</span><span className="col-span-2">Instrument</span><span className="text-right">Amount</span>
+                  </div>
+                  {recentSales.map((s, i) => (
+                    <div key={i} className="grid grid-cols-5 items-center text-xs px-1 py-1.5 rounded-lg hover:bg-slate-800/60 transition-colors">
+                      <span className="font-mono text-amber-400 truncate">{s.invoiceNumber}</span>
+                      <span className="text-slate-500 text-[11px]">{formatDate(s.createdAt)}</span>
+                      <span className="col-span-2 text-slate-300 truncate pr-2">{s.productName}</span>
+                      <div className="text-right">
+                        <div className="font-bold text-white">{formatCurrency(s.grandTotal)}</div>
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                          s.paymentStatus === 'PAID'
+                            ? 'bg-emerald-900/60 text-emerald-400'
+                            : 'bg-amber-900/60 text-amber-400'
+                        }`}>
+                          {s.paymentStatus === 'PAID' ? 'Paid' : s.paymentStatus}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* EMI / Installment Overview */}
+          <div className="rounded-2xl border-2 border-amber-500/60 bg-[#1a1a0e] p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">EMI / Installment Overview</span>
+              </div>
+              <Link href="/sales?saleType=EMI" className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                View All <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            {/* Donut + stats */}
+            <div className="flex items-center gap-5">
+              <div className="shrink-0">
+                <DonutChart pct={emi?.collectedPercent ?? 0} />
+              </div>
+              <div className="flex-1 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                    <Layers className="h-3.5 w-3.5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Total EMI Amount</div>
+                    <div className="text-base font-black text-white">{formatCurrency(emi?.totalEmiContractValue ?? 0)}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Collected Till Now</div>
+                    <div className="text-base font-black text-emerald-400">{formatCurrency(emi?.totalEmiCollected ?? 0)}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-rose-500/20 flex items-center justify-center shrink-0">
+                    <Clock className="h-3.5 w-3.5 text-rose-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Pending Amount</div>
+                    <div className="text-base font-black text-rose-400">{formatCurrency(emi?.totalEmiPending ?? 0)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { icon: <Music2 className="h-3.5 w-3.5 text-blue-400" />, label: 'Instruments on EMI', value: emi?.instrumentsOnEmi ?? 0, bg: 'bg-blue-500/10' },
+                { icon: <Layers className="h-3.5 w-3.5 text-slate-400" />, label: 'Total Installments', value: emi?.totalInstallments ?? 0, bg: 'bg-slate-500/10' },
+                { icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />, label: 'Paid Installments', value: emi?.paidInstallments ?? 0, bg: 'bg-emerald-500/10' },
+                { icon: <Clock className="h-3.5 w-3.5 text-amber-400" />, label: 'Remaining', value: emi?.remainingInstallments ?? 0, bg: 'bg-amber-500/10' },
+              ].map((s, i) => (
+                <div key={i} className={`rounded-xl ${s.bg} border border-slate-700/50 p-2.5 flex items-center gap-2`}>
+                  <div className="h-6 w-6 rounded bg-slate-800 flex items-center justify-center shrink-0">{s.icon}</div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 leading-tight">{s.label}</div>
+                    <div className="text-sm font-black text-white">{s.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Progress bar */}
+            <div>
+              <div className="flex justify-between text-[11px] text-slate-500 mb-1.5">
+                <span>EMI Collection Progress</span>
+                <span>{formatCurrency(emi?.totalEmiCollected ?? 0)} / {formatCurrency(emi?.totalEmiContractValue ?? 0)}</span>
+              </div>
+              <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  style={{ width: `${Math.min(100, emi?.collectedPercent ?? 0)}%` }}
+                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full transition-all duration-700"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right column: Stock Summary (compact) + Installments & Dues + Alerts */}
+          <div className="space-y-4">
+
+            {/* Installments & Dues */}
+            <div className="rounded-2xl bg-[#1a2235] border border-slate-800 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">Installments &amp; Dues</span>
+              </div>
+              <div className="space-y-2">
+                {/* Upcoming */}
+                <Link href="/usage" className="flex items-center justify-between rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2.5 hover:bg-amber-500/20 transition-colors group">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="h-4 w-4 text-amber-400" />
+                    <span className="text-amber-300 font-semibold">
+                      Upcoming ({upcomingItems.length})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-amber-400">{formatCurrency(upcomingAmount)}</span>
+                    <ChevronRight className="h-3.5 w-3.5 text-amber-500 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </Link>
+                {/* Overdue */}
+                <Link href="/usage" className="flex items-center justify-between rounded-xl bg-rose-500/10 border border-rose-500/20 px-3 py-2.5 hover:bg-rose-500/20 transition-colors group">
+                  <div className="flex items-center gap-2 text-sm">
+                    <AlertCircle className="h-4 w-4 text-rose-400" />
+                    <span className="text-rose-300 font-semibold">
+                      Overdue ({overdueItems.length})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-rose-400">{formatCurrency(overdueAmount)}</span>
+                    <ChevronRight className="h-3.5 w-3.5 text-rose-500 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </Link>
+              </div>
+            </div>
+
+            {/* Alerts */}
+            <div className="rounded-2xl bg-[#1a2235] border border-slate-800 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">Alerts</span>
+                {alerts.length > 0 && (
+                  <span className="ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    {alerts.length}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {alerts.length === 0 ? (
+                  <div className="text-xs text-slate-600 text-center py-2">No active alerts</div>
+                ) : (
+                  alerts.slice(0, 4).map((alert) => (
+                    <Link
+                      key={alert.id}
+                      href={alert.deepLink}
+                      className={`flex items-start justify-between rounded-xl px-3 py-2.5 border hover:opacity-90 transition-opacity group ${
+                        alert.severity === 'critical'
+                          ? 'bg-rose-500/10 border-rose-500/20'
+                          : alert.severity === 'high'
+                            ? 'bg-amber-500/10 border-amber-500/20'
+                            : 'bg-slate-500/10 border-slate-500/20'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2 min-w-0">
+                        <div className={`h-5 w-5 rounded flex items-center justify-center shrink-0 mt-0.5 ${
+                          alert.severity === 'critical' ? 'bg-rose-500/20' : 'bg-amber-500/20'
+                        }`}>
+                          <AlertCircle className={`h-3 w-3 ${alert.severity === 'critical' ? 'text-rose-400' : 'text-amber-400'}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className={`text-xs font-bold truncate ${alert.severity === 'critical' ? 'text-rose-300' : 'text-amber-300'}`}>
+                            {alert.title}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate">{alert.message}</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-600 shrink-0 mt-1 ml-2 group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
-      )}
+
+        {/* ── Refresh button (bottom right floating) ── */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={fetchAll}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-amber-400' : ''}`} />
+            {isLoading ? 'Refreshing…' : 'Refresh Data'}
+          </button>
+        </div>
+
+      </div>
     </div>
   );
 }
