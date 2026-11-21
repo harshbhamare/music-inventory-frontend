@@ -417,7 +417,7 @@ export default function IntakePage() {
             Stock Intake & Receiving
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Solo seamless stock intake, supplier shipments, and goods receipt register.
+            Stereobliss — Solo seamless stock intake, supplier shipments, and goods receipt register.
           </p>
         </div>
 

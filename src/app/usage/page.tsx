@@ -1048,7 +1048,7 @@ export default function UsagePage() {
             <span>Rent Instrument &amp; Instrument Loans</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
+            Stereobliss — Customer rental plans, 3-month lock-in agreements, bundled accessories (stands, adapters, bags), and monthly payment tracking.
           </p>
         </div>
 

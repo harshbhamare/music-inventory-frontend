@@ -354,7 +354,7 @@ export default function InventoryPage() {
             Catalogue & Inventory
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Manage product specifications, bulk inventory counts, and retail pricing.
+            Stereobliss — Manage product specifications, bulk inventory counts, and retail pricing.
           </p>
         </div>
 

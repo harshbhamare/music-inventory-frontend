@@ -203,7 +203,7 @@ export default function ReturnsMaintenancePage() {
             Repairs, Maintenance & Adjustments
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Luthier repairs, quarantine dispositions, and manager approval queues.
+            Stereobliss — Luthier repairs, quarantine dispositions, and manager approval queues.
           </p>
         </div>
 

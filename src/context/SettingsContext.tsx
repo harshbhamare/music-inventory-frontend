@@ -36,12 +36,12 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 function sanitizeCompanyName(val?: string | null): string {
-  if (!val) return 'Stereobliss Retail';
+  if (!val) return 'Stereobliss';
   const trimmed = val.trim();
-  if (/soundstock|muziclub/i.test(trimmed)) {
-    return 'Stereobliss Retail';
+  if (/soundstock|muziclub|retail/i.test(trimmed)) {
+    return 'Stereobliss';
   }
-  return trimmed;
+  return trimmed.replace(/\s+retail/gi, '').trim() || 'Stereobliss';
 }
 
 function sanitizeStoreName(val?: string | null): string {

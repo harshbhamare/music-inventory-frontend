@@ -6,8 +6,8 @@ import { SettingsProvider } from '@/context/SettingsContext';
 import { AppShell } from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
-  title: 'Stereobliss Retail - Musical Instrument & Audio Inventory',
-  description: 'Stereobliss Retail inventory, musical instruments, and stock tracking system.',
+  title: 'Stereobliss - Musical Instrument & Audio Inventory',
+  description: 'Stereobliss inventory, musical instruments, and stock tracking system.',
   icons: {
     icon: '/logo.png',
     shortcut: '/logo.png',

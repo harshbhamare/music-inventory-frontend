@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold tracking-wider text-slate-600 dark:text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
-            <span>Loading {companyName || 'Stereobliss Retail'}...</span>
+            <span>Loading {companyName || 'Stereobliss'}...</span>
           </div>
         </div>
       </div>

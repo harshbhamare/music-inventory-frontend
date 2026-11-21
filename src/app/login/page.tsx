@@ -67,7 +67,7 @@ export default function LoginPage() {
             </span>
           </div>
           <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-1.5">
-            Stereobliss Retail — Musical Instrument & Audio Inventory
+            Stereobliss — Musical Instrument & Audio Inventory
           </p>
         </div>
 

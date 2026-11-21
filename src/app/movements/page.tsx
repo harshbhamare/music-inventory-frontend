@@ -53,7 +53,7 @@ export default function MovementsPage() {
             Stock Movement Audit Ledger
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Immutable transaction history explaining every change in quantity, condition, location, or ownership.
+            Stereobliss — Immutable transaction history explaining every change in quantity, condition, location, or ownership.
           </p>
         </div>
 

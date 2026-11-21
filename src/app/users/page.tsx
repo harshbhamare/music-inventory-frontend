@@ -98,7 +98,7 @@ export default function UsersPage() {
             User Accounts & Roles
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Manage profile roles and staff access for Stereobliss Inventory.
+            Stereobliss — Manage profile roles and staff access for Stereobliss Inventory.
           </p>
         </div>
 

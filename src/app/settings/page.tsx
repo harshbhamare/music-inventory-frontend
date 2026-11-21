@@ -113,7 +113,7 @@ export default function SettingsPage() {
       const loc = setRes?.defaultLocation;
 
       if (s) {
-        const cName = s.companyName && !/soundstock|muziclub/i.test(s.companyName) ? s.companyName : 'Stereobliss Retail';
+        const cName = s.companyName && !/soundstock|muziclub|retail/i.test(s.companyName) ? s.companyName.replace(/\s+retail/gi, '').trim() : 'Stereobliss';
         const stName =
           s.storeName && !/central studio|academy/i.test(s.storeName)
             ? s.storeName

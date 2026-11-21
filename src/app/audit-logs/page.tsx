@@ -48,7 +48,7 @@ export default function AuditLogsPage() {
             System Activity & Audit Logs
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stereobliss Retail — Complete traceability of sensitive operations, security changes, and staff actions.
+            Stereobliss — Complete traceability of sensitive operations, security changes, and staff actions.
           </p>
         </div>
 
